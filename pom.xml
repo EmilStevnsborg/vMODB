@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>dk.ku.di.dms.vms</groupId>
@@ -14,12 +14,12 @@
 
     <!-- modb -->
     <module>modb</module>
-    <module>modb-api</module>
+    <!--    <module>modb-api</module>-->
     <module>modb-common</module>
 
     <!-- sdk -->
     <module>sdk-embed</module>
-    <module>sdk-core</module>
+    <!--    <module>sdk-core</module>-->
 
     <!-- general -->
     <module>web_common</module>
@@ -28,8 +28,9 @@
     <module>coordinator</module>
 
     <!-- applications -->
-    <module>marketplace</module>
-    <module>tpcc</module>
+    <!--    <module>marketplace</module>-->
+    <!--    <module>tpcc</module>-->
+    <module>flightScheduler</module>
 
   </modules>
 
@@ -97,15 +98,6 @@
               <arg>java.base/jdk.internal.misc=ALL-UNNAMED</arg>
               <arg>--add-opens</arg>
               <arg>java.base/jdk.internal.misc=ALL-UNNAMED</arg>
-              <arg>-parameters</arg>
-              <arg>-Xlint:deprecation</arg>
-              <arg>-Xlint:path</arg>
-              <arg>-Xlint:serial</arg>
-              <arg>-Xlint:unchecked</arg>
-              <arg>-Xmaxerrs</arg>
-              <arg>10000</arg>
-              <arg>-Xmaxwarns</arg>
-              <arg>999999</arg>
             </compilerArgs>
           </configuration>
         </plugin>
