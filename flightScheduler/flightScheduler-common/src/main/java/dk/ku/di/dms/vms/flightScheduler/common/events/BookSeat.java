@@ -22,10 +22,10 @@ public class BookSeat
     public String toString()
     {
         return "{\n"
-                + "  \"timestamp\":\"" + timestamp + "\",\n"
-                + "  \"orderFlight\":\""
+                + "  \"timestamp\":" + timestamp + ",\n"
+                + "  \"orderFlight\":"
                 + indent(orderFlight.toString(), "    ")
-                + "\"\n"
+                + "\n"
                 + "}";
     }
     private String indent(String input, String prefix) {

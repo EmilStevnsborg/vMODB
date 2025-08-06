@@ -26,12 +26,11 @@ public class SeatBooked
     public String toString()
     {
         return "{\n"
-                + "  \"bookingId\":\"" + bookingId + "\",\n"
-                + "  \"customerId\":\"" + customerId + "\",\n"
-                + "  \"flightId\":\"" + flightId + "\",\n"
+                + "  \"bookingId\":" + bookingId + ",\n"
+                + "  \"customerId\":" + customerId + ",\n"
+                + "  \"flightId\":" + flightId + ",\n"
                 + "  \"seatNumber\":\"" + seatNumber + "\",\n"
-                + "  \"seatNumber\":\"" + seatNumber + "\",\n"
-                + "  \"timestamp\":\"" + timestamp.toString() + "\"\n"
+                + "  \"timestamp\":" + timestamp + "\n"
                 + "}";
     }
 }

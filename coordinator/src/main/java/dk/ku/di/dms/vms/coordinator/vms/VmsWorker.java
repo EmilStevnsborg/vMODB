@@ -187,6 +187,8 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                                     Supplier<IChannel> channelFactory,
                                     VmsWorkerOptions options,
                                     IVmsSerdesProxy serdesProxy) throws IOException {
+
+        System.out.println("coordinator.vms.VmsWorker has been built.");
         return new VmsWorker(me, consumerVms, coordinatorQueue,
                 channelFactory, options, serdesProxy);
     }
@@ -385,12 +387,14 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private void processPendingLogging(){
         ByteBuffer writeBuffer;
         if((writeBuffer = this.loggingWriteBuffers.poll()) != null){
+//            System.out.println("coordinator.VmsWorker.processPendingLogging.loggingWriteBuffers.poll: not null");
             try {
                 writeBuffer.position(0);
                 this.loggingHandler.log(writeBuffer);
                 // return buffer
                 this.returnByteBuffer(writeBuffer);
             } catch (IOException e) {
+//                System.out.println("coordinator.VmsWorker.processPendingLogging.error: on writing byte buffer to logging file");
                 LOGGER.log(ERROR, "error on writing byte buffer to logging file: "+e.getMessage());
                 this.loggingWriteBuffers.add(writeBuffer);
             }
@@ -445,14 +449,19 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private void sendMessage(Object message) {
         switch (message) {
             case BatchCommitCommand.Payload o -> {
+                System.out.println("VmsWorker.sendMessage.BatchCommitCommand");
                 this.sendBatchCommitCommand(o);
                 this.loggingHandler.force();
             }
             case BatchCommitInfo.Payload o -> {
+                System.out.println("VmsWorker.sendMessage.BatchCommitInfo");
                 this.sendBatchCommitInfo(o);
                 this.loggingHandler.force();
             }
-            case TransactionAbort.Payload o -> this.sendTransactionAbort(o);
+            case TransactionAbort.Payload o -> {
+                System.out.println("VmsWorker.sendMessage.TransactionAbort");
+                this.sendTransactionAbort(o);
+            }
             case String o -> this.sendConsumerSet(o);
             default ->
                     LOGGER.log(WARNING, "Leader: VMS worker for " + this.consumerVms.identifier + " has unknown message type: " + message.getClass().getName());
@@ -539,6 +548,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             try {
                 switch (type) {
                     case PRESENTATION -> {
+//                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.Presentation");
                         // this is a very bad conditional statement
                         // we could do better removing this concept of "unknown" and simply check the state
                         if (state == LEADER_PRESENTATION_SENT) {
@@ -552,6 +562,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                     }
                     // from all terminal VMSs involved in the last batch
                     case BATCH_COMPLETE -> {
+//                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.BATCH_COMPLETE");
                         // don't actually need the host and port in the payload since we have the attachment to this read operation...
                         BatchComplete.Payload response = BatchComplete.read(readBuffer);
                         LOGGER.log(DEBUG, "Leader: Batch (" + response.batch() + ") complete received from: " + consumerVms.identifier);
@@ -562,22 +573,25 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                         // because only the aborted transaction will be rolled back
                     }
                     case BATCH_COMMIT_ACK -> {
+//                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.BATCH_COMMIT_ACK");
                         LOGGER.log(DEBUG, "Leader: Batch commit ACK received from: " + consumerVms.identifier);
                         BatchCommitAck.Payload response = BatchCommitAck.read(readBuffer);
                         // logger.config("Just logging it, since we don't necessarily need to wait for that. "+response);
                         coordinatorQueue.add(response);
                     }
                     case TX_ABORT -> {
+//                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.TX_ABORT");
                         // get information of what
                         TransactionAbort.Payload response = TransactionAbort.read(readBuffer);
                         coordinatorQueue.add(response);
                     }
-                    case EVENT -> LOGGER.log(INFO, "Leader: New event received from: " + consumerVms.identifier);
-                    case BATCH_OF_EVENTS -> LOGGER.log(INFO, "Leader: New batch of events received from VMS");
+                    case EVENT -> LOGGER.log(INFO, "Leader: New event received from: " + consumerVms.identifier); // TODO probably here is important
+                    case BATCH_OF_EVENTS -> LOGGER.log(INFO, "Leader: New batch of events received from VMS"); // TODO or here
                     default -> LOGGER.log(WARNING, "Leader: Unknown message received.");
 
                 }
             } catch (BufferUnderflowException e){
+//                System.out.println("VmsWorker.VmsReadCompletionHandler.BufferUnderflowException");
                 LOGGER.log(WARNING, "Leader: Buffer underflow captured. Will read more with the hope the full data is delivered.");
                 e.printStackTrace(System.out);
                 readBuffer.position(startPos);
@@ -664,6 +678,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
      * While a write operation is in progress, it must wait for completion and then submit the next write.
      */
     private void sendBatchOfEvents(){
+        System.out.println("VmsWorker.sendBatchOfEvents");
         int remaining = this.drained.size();
         int count = remaining;
         ByteBuffer writeBuffer;
@@ -687,6 +702,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                     this.processPendingLogging();
                 }
                 this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.batchWriteCompletionHandler);
+//                System.out.println("coordinator.VmsWorker.sendBatchOfEvents.channel.write");
             } catch (Exception e) {
                 LOGGER.log(ERROR, "Leader: Error on submitting ["+count+"] events to "+this.consumerVms.identifier+":"+e);
                 // return events to the deque
@@ -734,6 +750,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             } else {
                 releaseLock();
                 if(options.logging()){
+//                    System.out.println("coordinator.VmsWorker.BatchWriteCompletionHandler.completed: adding bytebuffer to loggingBuffers");
                     loggingWriteBuffers.add(byteBuffer);
                 } else {
                     returnByteBuffer(byteBuffer);

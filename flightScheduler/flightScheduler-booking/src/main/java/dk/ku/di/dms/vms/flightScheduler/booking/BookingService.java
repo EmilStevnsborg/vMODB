@@ -17,6 +17,7 @@ import static dk.ku.di.dms.vms.modb.api.enums.TransactionTypeEnum.W;
 public class BookingService
 {
     private static final System.Logger LOGGER = System.getLogger(BookingService.class.getName());
+    private static int booking_counter = 0;
     private final IBookingRepository bookingRepository;
     public BookingService(IBookingRepository bookingRepository){
         this.bookingRepository = bookingRepository;
@@ -30,10 +31,14 @@ public class BookingService
 //        System.out.println(STR."bookSeat: \{bookSeat.toString()}");
 
         var order = bookSeat.orderFlight;
-        var booking = new Booking(order.customerId, order.flightId, order.seatNumber, bookSeat.timestamp, 1);
+        var booking_id = booking_counter++;
+        var booking = new Booking(booking_id, order.customerId, order.flightId, order.seatNumber, bookSeat.timestamp);
+        System.out.println(STR."""
+            booking:
+            \{booking}""");
         bookingRepository.insert(booking); // booking validity is verified by prior services
 
-        var seatBooked = new SeatBooked(booking.next_booking_id, order.customerId, booking.flightId, booking.seatNumber, booking.timestamp);
+        var seatBooked = new SeatBooked(booking.booking_id, order.customerId, booking.flightId, booking.seatNumber, booking.timestamp);
         return seatBooked;
     }
 }

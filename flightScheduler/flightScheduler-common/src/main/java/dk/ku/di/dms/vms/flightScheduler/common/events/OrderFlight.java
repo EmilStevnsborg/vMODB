@@ -20,8 +20,8 @@ public class OrderFlight
     public String toString()
     {
         return "{\n"
-                + "  \"customerId\":\"" + customerId + "\",\n"
-                + "  \"flightId\":\"" + flightId + "\",\n"
+                + "  \"customerId\":" + customerId + ",\n"
+                + "  \"flightId\":" + flightId + ",\n"
                 + "  \"seatNumber\":\"" + seatNumber + "\"\n"
                 + "}";
     }

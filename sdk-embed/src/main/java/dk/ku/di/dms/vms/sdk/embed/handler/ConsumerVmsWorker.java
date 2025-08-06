@@ -95,6 +95,8 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                                   Supplier<IChannel> channelSupplier,
                                   VmsEventHandler.VmsHandlerOptions options,
                                   IVmsSerdesProxy serdesProxy) {
+
+        System.out.println("sdk.embed.handler.ConsumerVmsWorker has been built.");
         return new ConsumerVmsWorker(me, consumerVms,
                 channelSupplier.get(), options, serdesProxy);
     }
@@ -231,12 +233,15 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     private void processPendingLogging(){
         ByteBuffer writeBuffer;
         if((writeBuffer = this.loggingWriteBuffers.poll())!= null){
+            System.out.println("ConsumerVmsWorker.processPendingLogging: POLLING logging buffer");
             try {
                 writeBuffer.position(0);
-                this.loggingHandler.log(writeBuffer);
+//                this.loggingHandler.log(writeBuffer);
                 this.returnByteBuffer(writeBuffer);
+                System.out.println("ConsumerVmsWorker.processPendingLogging: WRITING logging buffer");
             } catch (Exception e) {
                 LOGGER.log(ERROR, me.identifier + ": Error on writing byte buffer to logging file: "+e.getMessage());
+                System.out.println("ConsumerVmsWorker.processPendingLogging: FAILED logging buffer");
                 e.printStackTrace(System.out);
                 this.loggingWriteBuffers.add(writeBuffer);
             }
@@ -268,14 +273,16 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         }
     }
 
+    // TODO sending batch of events (look for format)
     private void sendBatchOfEventsNonBlocking() {
+        System.out.println("ConsumerVmsWorker.sendBatchOfEventsNonBlocking");
         int remaining = this.drained.size();
         int count = remaining;
         ByteBuffer writeBuffer = null;
         while(remaining > 0){
             try {
                 writeBuffer = this.retrieveByteBuffer();
-                remaining = BatchUtils.assembleBatchPayload(remaining, this.drained, writeBuffer);
+                remaining = BatchUtils.assembleBatchPayload(remaining, this.drained, writeBuffer); // TODO putting payloads from drained into buffer
                 writeBuffer.flip();
                 LOGGER.log(DEBUG, this.me.identifier+ ": Submitting ["+(count - remaining)+"] event(s) to "+this.consumerVms.identifier);
                 count = remaining;
@@ -301,6 +308,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
             do {
                 this.channel.write(writeBuffer).get();
             } while (writeBuffer.hasRemaining());
+            // TODO decode byte
         } catch (Exception e){
             if(this.isRunning()) {
                 LOGGER.log(ERROR, "Error caught on sending single event: " + e);
@@ -314,6 +322,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     }
 
     private void sendBatchOfEventsBlocking() {
+        System.out.println("ConsumerVmsWorker.sendBatchOfEventsBlocking");
         int remaining = this.drained.size();
         int count = remaining;
         ByteBuffer writeBuffer = null;
@@ -356,6 +365,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         return MemoryManager.getTemporaryDirectBuffer(this.options.networkBufferSize());
     }
 
+    // Adding
     private void returnByteBuffer(ByteBuffer bb) {
         bb.clear();
         WRITE_BUFFER_POOL.add(bb);
@@ -371,6 +381,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                 channel.write(byteBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, byteBuffer, this);
             } else {
                 if(options.logging()){
+//                    System.out.println("sdk.embed.ConsumerVmsWorker.WriteCompletionHandler.completed: adding bytebuffer to loggingBuffers");
                     loggingWriteBuffers.add(byteBuffer);
                 } else {
                     returnByteBuffer(byteBuffer);

@@ -7,3 +7,6 @@
 
 Use ad-hoc queries to register users and flights
 
+```
+curl -X POST -H "Content-Type: application/json" -d '{"customerId":"1", "flightId": "1", "seatNumber": "1A" }' http://localhost:8766 
+```

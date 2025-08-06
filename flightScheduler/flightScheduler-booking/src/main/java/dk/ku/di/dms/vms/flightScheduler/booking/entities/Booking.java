@@ -11,9 +11,9 @@ import java.util.Date;
 @VmsTable(name="bookings")
 public class Booking implements IEntity<Integer>
 {
-    public Booking(int customerId, int flightId, String seatNumber, Date timestamp, int next_booking_id)
+    public Booking(int booking_id, int customerId, int flightId, String seatNumber, Date timestamp)
     {
-        this.next_booking_id = next_booking_id;
+        this.booking_id = booking_id;
         this.customerId = customerId;
         this.flightId = flightId;
         this.seatNumber = seatNumber;
@@ -23,7 +23,7 @@ public class Booking implements IEntity<Integer>
 
     @Id
     @Positive
-    public int next_booking_id;
+    public int booking_id;
     @Column
     public int customerId;
     @Column
@@ -32,4 +32,15 @@ public class Booking implements IEntity<Integer>
     public String seatNumber;
     @Column
     public Date timestamp;
+
+    @Override
+    public String toString() {
+        return "{\n"
+                + "  \"booking_id\":" + booking_id + ",\n"
+                + "  \"customerId\":" + customerId + "\n"
+                + "  \"flightId\":" + flightId + ",\n"
+                + "  \"seatNumber\":\"" + seatNumber + "\",\n"
+                + "  \"timestamp\":\"" + timestamp + "\"\n"
+                + "}";
+    }
 }

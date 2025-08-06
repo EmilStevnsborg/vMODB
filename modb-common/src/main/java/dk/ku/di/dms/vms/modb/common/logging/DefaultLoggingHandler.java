@@ -21,6 +21,7 @@ class DefaultLoggingHandler implements ILoggingHandler {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        System.out.println("modb.common.logging.DefaultLoggingHandler.close");
     }
 
     @Override
@@ -28,6 +29,7 @@ class DefaultLoggingHandler implements ILoggingHandler {
         do {
             this.fileChannel.write(byteBuffer);
         } while(byteBuffer.hasRemaining());
+        System.out.println("modb.common.logging.DefaultLoggingHandler.log");
     }
 
     @Override
@@ -37,6 +39,7 @@ class DefaultLoggingHandler implements ILoggingHandler {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        System.out.println("modb.common.logging.DefaultLoggingHandler.force");
     }
 
     public final String getFileName() {

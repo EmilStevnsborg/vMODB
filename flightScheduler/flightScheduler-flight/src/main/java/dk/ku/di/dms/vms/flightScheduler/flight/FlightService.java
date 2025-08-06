@@ -28,24 +28,24 @@ public class FlightService
     @Transactional(type=RW)
     public BookSeat orderingFlight(OrderFlight orderFlight)
     {
-//        System.out.println(STR."orderFlight: \{orderFlight.toString()}");
 
-        if (orderFlight == null) {
-            throw new RuntimeException("OrderFlight is null");
+        if (orderFlight == null)
+        {
+            // abort
         }
 
         FlightSeat flightSeat = this.flightRepository.lookupByKey(new FlightSeat.FlightSeatId(orderFlight.flightId, orderFlight.seatNumber));
-        if(flightSeat == null){
-            throw new RuntimeException(STR."Flight \{orderFlight.flightId} seat \{orderFlight.seatNumber} not found");
-        }
 
-        if (flightSeat.occupied == 1)
+        if(flightSeat == null)
         {
-            // abort transaction
+            // abort
         }
-        flightRepository.delete(flightSeat);
+        if (flightSeat.occupied != 1)
+        {
+            // abort
+        }
 
-        // output event
+        flightRepository.delete(flightSeat);
         return new BookSeat(new Date(), orderFlight);
     }
 }

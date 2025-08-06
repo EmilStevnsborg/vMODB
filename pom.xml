@@ -14,12 +14,12 @@
 
     <!-- modb -->
     <module>modb</module>
-    <!--    <module>modb-api</module>-->
+    <module>modb-api</module>
     <module>modb-common</module>
 
     <!-- sdk -->
     <module>sdk-embed</module>
-    <!--    <module>sdk-core</module>-->
+    <module>sdk-core</module>
 
     <!-- general -->
     <module>web_common</module>
@@ -27,9 +27,9 @@
     <!-- operations -->
     <module>coordinator</module>
 
-    <!-- applications -->
-    <!--    <module>marketplace</module>-->
-    <!--    <module>tpcc</module>-->
+<!--     applications -->
+<!--    <module>marketplace</module>-->
+<!--    <module>tpcc</module>-->
     <module>flightScheduler</module>
 
   </modules>

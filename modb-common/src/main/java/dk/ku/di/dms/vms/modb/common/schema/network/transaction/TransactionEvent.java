@@ -30,13 +30,21 @@ public final class TransactionEvent {
 
     public static void writeWithinBatch(ByteBuffer buffer, PayloadRaw payload){
         buffer.putLong( payload.tid );
+//        System.out.println(STR."TransactionEvent position after tid: \{buffer.position()}");
         buffer.putLong( payload.batch );
+//        System.out.println(STR."TransactionEvent position after batch: \{buffer.position()}");
         buffer.putInt( payload.event.length );
+//        System.out.println(STR."TransactionEvent position after event.length: \{buffer.position()}");
         buffer.put( payload.event );
+//        System.out.println(STR."TransactionEvent position after event: \{buffer.position()}");
         buffer.putInt( payload.payload.length );
+//        System.out.println(STR."TransactionEvent position after payload.length: \{buffer.position()}");
         buffer.put( payload.payload );
+//        System.out.println(STR."TransactionEvent position after payload: \{buffer.position()}");
         buffer.putInt( payload.precedenceMap.length );
+//        System.out.println(STR."TransactionEvent position after precedenceMap.length: \{buffer.position()}");
         buffer.put( payload.precedenceMap );
+//        System.out.println(STR."TransactionEvent position after precedenceMap: \{buffer.position()}");
     }
 
     public static Payload read(ByteBuffer buffer){

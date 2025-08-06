@@ -216,6 +216,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     }
 
     public void processOutputEvent(IVmsTransactionResult txResult) {
+        System.out.println("VmsEventHandler.processOutputEvent");
         LOGGER.log(DEBUG,this.me.identifier+": New transaction result in event handler. TID = "+ txResult.tid());
         // it is a void method that executed, nothing to send
         if (txResult.getOutboundEventResult().outputQueue() != null) {
@@ -238,6 +239,7 @@ public final class VmsEventHandler extends ModbHttpServer {
      * but can only send the batch commit once
      */
     private void updateBatchStats(OutboundEventResult outputEvent) {
+        System.out.println("VmsEventHandler.updateBatchStats");
         BatchMetadata batchMetadata = this.updateBatchMetadataAtomically(outputEvent);
         // not arrived yet
         if(!this.batchContextMap.containsKey(outputEvent.batch())) return;
@@ -249,6 +251,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         thisBatch.setStatus(BatchContext.BATCH_COMPLETED);
         // if terminal, must send batch complete
         if (thisBatch.terminal) {
+            System.out.println("VmsEventHandler.updateBatchStats TERMINAL BatchComplete to leaderWorker");
             LOGGER.log(DEBUG, this.me.identifier + ": Requesting leader worker to send batch " + thisBatch.batch + " complete");
             // must be queued in case leader is off and comes back online
             this.leaderWorker.queueMessage(BatchComplete.of(thisBatch.batch, this.me.identifier));
@@ -388,6 +391,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         public VmsReadCompletionHandler(IdentifiableNode node,
                                         ConnectionMetadata connectionMetadata,
                                         ByteBuffer byteBuffer){
+            System.out.println("New VmsEventHandler.UnknownNodeReadCompletionHandler for channel");
             this.node = node;
             this.connectionMetadata = connectionMetadata;
             this.readBuffer = byteBuffer;
@@ -531,6 +535,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         private final ByteBuffer buffer;
 
         public UnknownNodeReadCompletionHandler(AsynchronousSocketChannel channel, ByteBuffer buffer) {
+            System.out.println("New VmsEventHandler.UnknownNodeReadCompletionHandler for channel");
             this.channel = channel;
             this.buffer = buffer;
         }
@@ -766,6 +771,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                 // sync with last leader...
                 LOGGER.log(WARNING, me.identifier+": Updating leader connection metadata due to new connection");
             }
+            System.out.println("VmsEventHandler.ConnectionFromLeaderProtocol.processLeaderPresentation: " + leader.host + ":" + leader.port);
             leaderConnectionMetadata = new ConnectionMetadata(
                     leader.hashCode(),
                     ConnectionMetadata.NodeType.SERVER,
@@ -812,6 +818,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         private final ByteBuffer readBuffer;
 
         public LeaderReadCompletionHandler(ConnectionMetadata connectionMetadata, ByteBuffer readBuffer){
+            System.out.println("New VmsEventHandler.LeaderReadCompletionHandler for channel");
             this.connectionMetadata = connectionMetadata;
             this.readBuffer = readBuffer;
             LIST_BUFFER.add(new ArrayList<>(1024));
@@ -968,6 +975,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                 // extract events batched
                 for (int i = 0; i < count; i++) {
                     payload = TransactionEvent.read(readBuffer);
+                    System.out.println(STR."VmsEventHandler.LeaderReadCompletionHandler.processBatchOfEvents read event from BATCH: \n\{payload}\n");
                     LOGGER.log(DEBUG, me.identifier+": Processed TID "+payload.tid());
                     if (vmsMetadata.queueToEventMap().containsKey(payload.event())) {
                         payloads.add(buildInboundEvent(payload));
@@ -991,6 +999,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         private void processSingleEvent(ByteBuffer readBuffer) {
             try {
                 TransactionEvent.Payload payload = TransactionEvent.read(readBuffer);
+                System.out.println(STR."VmsEventHandler.LeaderReadCompletionHandler.processBatchOfEvents read SINGLE event: \n\{payload}\n");
                 LOGGER.log(DEBUG,me.identifier + ": 1 event received from the leader \n"+payload);
                 // send to scheduler.... drop if the event cannot be processed (not an input event in this vms)
                 if (vmsMetadata.queueToEventMap().containsKey(payload.event())) {

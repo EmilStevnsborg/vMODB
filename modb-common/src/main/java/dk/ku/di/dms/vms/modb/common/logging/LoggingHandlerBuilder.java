@@ -13,10 +13,16 @@ import java.util.Date;
 public final class LoggingHandlerBuilder {
 
     public static ILoggingHandler build(String identifier) {
-        String fileName = identifier + "_" + new Date().getTime() +".llog";
-        String userHome = ConfigUtils.getUserHome();
-        String basePath = userHome + "/vms";
+//        String fileName = identifier + "_" + new Date().getTime() +".llog";
+        String fileName = identifier + ".llog";
+//        String userHome = ConfigUtils.getUserHome();
+        String currentDir = System.getProperty("user.dir");
+        String basePath = currentDir + "/logs";
         File theDir = new File(basePath);
+
+        System.out.println("\n############# LoggingHandlerBuilder ###############\n");
+        System.out.println(STR."modb.common.logging.LoggingHandlerBuilder.build path: \{theDir.getAbsolutePath()}");
+
         assert theDir.exists() || theDir.mkdirs();
         String filePath = basePath + "/" + fileName;
         Path path = Paths.get(filePath);
@@ -32,9 +38,16 @@ public final class LoggingHandlerBuilder {
         String loggingType = System.getProperty("logging_type");
         ILoggingHandler handler;
         try {
-            if(loggingType == null || loggingType.isEmpty() || loggingType.contentEquals("default")){
+            if (loggingType == null || loggingType.isEmpty() ||loggingType.contentEquals("thesisV0")) {
+                System.out.println("thesis v0 logging type");
+                handler = new ThesisLoggingHandlerV0(fileChannel, fileName);
+            }
+            else if(loggingType.contentEquals("default")){
+                System.out.println("default logging type");
                 handler = new DefaultLoggingHandler(fileChannel, fileName);
-            } else {
+            }
+            else {
+                System.out.println("compressed logging type");
                 handler = new CompressedLoggingHandler(fileChannel, fileName);
             }
         } catch (NoClassDefFoundError | Exception e) {

@@ -16,7 +16,7 @@ public class FlightBooked
     public String toString()
     {
         return "{\n"
-                + "\"customerId\":\"" + customerId + "\"\n"
+                + "\"customerId\":" + customerId + "\n"
                 + "}";
     }
 }

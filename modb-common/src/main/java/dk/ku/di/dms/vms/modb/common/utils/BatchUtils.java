@@ -14,9 +14,11 @@ public final class BatchUtils {
     public static int assembleBatchPayload(int remaining, List<TransactionEvent.PayloadRaw> events, ByteBuffer writeBuffer){
         int remainingBytes = writeBuffer.remaining();
 
+//        System.out.println(STR."BatchUtils type: \{BATCH_OF_EVENTS}");
         writeBuffer.put(BATCH_OF_EVENTS);
         // jump 2 integers
         writeBuffer.position(1 + JUMP);
+//        System.out.println(STR."BatchUtils position after JUMP: \{writeBuffer.position()}");
         remainingBytes = remainingBytes - 1 - JUMP;
 
         // batch them all in the buffer,
@@ -25,6 +27,7 @@ public final class BatchUtils {
         int idx = events.size() - remaining;
         while(idx < events.size() && remainingBytes > events.get(idx).totalSize()){
             TransactionEvent.writeWithinBatch( writeBuffer, events.get(idx) );
+//            System.out.println(STR."BatchUtils position after event insert: \{writeBuffer.position()}");
             remainingBytes = remainingBytes - events.get(idx).totalSize();
             idx++;
             count++;
@@ -34,6 +37,8 @@ public final class BatchUtils {
         writeBuffer.putInt(1, position);
         writeBuffer.putInt(5, count);
         writeBuffer.position(position);
+
+        System.out.println(STR."BatchUtils BATCH_OF_EVENTS event count: \{count}");
 
         return remaining - count;
     }

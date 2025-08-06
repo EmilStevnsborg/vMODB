@@ -14,8 +14,8 @@ public final class ProxyHttpServerAsyncJdk extends AbstractHttpHandler implement
     }
 
     public void post(String uri, String body) {
-        System.out.println("\n################## NEW EVENT ###################\n");
-        System.out.println("\nProxyHttpServerAsyncJdk post");
+//        System.out.println("\n################## NEW EVENT ###################\n");
+//        System.out.println("\nProxyHttpServerAsyncJdk post");
 
         TransactionInput.Event eventPayload = new TransactionInput.Event(ORDER_FLIGHT, body);
         TransactionInput txInput = new TransactionInput(ORDER_FLIGHT, eventPayload);
