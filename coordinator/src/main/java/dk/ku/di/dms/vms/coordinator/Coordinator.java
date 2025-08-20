@@ -308,6 +308,7 @@ public final class Coordinator extends ModbHttpServer {
             do {
                 // tends to be faster than blocking
                 while ((message = this.coordinatorQueue.poll(250, TimeUnit.MILLISECONDS)) != null) {
+                    System.out.println("Coordinator queue polled");
                     this.processVmsMessage(message);
                 }
             } while (this.isRunning());
@@ -462,12 +463,14 @@ public final class Coordinator extends ModbHttpServer {
 
         @Override
         public void queueMessage(Object object){
+            System.out.println("Coordinator.VmsWorkerContainer.queueMessage");
             // always goes to first
             this.vmsWorkers[0].queueMessage(object);
         }
 
         @Override
         public void queueTransactionEvent(TransactionEvent.PayloadRaw payload){
+            System.out.println("Coordinator.VmsWorkerContainer.queueTransactionEvent");
             this.queueFunc.accept(payload);
         }
     }
@@ -721,11 +724,13 @@ public final class Coordinator extends ModbHttpServer {
     private void processMessagesSentByVmsWorkers() {
         Object message;
         while((message = this.coordinatorQueue.poll()) != null) {
+            System.out.println("Coordinator queue polled (processMessagesSentByVmsWorkers)");
             this.processVmsMessage(message);
         }
     }
 
     private void processVmsMessage(Object message) {
+        System.out.println(STR."Coordinator processVmsMessage: \{message}");
         switch (message) {
             // receive metadata from all microservices
             case BatchContext batchContext -> this.processNewBatchContext(batchContext);
@@ -744,6 +749,7 @@ public final class Coordinator extends ModbHttpServer {
     }
 
     private void processTransactionAbort(TransactionAbort.Payload txAbort) {
+        System.out.println("Coordinator processTransactionAbort");
         // send abort to all VMSs...
         // later we can optimize the number of messages since some VMSs may not need to receive this abort
         // cannot commit the batch unless the VMS is sure there will be no aborts...
@@ -752,7 +758,7 @@ public final class Coordinator extends ModbHttpServer {
         // can reuse the same buffer since the message does not change across VMSs like the commit request
         for (VmsNode vms : this.vmsMetadataMap.values()) {
             // don't need to send to the vms that aborted
-            // if(vms.getIdentifier().equalsIgnoreCase( msg.vms() )) continue;
+//            if(vms.identifier.equalsIgnoreCase( txAbort. )) continue;
             this.vmsWorkerContainerMap.get(vms.identifier).queueMessage(txAbort.tid());
         }
     }

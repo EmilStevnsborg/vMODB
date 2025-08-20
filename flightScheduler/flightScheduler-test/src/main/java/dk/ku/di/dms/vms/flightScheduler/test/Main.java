@@ -16,12 +16,12 @@ public final class Main
         var numSeatsPerFlight = 100;
         var flightSeats = CreateFlightSeats("0", numSeatsPerFlight);
 
-        var numCustomers = 20;
+        var numCustomers = 100;
         var customers = CreateCustomers(numCustomers);
 
 
         // ORDER FLIGHTS
-        var numFlightOrders = 2;
+        var numFlightOrders = 1;
 
         var customersCopy = new ArrayList<Customer>(customers);
         Collections.shuffle(customersCopy);
@@ -44,6 +44,13 @@ public final class Main
 
         for (int i = 0; i < customers.size(); i++)
         {
+            // Sleep before sending order
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+
             var customer = customers.get(i);
             var seat = flightSeats.get(i);
 
@@ -62,10 +69,10 @@ public final class Main
                     .build();
 
             try {
-                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                 System.out.println("Order placed: " + orderJson);
+                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             } catch (Exception e) {
-                System.err.println("Failed to place order: " + orderJson);
+                System.err.println("Failed to place order");
             }
         }
     }

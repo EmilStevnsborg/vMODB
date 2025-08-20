@@ -218,6 +218,17 @@ public final class VmsEventHandler extends ModbHttpServer {
     public void processOutputEvent(IVmsTransactionResult txResult) {
         System.out.println("VmsEventHandler.processOutputEvent");
         LOGGER.log(DEBUG,this.me.identifier+": New transaction result in event handler. TID = "+ txResult.tid());
+
+        if (txResult.getOutboundEventResult().isAbort()) {
+            // abort
+            System.out.println("Abort event");
+            var eventOutput = txResult.getOutboundEventResult();
+            System.out.println(STR."Abort event batch: \{eventOutput.batch()}");
+            var abortMessage = TransactionAbort.of(eventOutput.batch(), eventOutput.tid());
+            this.leaderWorker.queueMessage(abortMessage);
+            return;
+        }
+
         // it is a void method that executed, nothing to send
         if (txResult.getOutboundEventResult().outputQueue() != null) {
             Map<String, Long> precedenceMap = this.tidToPrecedenceMap.get(txResult.tid());
@@ -252,10 +263,11 @@ public final class VmsEventHandler extends ModbHttpServer {
         // if terminal, must send batch complete
         if (thisBatch.terminal) {
             System.out.println("VmsEventHandler.updateBatchStats TERMINAL BatchComplete to leaderWorker");
-            LOGGER.log(DEBUG, this.me.identifier + ": Requesting leader worker to send batch " + thisBatch.batch + " complete");
+//            LOGGER.log(DEBUG, this.me.identifier + ": Requesting leader worker to send batch " + thisBatch.batch + " complete");
             // must be queued in case leader is off and comes back online
             this.leaderWorker.queueMessage(BatchComplete.of(thisBatch.batch, this.me.identifier));
         }
+        System.out.println(STR."Checkpointing in updateBatchStats: \{this.options.checkpointing()}");
         if(this.options.checkpointing()){
             LOGGER.log(INFO, this.me.identifier + ": Requesting checkpoint for batch " + thisBatch.batch);
             submitBackgroundTask(()->checkpoint(thisBatch.batch, batchMetadata.maxTidExecuted));
@@ -301,11 +313,13 @@ public final class VmsEventHandler extends ModbHttpServer {
         // I need to make access to the data versions data race free
         // so new transactions get data versions from the version map or the store
         //long initTs = System.currentTimeMillis();
+        System.out.println("VmsEventHandler.checkpoint");
         this.transactionManager.checkpoint(maxTid);
         //LOGGER.log(WARNING, me.identifier+": Checkpointing latency is "+(System.currentTimeMillis()-initTs));
         this.batchContextMap.get(batch).setStatus(BatchContext.BATCH_COMMITTED);
         // it may not be necessary. the leader has already moved on at this point
         if(INFORM_BATCH_ACK) {
+            System.out.println("VmsEventHandler.checkpoint BatchCommitAck");
             this.leaderWorker.queueMessage(BatchCommitAck.of(batch, this.me.identifier));
         }
     }
@@ -391,7 +405,6 @@ public final class VmsEventHandler extends ModbHttpServer {
         public VmsReadCompletionHandler(IdentifiableNode node,
                                         ConnectionMetadata connectionMetadata,
                                         ByteBuffer byteBuffer){
-            System.out.println("New VmsEventHandler.UnknownNodeReadCompletionHandler for channel");
             this.node = node;
             this.connectionMetadata = connectionMetadata;
             this.readBuffer = byteBuffer;
@@ -535,7 +548,6 @@ public final class VmsEventHandler extends ModbHttpServer {
         private final ByteBuffer buffer;
 
         public UnknownNodeReadCompletionHandler(AsynchronousSocketChannel channel, ByteBuffer buffer) {
-            System.out.println("New VmsEventHandler.UnknownNodeReadCompletionHandler for channel");
             this.channel = channel;
             this.buffer = buffer;
         }
@@ -888,7 +900,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                             return;
                         }
                         TransactionAbort.Payload txAbortPayload = TransactionAbort.read(this.readBuffer);
-                        LOGGER.log(WARNING, "Transaction (" + txAbortPayload.batch() + ") abort received from the leader?");
+                        System.out.println("Transaction (" + txAbortPayload.batch() + ") abort received from the leader?");
                         vmsInternalChannels.transactionAbortInputQueue().add(txAbortPayload);
                     }
                     case (BATCH_ABORT_REQUEST) -> {
@@ -975,7 +987,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                 // extract events batched
                 for (int i = 0; i < count; i++) {
                     payload = TransactionEvent.read(readBuffer);
-                    System.out.println(STR."VmsEventHandler.LeaderReadCompletionHandler.processBatchOfEvents read event from BATCH: \n\{payload}\n");
+                    System.out.println(STR."VmsEventHandler.LeaderReadCompletionHandler.processBatchOfEvents read event from BATCH");
                     LOGGER.log(DEBUG, me.identifier+": Processed TID "+payload.tid());
                     if (vmsMetadata.queueToEventMap().containsKey(payload.event())) {
                         payloads.add(buildInboundEvent(payload));
@@ -1045,6 +1057,8 @@ public final class VmsEventHandler extends ModbHttpServer {
             }
             LOGGER.log(DEBUG, me.identifier + ": All TIDs for the batch " + batchCommitCommand.batch() + " have been executed");
             batchContext.setStatus(BatchContext.BATCH_COMPLETED);
+
+            System.out.println(STR."Checkpointing in updateBatchStats: \{options.checkpointing()}");
             if(options.checkpointing()){
                 LOGGER.log(INFO, me.identifier + ": Requesting checkpoint for batch " + batchCommitCommand.batch());
                 submitBackgroundTask(()->checkpoint(batchCommitCommand.batch(), batchMetadata.maxTidExecuted));

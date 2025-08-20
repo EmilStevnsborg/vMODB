@@ -39,6 +39,7 @@ public abstract class ReadWriteIndex<K> extends AbstractIndex<K> {
 
     // flush updates
     public void flush(){
+        System.out.println("Flushing index");
         throw new RuntimeException("Not supported.");
     }
 

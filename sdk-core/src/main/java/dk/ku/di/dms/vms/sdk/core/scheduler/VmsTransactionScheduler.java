@@ -142,16 +142,22 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         }
 
         @Override
-        public void error(ExecutionModeEnum executionMode, long tid, Exception e) {
+        public void error(ExecutionModeEnum executionMode, long tid, long batch, Exception e) {
             // a simple mechanism to handle error is by re-executing, depending on the nature of the error
             // if constraint violation, it cannot be re-executed
             // in this case, the error must be informed to the event handler, so the event handler
             // can forward the error to downstream VMSs. if input VMS, easier to handle, just send a noop to them
-            LOGGER.log(WARNING, "Error captured during application execution: \n"+e.getCause().getMessage());
+
+            System.out.println("VmsTransactionScheduler error during execution");
+
             // remove from map to avoid reescheduling? no, it will lead to null pointer in scheduler loop
             VmsTransactionTask task = transactionTaskMap.get(tid);
             task.signalFailed();
             this.updateSchedulerTaskStats(executionMode, task);
+
+            // abort task now
+            var eventOutput = new OutboundEventResult(tid, batch); // abort
+            this.eventHandler.accept(eventOutput);
         }
 
         @Override
@@ -189,6 +195,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         this.lastTidFinished.updateAndGet(currTid -> Math.max(currTid, tid));
     }
 
+
     /**
      * To avoid the scheduler to remain in a busy loop while no new input events arrive
      */
@@ -210,6 +217,9 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             // must check because partitioned task interleave and may finish before a lower TID
             if(task.isFinished()){
                 this.updateLastFinishedTid(nextTid);
+                return;
+            }
+            if (task.isFailed()) {
                 return;
             }
             switch (task.signature().executionMode()) {
@@ -305,6 +315,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             LOGGER.log(WARNING, this.vmsIdentifier+": Event TID has already been processed! Queue '" + inboundEvent.event() + "' Batch: " + inboundEvent.batch() + " TID: " + inboundEvent.tid());
             return;
         }
+        System.out.println("VmsTransactionScheduler.processNewEvent Processing event");
         this.transactionTaskMap.put(inboundEvent.tid(), this.vmsTransactionTaskBuilder.build(
                 inboundEvent.tid(),
                 inboundEvent.lastTid(),

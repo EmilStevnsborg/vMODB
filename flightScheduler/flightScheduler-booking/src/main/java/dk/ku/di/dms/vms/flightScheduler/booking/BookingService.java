@@ -28,14 +28,10 @@ public class BookingService
     @Transactional(type=W)
     public SeatBooked seatBooking(BookSeat bookSeat)
     {
-//        System.out.println(STR."bookSeat: \{bookSeat.toString()}");
-
+//        if (bookSeat.toString() != null) throw new RuntimeException();
         var order = bookSeat.orderFlight;
         var booking_id = booking_counter++;
         var booking = new Booking(booking_id, order.customerId, order.flightId, order.seatNumber, bookSeat.timestamp);
-        System.out.println(STR."""
-            booking:
-            \{booking}""");
         bookingRepository.insert(booking); // booking validity is verified by prior services
 
         var seatBooked = new SeatBooked(booking.booking_id, order.customerId, booking.flightId, booking.seatNumber, booking.timestamp);

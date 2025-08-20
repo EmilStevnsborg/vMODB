@@ -38,7 +38,7 @@ public final class BatchUtils {
         writeBuffer.putInt(5, count);
         writeBuffer.position(position);
 
-        System.out.println(STR."BatchUtils BATCH_OF_EVENTS event count: \{count}");
+//        System.out.println(STR."BatchUtils BATCH_OF_EVENTS event count: \{count}");
 
         return remaining - count;
     }

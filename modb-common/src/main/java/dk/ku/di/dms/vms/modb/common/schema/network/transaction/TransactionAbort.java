@@ -1,6 +1,7 @@
 package dk.ku.di.dms.vms.modb.common.schema.network.transaction;
 
 import dk.ku.di.dms.vms.modb.common.schema.network.Constants;
+import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchComplete;
 
 import java.nio.ByteBuffer;
 
@@ -32,6 +33,10 @@ public final class TransactionAbort {
         return new Payload(batch, tid);
     }
 
+    public static TransactionAbort.Payload of(long batch, long tid){
+        return new TransactionAbort.Payload(batch, tid);
+    }
+
     // a leader cannot issue new events (and batches of course) without receiving batch ACKs from all vms involved
     // so no need for further information in the payload
     public record Payload(
@@ -39,7 +44,7 @@ public final class TransactionAbort {
     ) {
         @Override
         public String toString() {
-            return "{"
+            return "TransactionAbort {"
                     + "\"batch\":\"" + batch + "\""
                     + ",\"tid\":\"" + tid + "\""
                     + "}";

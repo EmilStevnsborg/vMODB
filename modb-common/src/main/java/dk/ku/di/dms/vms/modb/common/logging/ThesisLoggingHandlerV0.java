@@ -27,7 +27,7 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        System.out.println("modb.common.logging.ThesisLoggingHandlerV0.close");
+//        System.out.println("modb.common.logging.ThesisLoggingHandlerV0.close");
     }
 
     private void disAssembleBatchPayload(ByteBuffer byteBuffer) throws IOException {
@@ -41,14 +41,14 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
             int segmentSize = byteBuffer.getInt();
             int eventCount = byteBuffer.getInt();
 
-            System.out.println(STR."ThesisLogger BATCH_OF_EVENTS event count: \{eventCount}");
+//            System.out.println(STR."ThesisLogger BATCH_OF_EVENTS event count: \{eventCount}");
 
             for (int i = 0; i < eventCount; i++) {
                 long tid = byteBuffer.getLong();
                 long batch = byteBuffer.getLong();
                 int eventLength = byteBuffer.getInt();
 
-                System.out.println(STR."Logging event... tid: \{tid}, batch: \{batch}, eventLength: \{eventLength}");
+//                System.out.println(STR."Logging event... tid: \{tid}, batch: \{batch}, eventLength: \{eventLength}");
 
                 byte[] eventBytes = new byte[eventLength];
                 byteBuffer.get(eventBytes);
@@ -56,7 +56,7 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
                 int payloadLength = byteBuffer.getInt();
                 int payloadStart = byteBuffer.position();
                 int payloadEnd = payloadStart + payloadLength;
-                System.out.println(STR."Logging event... payloadLength: \{payloadLength}, payloadStart: \{payloadStart}");
+//                System.out.println(STR."Logging event... payloadLength: \{payloadLength}, payloadStart: \{payloadStart}");
 
 //                // this is just for testing
 //                byte[] payloadBytes = new byte[payloadLength];
@@ -73,14 +73,14 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
 
                 byteBuffer.limit(oldLimit);
 
-                System.out.println("Logging... Done writing payload to channel");
+//                System.out.println("Logging... Done writing payload to channel");
                 byteBuffer.position(payloadEnd);
 
                 int precedenceLength = byteBuffer.getInt();
                 byte[] precedenceBytes = new byte[precedenceLength];
                 byteBuffer.get(precedenceBytes);
 
-                System.out.println(STR."ThesisLogger DECODE position after decoding: \{byteBuffer.position()}");
+//                System.out.println(STR."ThesisLogger DECODE position after decoding: \{byteBuffer.position()}");
             }
         }
     }
@@ -115,7 +115,7 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
                 System.out.println(STR."logging batch complete, type=\{BATCH_COMPLETE}");
                 break;
             default:
-                System.out.println("logging unspecified event type");
+                System.out.println(STR."logging unspecified event type: \{type}");
                 break;
         }
         byteBuffer.clear();
@@ -128,7 +128,7 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        System.out.println("modb.common.logging.ThesisLoggingHandlerV0.force");
+//        System.out.println("modb.common.logging.ThesisLoggingHandlerV0.force");
     }
 
     public final String getFileName() {

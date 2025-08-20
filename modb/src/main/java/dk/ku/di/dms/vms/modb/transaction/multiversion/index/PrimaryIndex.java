@@ -420,11 +420,16 @@ public final class PrimaryIndex implements IMultiVersionIndex {
     private static final boolean GARBAGE_COLLECTION = false;
 
     public void checkpoint(long maxTid){
+        System.out.println(STR."PrimaryIndex checkpoint maxTid \{maxTid}");
+        System.out.println(STR."keysToFlush.isEmpty() \{keysToFlush.isEmpty()} " +
+                           STR."and updatesPerKeyMap.isEmpty() \{updatesPerKeyMap.isEmpty()}");
+
         if(this.keysToFlush.isEmpty() || this.updatesPerKeyMap.isEmpty()) return;
         int numRecords = 0;
         Iterator<IKey> it = this.keysToFlush.iterator();
         this.rawIndex.lock();
         while(it.hasNext()){
+            System.out.println("PrimaryIndex checkpoint it.hasNext()");
             IKey key = it.next();
             OperationSetOfKey operationSetOfKey = this.updatesPerKeyMap.get(key);
             if(operationSetOfKey == null){

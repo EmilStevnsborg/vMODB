@@ -387,7 +387,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private void processPendingLogging(){
         ByteBuffer writeBuffer;
         if((writeBuffer = this.loggingWriteBuffers.poll()) != null){
-//            System.out.println("coordinator.VmsWorker.processPendingLogging.loggingWriteBuffers.poll: not null");
+            System.out.println("coordinator.VmsWorker.processPendingLogging.loggingWriteBuffers.poll: not null");
             try {
                 writeBuffer.position(0);
                 this.loggingHandler.log(writeBuffer);
@@ -429,6 +429,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
     @Override
     public void queueTransactionEvent(TransactionEvent.PayloadRaw payloadRaw) {
+        System.out.println(STR."Coordinator queueTransactionEvent");
         this.transactionEventQueue.insert(payloadRaw);
     }
 
@@ -534,6 +535,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private final class VmsReadCompletionHandler implements CompletionHandler<Integer, Integer> {
         @Override
         public void completed(Integer result, Integer startPos) {
+            System.out.println("Leader (Coordinator) VmsReadCompletionHandler");
             if(result == -1){
                 LOGGER.log(WARNING, "Leader: " + consumerVms.identifier+" has disconnected!");
                 channel.close();
@@ -548,7 +550,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             try {
                 switch (type) {
                     case PRESENTATION -> {
-//                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.Presentation");
+                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.Presentation");
                         // this is a very bad conditional statement
                         // we could do better removing this concept of "unknown" and simply check the state
                         if (state == LEADER_PRESENTATION_SENT) {
@@ -562,7 +564,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                     }
                     // from all terminal VMSs involved in the last batch
                     case BATCH_COMPLETE -> {
-//                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.BATCH_COMPLETE");
+                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.BATCH_COMPLETE");
                         // don't actually need the host and port in the payload since we have the attachment to this read operation...
                         BatchComplete.Payload response = BatchComplete.read(readBuffer);
                         LOGGER.log(DEBUG, "Leader: Batch (" + response.batch() + ") complete received from: " + consumerVms.identifier);
@@ -573,14 +575,14 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                         // because only the aborted transaction will be rolled back
                     }
                     case BATCH_COMMIT_ACK -> {
-//                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.BATCH_COMMIT_ACK");
+                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.BATCH_COMMIT_ACK");
                         LOGGER.log(DEBUG, "Leader: Batch commit ACK received from: " + consumerVms.identifier);
                         BatchCommitAck.Payload response = BatchCommitAck.read(readBuffer);
                         // logger.config("Just logging it, since we don't necessarily need to wait for that. "+response);
                         coordinatorQueue.add(response);
                     }
                     case TX_ABORT -> {
-//                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.TX_ABORT");
+                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.TX_ABORT");
                         // get information of what
                         TransactionAbort.Payload response = TransactionAbort.read(readBuffer);
                         coordinatorQueue.add(response);
@@ -750,7 +752,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             } else {
                 releaseLock();
                 if(options.logging()){
-//                    System.out.println("coordinator.VmsWorker.BatchWriteCompletionHandler.completed: adding bytebuffer to loggingBuffers");
+                    System.out.println("coordinator.VmsWorker.BatchWriteCompletionHandler.completed: adding bytebuffer to loggingBuffers");
                     loggingWriteBuffers.add(byteBuffer);
                 } else {
                     returnByteBuffer(byteBuffer);

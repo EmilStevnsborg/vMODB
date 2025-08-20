@@ -156,7 +156,9 @@ public class StorageUtils {
     }
 
     public static File buildFile(String fileName) {
-        String filePath = getBasePath() + fileName + ".data";
+        String currentDir = System.getProperty("user.dir");
+        String basePath = currentDir + "/checkpoint/";
+        String filePath = basePath + fileName + ".data";
         File file = new File(filePath);
         LOGGER.log(DEBUG, "Attempt to create new file in directory: "+filePath);
         if(file.getParentFile().mkdirs()){

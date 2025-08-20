@@ -431,11 +431,13 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
      */
     @Override
     public void checkpoint(long maxTid){
+        System.out.println("TransactionManager checkpoint");
         LOGGER.log(INFO, "Checkpoint for max TID "+maxTid+" started at "+System.currentTimeMillis());
         if(this.checkpointing) {
+            System.out.println(STR."TransactionManager checkpointing is \{this.checkpointing} ");
             for (Table table : this.catalog.values()) {
                 LOGGER.log(INFO, "Checkpointing table "+table.getName());
-                table.primaryKeyIndex().checkpoint(maxTid);
+                table.primaryKeyIndex().checkpoint(maxTid); // checkpointing here
             }
         } else {
             LOGGER.log(INFO, "Checkpoint disabled. Starting only garbage collection for max TID "+maxTid);
@@ -453,6 +455,7 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
      */
     @Override
     public void commit(){
+        System.out.println("TransactionManager commit");
         TransactionContext txCtx = this.txCtxMap.get(Thread.currentThread().threadId());
         for(var index : txCtx.indexes){
             index.installWrites(txCtx);

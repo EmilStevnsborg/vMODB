@@ -96,7 +96,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                                   VmsEventHandler.VmsHandlerOptions options,
                                   IVmsSerdesProxy serdesProxy) {
 
-        System.out.println("sdk.embed.handler.ConsumerVmsWorker has been built.");
+        System.out.println(STR."sdk.embed.handler.ConsumerVmsWorker has been built which is \{consumerVms.identifier}");
         return new ConsumerVmsWorker(me, consumerVms,
                 channelSupplier.get(), options, serdesProxy);
     }
@@ -308,7 +308,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
             do {
                 this.channel.write(writeBuffer).get();
             } while (writeBuffer.hasRemaining());
-            // TODO decode byte
         } catch (Exception e){
             if(this.isRunning()) {
                 LOGGER.log(ERROR, "Error caught on sending single event: " + e);
