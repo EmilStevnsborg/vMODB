@@ -28,7 +28,6 @@ public class FlightService
     @Transactional(type=RW)
     public BookSeat orderingFlight(OrderFlight orderFlight)
     {
-
         if (orderFlight == null)
         {
             // abort

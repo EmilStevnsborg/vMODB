@@ -210,12 +210,14 @@ public final class TransactionWorker extends StoppableRunnable {
             TransactionEvent.PayloadRaw txEvent = TransactionEvent.of(this.tid, this.batchContext.batchOffset,
                     transactionInput.event.name, transactionInput.event.payload, precedenceMapStr);
             LOGGER.log(DEBUG,"Leader: Transaction worker "+id+" adding event "+event.name+" to "+inputVms.identifier+" worker:\n"+txEvent+"\n"+previousTidPerVms);
+            System.out.println("Coordinator.VmsWorkerContainer.queueTransactionEvent: "+txEvent);
             this.vmsWorkerContainerMap.get(inputVms.identifier).queueTransactionEvent(txEvent);
         }
         this.tid++;
     }
 
     private void generatePendingTransactionInput(Set<String> pendingVMSs, Map<String, Long> previousTidPerVms, TransactionInput transactionInput) {
+        System.out.println("TransactionWorker.generatePendingTransactionInput");
         // this has to be emitted when batch info from previous worker in the ring arrives
         long lastBatchOffset = this.batchContext.batchOffset - this.numWorkers;
         PendingTransactionInput pendingInput = new PendingTransactionInput(
@@ -264,6 +266,7 @@ public final class TransactionWorker extends StoppableRunnable {
 
         List<PendingTransactionInput> pendingInputs = entry.getValue();
         for(PendingTransactionInput pendingInput : pendingInputs){
+            System.out.println("TransactionWorker pendingInput from pendingInputMap entry");
             // building map only those VMSs that participate in the transaction
             TransactionDAG transactionDAG = this.transactionMap.get(pendingInput.input.name);
             VmsTracking[] vmsList = this.vmsPerTransactionMap.get(transactionDAG.name);
@@ -294,6 +297,7 @@ public final class TransactionWorker extends StoppableRunnable {
     }
 
     private boolean advanceCurrentBatch() {
+        System.out.println(STR."TransactionWorker.advanceCurrentBatch");
         if(!this.precedenceMapCache.containsKey(this.batchContext.batchOffset - this.numWorkers)) {
             return false;
         }
@@ -328,6 +332,7 @@ public final class TransactionWorker extends StoppableRunnable {
         // send batch precedence map for next worker in the ring
         this.precedenceMapOutputQueue.add(precedenceMap);
         this.batchContext.seal(this.tid - this.startingTidBatch, this.tid - 1, previousBatchPerVms, numberOfTIDsPerVms);
+        System.out.println("TransactionWorker Adding batchContext with offset " + this.batchContext.batchOffset + " to coordinator queue");
         this.coordinatorQueue.add(this.batchContext);
 
         // optimization: iterate over all vms in the last batch, filter those which last tid != this.tid

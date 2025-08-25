@@ -165,6 +165,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             int totalSize = 0;
             TransactionEvent.PayloadRaw txEvent = this.queue.poll();
             if(txEvent == null) return;
+            System.out.println("SingleDequeue drain");
             totalSize += txEvent.totalSize();
             while(true) {
                 list.add(txEvent);
@@ -450,12 +451,12 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private void sendMessage(Object message) {
         switch (message) {
             case BatchCommitCommand.Payload o -> {
-                System.out.println("VmsWorker.sendMessage.BatchCommitCommand");
+                System.out.println("\nVmsWorker.sendMessage.BatchCommitCommand\n");
                 this.sendBatchCommitCommand(o);
                 this.loggingHandler.force();
             }
             case BatchCommitInfo.Payload o -> {
-                System.out.println("VmsWorker.sendMessage.BatchCommitInfo");
+                System.out.println("\nVmsWorker.sendMessage.BatchCommitInfo payload" + o);
                 this.sendBatchCommitInfo(o);
                 this.loggingHandler.force();
             }
@@ -535,7 +536,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private final class VmsReadCompletionHandler implements CompletionHandler<Integer, Integer> {
         @Override
         public void completed(Integer result, Integer startPos) {
-            System.out.println("Leader (Coordinator) VmsReadCompletionHandler");
             if(result == -1){
                 LOGGER.log(WARNING, "Leader: " + consumerVms.identifier+" has disconnected!");
                 channel.close();
@@ -647,6 +647,8 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         // then send only the batch commit info
         LOGGER.log(DEBUG, "Leader: Batch ("+batchCommitInfo.batch()+") commit info will be sent to " + this.consumerVms.identifier);
         try {
+            System.out.println("Stall sending batch commit info to terminal VMS ....");
+            Thread.sleep(3000);
             ByteBuffer writeBuffer = this.retrieveByteBuffer();
             BatchCommitInfo.write(writeBuffer, batchCommitInfo);
             writeBuffer.flip();
@@ -680,7 +682,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
      * While a write operation is in progress, it must wait for completion and then submit the next write.
      */
     private void sendBatchOfEvents(){
-        System.out.println("VmsWorker.sendBatchOfEvents");
+        System.out.println(STR."VmsWorker.sendBatchOfEvents for \{consumerVms.identifier}");
         int remaining = this.drained.size();
         int count = remaining;
         ByteBuffer writeBuffer;
@@ -704,7 +706,8 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                     this.processPendingLogging();
                 }
                 this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.batchWriteCompletionHandler);
-//                System.out.println("coordinator.VmsWorker.sendBatchOfEvents.channel.write");
+                System.out.println("VmsWorker.sendBatchOfEvents.channel.write");
+
             } catch (Exception e) {
                 LOGGER.log(ERROR, "Leader: Error on submitting ["+count+"] events to "+this.consumerVms.identifier+":"+e);
                 // return events to the deque

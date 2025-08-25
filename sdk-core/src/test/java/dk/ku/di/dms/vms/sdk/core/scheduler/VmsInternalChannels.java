@@ -37,20 +37,12 @@ public final class VmsInternalChannels implements IVmsInternalChannels {
 
     private static final BlockingQueue<IVmsTransactionResult> transactionOutputQueue;
 
-    private static final BlockingQueue<TransactionAbort.Payload> transactionAbortInputQueue;
-
-    private static final BlockingQueue<TransactionAbort.Payload> transactionAbortOutputQueue;
-
     static {
         INSTANCE = new VmsInternalChannels();
 
         /* transaction **/
         transactionInputQueue = new LinkedBlockingQueue<>();
         transactionOutputQueue = new LinkedBlockingQueue<>();
-
-        /* abort **/
-        transactionAbortInputQueue = new LinkedBlockingQueue<>();
-        transactionAbortOutputQueue = new LinkedBlockingQueue<>();
     }
 
     @Override
@@ -64,13 +56,8 @@ public final class VmsInternalChannels implements IVmsInternalChannels {
     }
 
     @Override
-    public BlockingQueue<TransactionAbort.Payload> transactionAbortInputQueue() {
-        return transactionAbortInputQueue;
-    }
-
-    @Override
-    public BlockingQueue<TransactionAbort.Payload> transactionAbortOutputQueue() {
-        return transactionAbortOutputQueue;
+    public void clearTransactionInputQueue() {
+        transactionInputQueue.clear();
     }
 
 }

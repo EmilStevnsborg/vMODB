@@ -88,6 +88,7 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
     @Override
     public void log(ByteBuffer byteBuffer) throws IOException {
         byte type = byteBuffer.get(0);
+        System.out.println();
         switch (type) {
             // from and to server nodes
             case HEARTBEAT:
@@ -118,6 +119,7 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
                 System.out.println(STR."logging unspecified event type: \{type}");
                 break;
         }
+        System.out.println();
         byteBuffer.clear();
     }
 

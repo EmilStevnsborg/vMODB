@@ -44,15 +44,10 @@ public interface IVmsInternalChannels {
      * BATCH COMMIT, ABORT EVENTS
      */
 
+    void clearTransactionInputQueue();
+
     // this should be sent by terminal vms
     // BlockingQueue<BatchComplete.Payload> batchCompleteOutputQueue();
-
-    // abort a specific transaction from the batch and restart state from there
-    // should maintain an MV scheme to avoid rolling back to the last committed state
-    Queue<TransactionAbort.Payload> transactionAbortInputQueue();
-
-    //
-    Queue<TransactionAbort.Payload> transactionAbortOutputQueue();
 
     /*
      *  This is sent by the leader by all non-terminal VMSs involved in the last batch commit

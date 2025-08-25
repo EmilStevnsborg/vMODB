@@ -96,7 +96,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                                   VmsEventHandler.VmsHandlerOptions options,
                                   IVmsSerdesProxy serdesProxy) {
 
-        System.out.println(STR."sdk.embed.handler.ConsumerVmsWorker has been built which is \{consumerVms.identifier}");
+        System.out.println(STR."ConsumerVmsWorker has been built for \{consumerVms.identifier}");
         return new ConsumerVmsWorker(me, consumerVms,
                 channelSupplier.get(), options, serdesProxy);
     }
@@ -179,9 +179,9 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         while(this.isRunning()){
             try {
                 if(this.loggingWriteBuffers.isEmpty()){
-                    //LOGGER.log(WARNING, me.identifier+": Going to block since no logging buffers");
+                    LOGGER.log(WARNING, me.identifier+": Going to block since no logging buffers");
                     this.drained.add(this.transactionEventQueue.take());
-                    //LOGGER.log(WARNING, me.identifier+": Woke up");
+                    LOGGER.log(WARNING, me.identifier+": Woke up");
                 }
                 this.transactionEventQueue.drain(this.drained::add);
                 if(this.drained.isEmpty()){
@@ -232,16 +232,15 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
 
     private void processPendingLogging(){
         ByteBuffer writeBuffer;
+        System.out.println("Processing pending logging");
         if((writeBuffer = this.loggingWriteBuffers.poll())!= null){
             System.out.println("ConsumerVmsWorker.processPendingLogging: POLLING logging buffer");
             try {
                 writeBuffer.position(0);
-//                this.loggingHandler.log(writeBuffer);
+                this.loggingHandler.log(writeBuffer);
                 this.returnByteBuffer(writeBuffer);
-                System.out.println("ConsumerVmsWorker.processPendingLogging: WRITING logging buffer");
             } catch (Exception e) {
                 LOGGER.log(ERROR, me.identifier + ": Error on writing byte buffer to logging file: "+e.getMessage());
-                System.out.println("ConsumerVmsWorker.processPendingLogging: FAILED logging buffer");
                 e.printStackTrace(System.out);
                 this.loggingWriteBuffers.add(writeBuffer);
             }
@@ -275,11 +274,13 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
 
     // TODO sending batch of events (look for format)
     private void sendBatchOfEventsNonBlocking() {
-        System.out.println("ConsumerVmsWorker.sendBatchOfEventsNonBlocking");
         int remaining = this.drained.size();
+
+        System.out.println("ConsumerVmsWorker.sendBatchOfEventsNonBlocking remaining: " + remaining);
         int count = remaining;
         ByteBuffer writeBuffer = null;
         while(remaining > 0){
+            System.out.println("Something remaining");
             try {
                 writeBuffer = this.retrieveByteBuffer();
                 remaining = BatchUtils.assembleBatchPayload(remaining, this.drained, writeBuffer); // TODO putting payloads from drained into buffer
@@ -380,7 +381,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                 channel.write(byteBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, byteBuffer, this);
             } else {
                 if(options.logging()){
-//                    System.out.println("sdk.embed.ConsumerVmsWorker.WriteCompletionHandler.completed: adding bytebuffer to loggingBuffers");
+                    System.out.println("ConsumerVmsWorker.WriteCompletionHandler.completed: adding bytebuffer to loggingBuffers");
                     loggingWriteBuffers.add(byteBuffer);
                 } else {
                     returnByteBuffer(byteBuffer);

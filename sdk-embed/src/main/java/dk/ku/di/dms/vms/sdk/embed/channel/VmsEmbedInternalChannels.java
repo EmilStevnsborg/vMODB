@@ -18,17 +18,10 @@ public final class VmsEmbedInternalChannels implements IVmsInternalChannels {
 
     private final BlockingQueue<IVmsTransactionResult> transactionOutputQueue;
 
-    private final Queue<TransactionAbort.Payload> transactionAbortInputQueue;
-
-    private final Queue<TransactionAbort.Payload> transactionAbortOutputQueue;
-
     public VmsEmbedInternalChannels() {
         /* transaction **/
         this.transactionInputQueue = new MpscBlockingConsumerArrayQueueWrapper(1024*200);
         this.transactionOutputQueue = new LinkedBlockingQueue<>();
-        /* abort **/
-        this.transactionAbortInputQueue = new ConcurrentLinkedQueue<>();
-        this.transactionAbortOutputQueue = new ConcurrentLinkedQueue<>();
     }
 
     private static final class MpscBlockingConsumerArrayQueueWrapper extends MpscBlockingConsumerArrayQueue<InboundEvent> {
@@ -58,13 +51,8 @@ public final class VmsEmbedInternalChannels implements IVmsInternalChannels {
     }
 
     @Override
-    public Queue<TransactionAbort.Payload> transactionAbortInputQueue() {
-        return this.transactionAbortInputQueue;
-    }
-
-    @Override
-    public Queue<TransactionAbort.Payload> transactionAbortOutputQueue() {
-        return this.transactionAbortOutputQueue;
+    public void clearTransactionInputQueue() {
+        this.transactionInputQueue.clear();
     }
 
 }

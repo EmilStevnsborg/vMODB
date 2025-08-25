@@ -47,6 +47,7 @@ import static java.lang.System.Logger.Level.*;
  */
 public final class VmsEventHandler extends ModbHttpServer {
 
+    private boolean abortInProgress;
     private static final System.Logger LOGGER = System.getLogger(VmsEventHandler.class.getName());
     
     /** SERVER SOCKET **/
@@ -165,6 +166,9 @@ public final class VmsEventHandler extends ModbHttpServer {
                             IHttpHandler httpHandler,
                             IVmsSerdesProxy serdesProxy) throws IOException {
         super();
+
+        // abort
+        abortInProgress = false;
 
         // network and executor
         if(options.networkThreadPoolSize > 0){
@@ -294,6 +298,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         // build an indirect map
         for(Map.Entry<String,List<IdentifiableNode>> entry : receivedConsumerVms.entrySet()) {
             for(IdentifiableNode consumer : entry.getValue()){
+                LOGGER.log(DEBUG, "me: " + me.identifier + " connect to consumer: " + consumer.identifier);
                 consumerToEventsMap.computeIfAbsent(consumer, (ignored) -> new ArrayList<>()).add(entry.getKey());
             }
         }
@@ -319,7 +324,6 @@ public final class VmsEventHandler extends ModbHttpServer {
         this.batchContextMap.get(batch).setStatus(BatchContext.BATCH_COMMITTED);
         // it may not be necessary. the leader has already moved on at this point
         if(INFORM_BATCH_ACK) {
-            System.out.println("VmsEventHandler.checkpoint BatchCommitAck");
             this.leaderWorker.queueMessage(BatchCommitAck.of(batch, this.me.identifier));
         }
     }
@@ -358,6 +362,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             LOGGER.log(ERROR,this.me.identifier+" is receiving itself as consumer: "+ node.identifier);
             return;
         }
+        LOGGER.log(DEBUG,this.me.identifier+" is producing to "+ node.identifier);
         ConsumerVmsWorker consumerVmsWorker = ConsumerVmsWorker.build(this.me, node,
                         () -> JdkAsyncChannel.create(this.group),
                         this.options,
@@ -881,6 +886,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                         // events of this batch from VMSs may arrive before the batch commit info
                         // it means this VMS is a terminal node for the batch
                         BatchCommitInfo.Payload bPayload = BatchCommitInfo.read(this.readBuffer);
+                        System.out.println(me.identifier + " read BATCH_COMMIT_INFO " + bPayload);
                         LOGGER.log(DEBUG, me.identifier + ": Batch (" + bPayload.batch() + ") commit info received from the leader");
                         this.processNewBatchInfo(bPayload);
                     }
@@ -901,7 +907,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                         }
                         TransactionAbort.Payload txAbortPayload = TransactionAbort.read(this.readBuffer);
                         System.out.println("Transaction (" + txAbortPayload.batch() + ") abort received from the leader?");
-                        vmsInternalChannels.transactionAbortInputQueue().add(txAbortPayload);
+                        this.processNewTransactionAbort(txAbortPayload);
                     }
                     case (BATCH_ABORT_REQUEST) -> {
                         if(this.readBuffer.remaining() < (BatchAbortRequest.SIZE - 1)){
@@ -1029,13 +1035,20 @@ public final class VmsEventHandler extends ModbHttpServer {
         }
 
         private void processNewBatchInfo(BatchCommitInfo.Payload batchCommitInfo){
+            System.out.println("VmsEventHandler.processNewBatchInfo " + batchCommitInfo);
             BatchContext batchContext = BatchContext.build(batchCommitInfo);
             batchContextMap.put(batchCommitInfo.batch(), batchContext);
             // if it has been completed but not moved to status, then should send
             if(trackingBatchMap.containsKey(batchCommitInfo.batch())
                     && trackingBatchMap.get(batchCommitInfo.batch()).numberTIDsExecuted == batchCommitInfo.numberOfTIDsBatch()){
+
                 LOGGER.log(INFO,me.identifier+": Requesting leader worker to send batch ("+batchCommitInfo.batch()+") complete (LATE)");
                 leaderWorker.queueMessage(BatchComplete.of(batchCommitInfo.batch(), me.identifier));
+
+                // TODO maybe checkpoint here
+                BatchContext thisBatch = batchContextMap.get(batchCommitInfo.batch());
+                BatchMetadata batchMetadata = trackingBatchMap.get(batchCommitInfo.batch());
+                submitBackgroundTask(()->checkpoint(thisBatch.batch, batchMetadata.maxTidExecuted));
             }
         }
 
@@ -1044,6 +1057,7 @@ public final class VmsEventHandler extends ModbHttpServer {
          * This is not a terminal node in this batch
          */
         private void processNewBatchCommand(BatchCommitCommand.Payload batchCommitCommand){
+            System.out.println("VmsEventHandler.processNewBatchCommand " + batchCommitCommand);
             BatchContext batchContext = BatchContext.build(batchCommitCommand);
             batchContextMap.put(batchCommitCommand.batch(), batchContext);
             BatchMetadata batchMetadata = trackingBatchMap.get(batchCommitCommand.batch());
@@ -1058,11 +1072,18 @@ public final class VmsEventHandler extends ModbHttpServer {
             LOGGER.log(DEBUG, me.identifier + ": All TIDs for the batch " + batchCommitCommand.batch() + " have been executed");
             batchContext.setStatus(BatchContext.BATCH_COMPLETED);
 
-            System.out.println(STR."Checkpointing in updateBatchStats: \{options.checkpointing()}");
             if(options.checkpointing()){
                 LOGGER.log(INFO, me.identifier + ": Requesting checkpoint for batch " + batchCommitCommand.batch());
                 submitBackgroundTask(()->checkpoint(batchCommitCommand.batch(), batchMetadata.maxTidExecuted));
             }
+        }
+
+        private void processNewTransactionAbort(TransactionAbort.Payload transactionAbort){
+            // TODO actually stop reading/sending events
+            // stop processing events
+            abortInProgress = true;
+            // remove queued up events
+            vmsInternalChannels.clearTransactionInputQueue();
         }
 
         @Override

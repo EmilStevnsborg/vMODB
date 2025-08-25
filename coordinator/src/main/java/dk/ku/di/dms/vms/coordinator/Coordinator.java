@@ -308,7 +308,7 @@ public final class Coordinator extends ModbHttpServer {
             do {
                 // tends to be faster than blocking
                 while ((message = this.coordinatorQueue.poll(250, TimeUnit.MILLISECONDS)) != null) {
-                    System.out.println("Coordinator queue polled");
+                    System.out.println("\nCoordinator queue polled\n");
                     this.processVmsMessage(message);
                 }
             } while (this.isRunning());
@@ -463,14 +463,14 @@ public final class Coordinator extends ModbHttpServer {
 
         @Override
         public void queueMessage(Object object){
-            System.out.println("Coordinator.VmsWorkerContainer.queueMessage");
+            System.out.println("Coordinator.VmsWorkerContainer.queueMessage: "+object);
             // always goes to first
             this.vmsWorkers[0].queueMessage(object);
         }
 
         @Override
         public void queueTransactionEvent(TransactionEvent.PayloadRaw payload){
-            System.out.println("Coordinator.VmsWorkerContainer.queueTransactionEvent");
+            System.out.println("\nCoordinator.VmsWorkerContainer.queueTransactionEvent");
             this.queueFunc.accept(payload);
         }
     }
@@ -764,6 +764,7 @@ public final class Coordinator extends ModbHttpServer {
     }
 
     private void processBatchComplete(BatchComplete.Payload batchComplete) {
+        System.out.println("Coordinator processBatchComplete");
         // what if ACKs from VMSs take too long? or never arrive?
         // need to deal with intersecting batches? actually just continue emitting for higher throughput
         LOGGER.log(DEBUG,"Leader: Processing batch ("+ batchComplete.batch()+") complete from: "+ batchComplete.vms());
@@ -801,9 +802,11 @@ public final class Coordinator extends ModbHttpServer {
 
     // seal batch and send batch complete to all terminals...
     private void processNewBatchContext(BatchContext batchContext) {
+        System.out.println("\nCoordinator processNewBatchContext\n");
         this.batchContextMap.put(batchContext.batchOffset, batchContext);
         // after storing batch context, send to vms workers
         for(var entry : batchContext.terminalVMSs) {
+            System.out.println("Sending batchContext " + batchContext.batchOffset + " to " + entry);
             this.vmsWorkerContainerMap.get(entry).queueMessage(
                     BatchCommitInfo.of(batchContext.batchOffset,
                             batchContext.previousBatchPerVms.get(entry),
