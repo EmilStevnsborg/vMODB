@@ -9,25 +9,25 @@ import javax.persistence.Id;
 @VmsTable(name="customers")
 public final class Customer implements IEntity<Integer> {
 
-    public Customer(int customerId, String name)
+    @Id
+    public int customer_id;
+    @Column
+    public String name;
+
+    public Customer(int customer_id, String name)
     {
-        this.customerId = customerId;
+        this.customer_id = customer_id;
         this.name = name;
     }
 
     @SuppressWarnings("unused")
     public Customer(){}
 
-    @Id
-    public int customerId;
-    @Column
-    public String name;
-
 
     @Override
     public String toString() {
         return "{\n"
-                + "  \"customerId\":" + customerId + ",\n"
+                + "  \"customer_id\":" + customer_id + ",\n"
                 + "  \"name\":\"" + name + "\"\n"
                 + "}";
         }

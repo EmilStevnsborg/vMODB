@@ -22,6 +22,7 @@
         <module>flightScheduler-booking</module>
         <module>flightScheduler-customer</module>
         <module>flightScheduler-test</module>
+        <module>flightScheduler-payment</module>
     </modules>
 
     <properties>

@@ -2,35 +2,34 @@ package dk.ku.di.dms.vms.flightScheduler.common.events;
 
 import dk.ku.di.dms.vms.modb.api.annotations.Event;
 
-import java.util.Date;
-
 @Event
-public class SeatBooked
+public class BookingCancelled
 {
     public int booking_id;
+    public int requires_reimbursement;
+    public int customer_id;
     public int flight_id;
     public String seat_number;
-    public int customer_id;
-    public Date timestamp;
 
-    public SeatBooked() {}
-    public SeatBooked(int booking_id, int customer_id, int flight_id, String seat_number, Date timestamp)
+    public BookingCancelled(){}
+    public BookingCancelled(int booking_id, int requires_reimbursement, int customer_id, int flight_id, String seat_number)
     {
         this.booking_id = booking_id;
+        this.requires_reimbursement = requires_reimbursement;
         this.customer_id = customer_id;
         this.flight_id = flight_id;
         this.seat_number = seat_number;
-        this.timestamp = timestamp;
     }
+
     @Override
     public String toString()
     {
         return "{\n"
                 + "  \"booking_id\":" + booking_id + ",\n"
+                + "  \"requires_reimbursement\":" + requires_reimbursement + ",\n"
                 + "  \"customer_id\":" + customer_id + ",\n"
                 + "  \"flight_id\":" + flight_id + ",\n"
-                + "  \"seat_number\":\"" + seat_number + "\",\n"
-                + "  \"timestamp\":" + timestamp + "\n"
-                + "}";
+                + "  \"seatNumber\":\"" + seat_number + "\"\n"
+                + "\n}";
     }
 }

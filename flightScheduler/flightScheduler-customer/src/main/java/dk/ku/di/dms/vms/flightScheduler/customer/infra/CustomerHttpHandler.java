@@ -28,9 +28,9 @@ public class CustomerHttpHandler extends DefaultHttpHandler
     @Override
     public String getAsJson(String uri) {
         String[] split = uri.split("/");
-        int customerId = Integer.parseInt(split[split.length - 1]);
+        int customer_id = Integer.parseInt(split[split.length - 1]);
         this.transactionManager.beginTransaction(0, 0, 0,true);
-        Customer customer = this.repository.lookupByKey(customerId);
+        Customer customer = this.repository.lookupByKey(customer_id);
         return customer.toString();
     }
 }

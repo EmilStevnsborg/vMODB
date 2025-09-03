@@ -1,5 +1,6 @@
 package dk.ku.di.dms.vms.flightScheduler.flight;
 
+import dk.ku.di.dms.vms.flightScheduler.common.events.BookingCancelled;
 import dk.ku.di.dms.vms.flightScheduler.common.events.OrderFlight;
 import dk.ku.di.dms.vms.flightScheduler.common.events.BookSeat;
 import dk.ku.di.dms.vms.flightScheduler.flight.entities.FlightSeat;
@@ -14,6 +15,8 @@ import java.util.Date;
 import static dk.ku.di.dms.vms.modb.api.enums.TransactionTypeEnum.RW;
 
 import static dk.ku.di.dms.vms.flightScheduler.common.Constants.*;
+import static dk.ku.di.dms.vms.modb.api.enums.TransactionTypeEnum.W;
+
 @Microservice("flight")
 public class FlightService
 {
@@ -23,6 +26,7 @@ public class FlightService
         this.flightRepository = flightRepository;
     }
 
+    // part of OrderFlight
     @Inbound(values = {ORDER_FLIGHT})
     @Outbound(BOOK_SEAT)
     @Transactional(type=RW)
@@ -33,7 +37,8 @@ public class FlightService
             // abort
         }
 
-        FlightSeat flightSeat = this.flightRepository.lookupByKey(new FlightSeat.FlightSeatId(orderFlight.flightId, orderFlight.seatNumber));
+        var flightSeatId = new FlightSeat.FlightSeatId(orderFlight.flight_id, orderFlight.seat_number);
+        FlightSeat flightSeat = this.flightRepository.lookupByKey(flightSeatId);
 
         if(flightSeat == null)
         {
@@ -47,4 +52,14 @@ public class FlightService
         flightRepository.delete(flightSeat);
         return new BookSeat(new Date(), orderFlight);
     }
+
+    // part of CancelBooking
+    @Inbound(values = {BOOKING_CANCELLED})
+    @Transactional(type=W)
+    public void bookingCancelled(BookingCancelled bookingCancelled)
+    {
+        var flightSeat = new FlightSeat(bookingCancelled.flight_id, bookingCancelled.seat_number);
+        flightRepository.upsert(flightSeat);
+    }
+
 }

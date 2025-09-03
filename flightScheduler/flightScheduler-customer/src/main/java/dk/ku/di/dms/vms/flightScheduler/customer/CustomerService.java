@@ -1,5 +1,6 @@
 package dk.ku.di.dms.vms.flightScheduler.customer;
 
+import dk.ku.di.dms.vms.flightScheduler.common.events.CustomerReimbursed;
 import dk.ku.di.dms.vms.flightScheduler.common.events.SeatBooked;
 import dk.ku.di.dms.vms.flightScheduler.customer.entities.Customer;
 import dk.ku.di.dms.vms.flightScheduler.customer.repositories.ICustomerRepository;
@@ -20,17 +21,25 @@ public class CustomerService
         this.customerRepository = customerRepository;
     }
 
+    // part of OrderFlight
     @Inbound(values = {SEAT_BOOKED})
     @Transactional(type=R)
     public void seatBookedConfirmed(SeatBooked seatBooked)
     {
-//        System.out.println(STR."seatBooked: \{seatBooked.toString()}");
-
-        Customer customer = this.customerRepository.lookupByKey(seatBooked.customerId );
+        Customer customer = this.customerRepository.lookupByKey(seatBooked.customer_id );
         if(customer == null){
-            throw new RuntimeException(STR."Customer \{seatBooked.customerId} cannot be found!");
+            throw new RuntimeException(STR."Customer \{seatBooked.customer_id} cannot be found!");
         }
-        System.out.println(STR."\{customer.name} with id \{customer.customerId} has booked "
-                           + STR."flight \{seatBooked.flightId} seat \{seatBooked.seatNumber}");
+        System.out.println(STR."\{customer.name} with id \{customer.customer_id} has booked "
+                           + STR."flight \{seatBooked.flight_id} seat \{seatBooked.seat_number}");
+    }
+
+    // part of ReimburseBooking
+    @Inbound(values = {CUSTOMER_REIMBURSED})
+    @Transactional(type=R)
+    public void bookingReimbursed(CustomerReimbursed customerReimbursed)
+    {
+        Customer customer = this.customerRepository.lookupByKey(customerReimbursed.customer_id );
+        System.out.println(STR."\{customer.name} with id \{customer.customer_id} has been reimburdsed");
     }
 }

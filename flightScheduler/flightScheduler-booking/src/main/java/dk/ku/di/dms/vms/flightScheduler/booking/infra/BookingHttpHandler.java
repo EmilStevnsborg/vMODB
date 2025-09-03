@@ -17,9 +17,22 @@ public class BookingHttpHandler extends DefaultHttpHandler
     // http://host/booking
     @Override
     public String getAsJson(String uri) {
+        System.out.println("BookingHttpHandler getAsJson for uri: " + uri);
         String[] split = uri.split("/");
         this.transactionManager.beginTransaction(0, 0, 0,true);
         var bookings = this.repository.getAll();
-        return bookings.toString();
+
+        // return the (unpaid) booking ids
+        if (split[split.length-1].equals("unpaid")){
+            return bookings.stream().
+                    filter((booking -> booking.paid == 0)).
+                    map((booking -> booking.booking_id)).
+                    toList().
+                    toString();
+        }
+        return bookings.stream().
+                map((booking -> booking.booking_id)).
+                toList().
+                toString();
     }
 }

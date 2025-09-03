@@ -10,10 +10,10 @@ import java.io.Serializable;
 @VmsTable(name="flight_seats")
 public final class FlightSeat implements IEntity<FlightSeat.FlightSeatId> {
 
-    public FlightSeat(int flightId, String seatNumber)
+    public FlightSeat(int flight_id, String seat_number)
     {
-        this.flightId = flightId;
-        this.seatNumber = seatNumber;
+        this.flight_id = flight_id;
+        this.seat_number = seat_number;
         this.occupied = 0;
     }
     @SuppressWarnings("unused")
@@ -21,30 +21,30 @@ public final class FlightSeat implements IEntity<FlightSeat.FlightSeatId> {
 
     // Id
     public static class FlightSeatId implements Serializable {
-        public int flightId;
-        public String seatNumber;
+        public int flight_id;
+        public String seat_number;
 
         @SuppressWarnings("unused")
         public FlightSeatId(){}
 
-        public FlightSeatId(int flightId, String seatNumber) {
-            this.flightId = flightId;
-            this.seatNumber = seatNumber;
+        public FlightSeatId(int flight_id, String seat_number) {
+            this.flight_id = flight_id;
+            this.seat_number = seat_number;
         }
     }
 
     @Id
-    public int flightId;
+    public int flight_id;
     @Id
-    public String seatNumber;
+    public String seat_number;
     @Column
     public int occupied;
 
     @Override
     public String toString() {
         return "{\n"
-                + "  \"flightId\":" + flightId + ",\n"
-                + "  \"seatNumber\":\"" + seatNumber + ",\"\n"
+                + "  \"flight_id\":" + flight_id + ",\n"
+                + "  \"seat_number\":\"" + seat_number + ",\"\n"
                 + "  \"occupied\":\"" + occupied + "\"\n"
                 + "}";
     }

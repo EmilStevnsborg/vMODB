@@ -14,11 +14,34 @@ public final class ProxyHttpServerAsyncJdk extends AbstractHttpHandler implement
     }
 
     public void post(String uri, String body) {
-//        System.out.println("\n################## NEW EVENT ###################\n");
-//        System.out.println("\nProxyHttpServerAsyncJdk post");
 
-        TransactionInput.Event eventPayload = new TransactionInput.Event(ORDER_FLIGHT, body);
-        TransactionInput txInput = new TransactionInput(ORDER_FLIGHT, eventPayload);
+        var split = uri.split("/");
+        TransactionInput.Event eventPayload;
+        TransactionInput txInput;
+        switch (split[split.length-1])
+        {
+            case "orderFlight":
+                eventPayload = new TransactionInput.Event(ORDER_FLIGHT, body);
+                txInput = new TransactionInput(ORDER_FLIGHT, eventPayload);
+                this.coordinator.queueTransactionInput(txInput);
+                break;
+            case "payBooking":
+                eventPayload = new TransactionInput.Event(PAY_BOOKING, body);
+                txInput = new TransactionInput(PAY_BOOKING, eventPayload);
+                break;
+            case "cancelBooking":
+                eventPayload = new TransactionInput.Event(CANCEL_BOOKING, body);
+                txInput = new TransactionInput(CANCEL_BOOKING, eventPayload);
+                break;
+            case "reimburseBooking":
+                eventPayload = new TransactionInput.Event(REIMBURSE_BOOKING, body);
+                txInput = new TransactionInput(REIMBURSE_BOOKING, eventPayload);
+                break;
+            default:
+                System.out.println("Invalid URI: " + uri);
+                return;
+        }
+
         this.coordinator.queueTransactionInput(txInput);
     }
 }

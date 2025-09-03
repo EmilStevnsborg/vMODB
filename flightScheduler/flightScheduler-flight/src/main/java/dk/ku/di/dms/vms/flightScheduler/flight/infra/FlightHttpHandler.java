@@ -21,7 +21,7 @@ public class FlightHttpHandler extends DefaultHttpHandler
     @Override
     public void post(String uri, String payload)
     {
-        System.out.println(STR."\nPosting \{payload}\n");
+//        System.out.println(STR."\nPosting \{payload}\n");
         FlightSeat flightSeat = SERDES.deserialize(payload, FlightSeat.class);
         this.transactionManager.beginTransaction(0, 0, 0, false);
         this.repository.upsert(flightSeat); // upsert: update + insert (if it exists, update, else insert)

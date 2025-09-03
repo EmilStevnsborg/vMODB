@@ -3,20 +3,20 @@ package dk.ku.di.dms.vms.flightScheduler.common.events;
 import dk.ku.di.dms.vms.modb.api.annotations.Event;
 
 @Event
-public class FlightBooked
+public class PaymentSucceeded
 {
-    public int customerId;
-    public FlightBooked(){}
-    public FlightBooked(int customerId)
+    public int booking_id;
+    public PaymentSucceeded(){}
+    public PaymentSucceeded(int booking_id)
     {
-        this.customerId = customerId;
+        this.booking_id = booking_id;
     }
 
     @Override
     public String toString()
     {
         return "{\n"
-                + "\"customerId\":" + customerId + "\n"
+                + "  \"booking_id\":" + booking_id + "\n"
                 + "}";
     }
 }
