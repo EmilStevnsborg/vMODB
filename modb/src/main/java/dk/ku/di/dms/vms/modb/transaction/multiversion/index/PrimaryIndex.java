@@ -266,6 +266,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         TransactionWrite entry = TransactionWrite.upsert(WriteType.INSERT, values);
         if(operationSet == null){
             operationSet = new OperationSetOfKey(WriteType.INSERT);
+            System.out.println(STR."Putting operationSet after insert into updatesPerKeyMap under key: \{key}");
             this.updatesPerKeyMap.put(key, operationSet);
         } else {
             operationSet.lastWriteType = WriteType.INSERT;
@@ -314,6 +315,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         if(operationSet == null){
             operationSet = new OperationSetOfKey(WriteType.UPDATE);
             this.updatesPerKeyMap.put(key, operationSet);
+            System.out.println(STR."Putting operationSet after Update into updatesPerKeyMap under key: \{key}");
         } else {
             operationSet.lastWriteType = WriteType.UPDATE;
         }
@@ -360,6 +362,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
             // that means we haven't had any previous transaction performing writes to this key
             operationSet = new OperationSetOfKey(WriteType.DELETE);
             this.updatesPerKeyMap.put( key, operationSet );
+            System.out.println(STR."Putting operationSet after removeOpt into updatesPerKeyMap under key: \{key}");
             TransactionWrite entry = TransactionWrite.delete(WriteType.DELETE);
             operationSet.put(txCtx.tid, entry);
             this.appendWrite(txCtx, key);
@@ -421,21 +424,20 @@ public final class PrimaryIndex implements IMultiVersionIndex {
 
     public void checkpoint(long maxTid){
         System.out.println(STR."PrimaryIndex checkpoint maxTid \{maxTid}");
-        System.out.println(STR."keysToFlush.isEmpty() \{keysToFlush.isEmpty()} " +
-                           STR."and updatesPerKeyMap.isEmpty() \{updatesPerKeyMap.isEmpty()}");
 
         if(this.keysToFlush.isEmpty() || this.updatesPerKeyMap.isEmpty()) return;
         int numRecords = 0;
-        Iterator<IKey> it = this.keysToFlush.iterator();
+        Iterator<IKey> it = this.keysToFlush.iterator(); // set of rows modified by committed transactions
         this.rawIndex.lock();
         while(it.hasNext()){
-            System.out.println("PrimaryIndex checkpoint it.hasNext()");
             IKey key = it.next();
-            OperationSetOfKey operationSetOfKey = this.updatesPerKeyMap.get(key);
+//            System.out.println("PrimaryIndex checkpoint key: "+key);
+            OperationSetOfKey operationSetOfKey = this.updatesPerKeyMap.get(key); // updates by transactions to the key
             if(operationSetOfKey == null){
                 this.rawIndex.unlock();
                 throw new RuntimeException("Error on retrieving operation set for key "+key);
             }
+            // the most recent update on the Key
             Entry<Long, TransactionWrite> entry = operationSetOfKey.floorEntry(maxTid);
             if (entry == null) continue;
             // is the head?
@@ -444,6 +446,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
             } else if(GARBAGE_COLLECTION) {
                 operationSetOfKey.removeChildren(entry);
             }
+            // we update the snapshot
             switch (operationSetOfKey.lastWriteType) {
                 case UPDATE -> this.rawIndex.upsert(key, entry.val().record);
                 case INSERT -> this.rawIndex.insert(key, entry.val().record);
@@ -461,6 +464,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
     }
 
     public void installWrites(TransactionContext txCtx){
+        System.out.println(STR."We commit the transaction \{txCtx.tid}");
         Set<IKey> writeSet = this.removeWriteSet(txCtx);
         if(writeSet == null) {
             LOGGER.log(WARNING, "Primary Index: Transaction ID "+txCtx.tid+" could not be found in write set. Perhaps concurrent threads are set to the same TID?");
@@ -472,6 +476,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
     }
 
     public void appendWrite(TransactionContext txCtx, IKey key){
+//        System.out.println(STR."appendWrite into writeSetMap set of TransactionContext tid \{txCtx.tid} and key \{key}");
         this.writeSetMap.computeIfAbsent(txCtx.tid, ignored ->
                 Objects.requireNonNullElseGet(WRITE_SET_BUFFER.poll(), HashSet::new)).add(key);
     }

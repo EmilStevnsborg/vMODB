@@ -1083,7 +1083,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             // stop processing events
             abortInProgress = true;
             // remove queued up events
-            vmsInternalChannels.clearTransactionInputQueue();
+//            vmsInternalChannels.clearTransactionInputQueue();
         }
 
         @Override

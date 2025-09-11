@@ -34,22 +34,26 @@ public class FlightService
     {
         if (orderFlight == null)
         {
-            // abort
+            throw new RuntimeException("orderFlight is null");
         }
-
-        var flightSeatId = new FlightSeat.FlightSeatId(orderFlight.flight_id, orderFlight.seat_number);
-        FlightSeat flightSeat = this.flightRepository.lookupByKey(flightSeatId);
+        FlightSeat flightSeat = this.flightRepository.lookupByKey(new FlightSeat.FlightSeatId(orderFlight.flight_id, orderFlight.seat_number));
+//        System.out.println(STR."Trying to order flight: \n\{flightSeat.toString()}");
 
         if(flightSeat == null)
         {
             // abort
+            throw new RuntimeException("flightSeat is null");
         }
-        if (flightSeat.occupied != 1)
+        if (flightSeat.occupied != 0)
         {
             // abort
+            throw new RuntimeException("flightSeat is already occupied");
         }
 
-        flightRepository.delete(flightSeat);
+        // update occupied status
+        flightSeat.occupied = 1;
+        this.flightRepository.update(flightSeat);
+
         return new BookSeat(new Date(), orderFlight);
     }
 
@@ -59,7 +63,7 @@ public class FlightService
     public void bookingCancelled(BookingCancelled bookingCancelled)
     {
         var flightSeat = new FlightSeat(bookingCancelled.flight_id, bookingCancelled.seat_number);
-        flightRepository.upsert(flightSeat);
+        flightRepository.update(flightSeat);
     }
 
 }

@@ -709,6 +709,7 @@ public final class Coordinator extends ModbHttpServer {
      * having this info avoids having to contact all internal/terminal nodes to inform the precedence of events
      */
     public void queueTransactionInput(TransactionInput transactionInput){
+        System.out.println("Coordinator inserting transactionInput into queue");
         this.transactionInputConsumer.accept(transactionInput);
     }
 

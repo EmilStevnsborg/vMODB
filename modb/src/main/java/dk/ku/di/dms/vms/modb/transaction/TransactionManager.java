@@ -455,8 +455,8 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
      */
     @Override
     public void commit(){
-        System.out.println("TransactionManager commit");
         TransactionContext txCtx = this.txCtxMap.get(Thread.currentThread().threadId());
+        System.out.println(STR."TransactionManager commit \{txCtx.tid}");
         for(var index : txCtx.indexes){
             index.installWrites(txCtx);
         }

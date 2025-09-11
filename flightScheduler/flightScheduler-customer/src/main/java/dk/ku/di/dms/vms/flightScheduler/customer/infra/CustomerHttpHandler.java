@@ -18,7 +18,7 @@ public class CustomerHttpHandler extends DefaultHttpHandler
     @Override
     public void post(String uri, String payload)
     {
-//        System.out.println(STR."\nPosting \{payload}\n");
+        System.out.println(STR."\nPosting \{payload}\n");
         Customer customer = SERDES.deserialize(payload, Customer.class);
         this.transactionManager.beginTransaction(0, 0, 0, false);
         this.repository.upsert(customer); // upsert: update + insert (if it exists, update, else insert)

@@ -92,7 +92,7 @@ final class LeaderWorker extends StoppableRunnable {
     }
 
     private void sendMessage(Object message) {
-        System.out.println("LeaderWorker sending message");
+//        System.out.println("LeaderWorker sending message");
         switch (message) {
             case BatchComplete.Payload o -> this.sendBatchComplete(o);
             case BatchCommitAck.Payload o -> this.sendBatchCommitAck(o);
@@ -104,13 +104,13 @@ final class LeaderWorker extends StoppableRunnable {
     }
 
     public void queueMessage(Object message) {
-        System.out.println(STR."LeaderWorker queueing message \{message.toString()}");
+//        System.out.println(STR."LeaderWorker queueing message \{message.toString()}");
         this.sendMessage(message);
     }
 
     private void write(Object message) {
         try {
-            System.out.println(STR."LeaderWorker writing message \{message}");
+//            System.out.println(STR."LeaderWorker writing message \{message}");
             this.writeBuffer.flip();
             do {
                // var initTs = System.currentTimeMillis();

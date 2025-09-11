@@ -92,31 +92,31 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
         switch (type) {
             // from and to server nodes
             case HEARTBEAT:
-                System.out.println(STR."logging heartbeat, type=\{HEARTBEAT}");
+//                System.out.println(STR."logging heartbeat, type=\{HEARTBEAT}");
                 break;
             case PRESENTATION:
-                System.out.println(STR."logging presentation, type=\{PRESENTATION}");
+//                System.out.println(STR."logging presentation, type=\{PRESENTATION}");
                 break;
             case CONSUMER_SET:
-                System.out.println(STR."logging consumer set, type=\{CONSUMER_SET}");
+//                System.out.println(STR."logging consumer set, type=\{CONSUMER_SET}");
                 break;
 
             // events
             case EVENT:
-                System.out.println(STR."logging event, type=\{EVENT}");
+//                System.out.println(STR."logging event, type=\{EVENT}");
                 break;
             case BATCH_OF_EVENTS:
-                System.out.println(STR."logging batch of events, type=\{BATCH_OF_EVENTS}");
+//                System.out.println(STR."logging batch of events, type=\{BATCH_OF_EVENTS}");
                 disAssembleBatchPayload(byteBuffer);
                 break;
             case TX_ABORT:
-                System.out.println(STR."logging transaction abort, type=\{TX_ABORT}");
+//                System.out.println(STR."logging transaction abort, type=\{TX_ABORT}");
                 break;
             case BATCH_COMPLETE:
-                System.out.println(STR."logging batch complete, type=\{BATCH_COMPLETE}");
+//                System.out.println(STR."logging batch complete, type=\{BATCH_COMPLETE}");
                 break;
             default:
-                System.out.println(STR."logging unspecified event type: \{type}");
+//                System.out.println(STR."logging unspecified event type: \{type}");
                 break;
         }
         System.out.println();

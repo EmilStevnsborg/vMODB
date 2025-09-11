@@ -710,6 +710,8 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
             } catch (Exception e) {
                 LOGGER.log(ERROR, "Leader: Error on submitting ["+count+"] events to "+this.consumerVms.identifier+":"+e);
+
+                System.out.println("\n!!!VmsWorker.sendBatchOfEvents.channel.write FAILED!!!\n");
                 // return events to the deque
                 while(!this.drained.isEmpty()) {
                     this.transactionEventQueue.insert(this.drained.remove(0));

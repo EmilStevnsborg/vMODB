@@ -20,8 +20,10 @@ public class Transactions
                     }
                     """;
 
+        System.out.println("Sending: \n" + orderJson);
+
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8766"))
+                .uri(URI.create("http://localhost:8766/orderFlight"))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(orderJson))
                 .build();
@@ -38,13 +40,13 @@ public class Transactions
     {
         var payBookingJson = STR."""
                     {
-                      "customer_id": "\{booking_id}",
-                      "flight_id": "\{payment_method}"
+                      "booking_id": "\{booking_id}",
+                      "payment_method": "\{payment_method}"
                     }
                     """;
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8766"))
+                .uri(URI.create("http://localhost:8766/payBooking"))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(payBookingJson))
                 .build();
@@ -57,6 +59,46 @@ public class Transactions
     }
 
     // CancelBooking
+    public static void CancelBooking(HttpClient client, int booking_id)
+    {
+        var cancelBookingJson = STR."""
+                    {
+                      "booking_id": "\{booking_id}"
+                    }
+                    """;
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:8766/cancelBooking"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(cancelBookingJson))
+                .build();
+
+        try {
+            client.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (Exception e) {
+            System.err.println("Failed to cancel booking");
+        }
+    }
 
     // ReimburseBooking
+    public static void ReimburseBooking(HttpClient client, int booking_id)
+    {
+        var reimburseBookingJson = STR."""
+                    {
+                      "booking_id": "\{booking_id}"
+                    }
+                    """;
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:8766/reimburseBooking"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(reimburseBookingJson))
+                .build();
+
+        try {
+            client.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (Exception e) {
+            System.err.println("Failed to reimburse booking");
+        }
+    }
 }

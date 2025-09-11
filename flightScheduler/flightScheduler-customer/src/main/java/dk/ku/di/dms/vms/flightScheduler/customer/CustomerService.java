@@ -30,8 +30,8 @@ public class CustomerService
         if(customer == null){
             throw new RuntimeException(STR."Customer \{seatBooked.customer_id} cannot be found!");
         }
-        System.out.println(STR."\{customer.name} with id \{customer.customer_id} has booked "
-                           + STR."flight \{seatBooked.flight_id} seat \{seatBooked.seat_number}");
+//        System.out.println(STR."\{customer.name} with id \{customer.customer_id} has booked "
+//                           + STR."flight \{seatBooked.flight_id} seat \{seatBooked.seat_number}");
     }
 
     // part of ReimburseBooking

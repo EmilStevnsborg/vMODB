@@ -232,9 +232,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
 
     private void processPendingLogging(){
         ByteBuffer writeBuffer;
-        System.out.println("Processing pending logging");
         if((writeBuffer = this.loggingWriteBuffers.poll())!= null){
-            System.out.println("ConsumerVmsWorker.processPendingLogging: POLLING logging buffer");
             try {
                 writeBuffer.position(0);
                 this.loggingHandler.log(writeBuffer);
@@ -280,7 +278,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         int count = remaining;
         ByteBuffer writeBuffer = null;
         while(remaining > 0){
-            System.out.println("Something remaining");
             try {
                 writeBuffer = this.retrieveByteBuffer();
                 remaining = BatchUtils.assembleBatchPayload(remaining, this.drained, writeBuffer); // TODO putting payloads from drained into buffer
@@ -381,7 +378,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                 channel.write(byteBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, byteBuffer, this);
             } else {
                 if(options.logging()){
-                    System.out.println("ConsumerVmsWorker.WriteCompletionHandler.completed: adding bytebuffer to loggingBuffers");
+//                    System.out.println("ConsumerVmsWorker.WriteCompletionHandler.completed: adding bytebuffer to loggingBuffers");
                     loggingWriteBuffers.add(byteBuffer);
                 } else {
                     returnByteBuffer(byteBuffer);

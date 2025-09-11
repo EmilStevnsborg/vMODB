@@ -5,9 +5,11 @@ import dk.ku.di.dms.vms.modb.api.interfaces.IEntity;
 
 import javax.persistence.Column;
 import javax.persistence.Id;
+import javax.persistence.IdClass;
 import java.io.Serializable;
 
 @VmsTable(name="flight_seats")
+@IdClass(FlightSeat.FlightSeatId.class)
 public final class FlightSeat implements IEntity<FlightSeat.FlightSeatId> {
 
     public FlightSeat(int flight_id, String seat_number)
@@ -44,7 +46,7 @@ public final class FlightSeat implements IEntity<FlightSeat.FlightSeatId> {
     public String toString() {
         return "{\n"
                 + "  \"flight_id\":" + flight_id + ",\n"
-                + "  \"seat_number\":\"" + seat_number + ",\"\n"
+                + "  \"seat_number\":\"" + seat_number + "\",\n"
                 + "  \"occupied\":\"" + occupied + "\"\n"
                 + "}";
     }
