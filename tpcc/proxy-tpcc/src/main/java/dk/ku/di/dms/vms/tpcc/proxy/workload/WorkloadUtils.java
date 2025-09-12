@@ -21,6 +21,7 @@ import static dk.ku.di.dms.vms.tpcc.proxy.datagen.DataGenUtils.nuRand;
 import static dk.ku.di.dms.vms.tpcc.proxy.datagen.DataGenUtils.randomNumber;
 import static dk.ku.di.dms.vms.tpcc.proxy.infra.TPCcConstants.*;
 import static java.lang.System.Logger.Level.*;
+import static java.lang.Thread.sleep;
 
 public final class WorkloadUtils {
 
@@ -119,7 +120,7 @@ public final class WorkloadUtils {
                 try {
                     if(!input.hasNext()){
                         LOGGER.log(WARNING, "Number of input events are not enough for runtime " + runTime + " ms");
-                        allThreadsAreDone.countDown();
+                        sleep(endTs - currentTs);
                         break;
                     }
                     long batchId = func.apply(input.next());
@@ -144,7 +145,7 @@ public final class WorkloadUtils {
         long initTs = System.currentTimeMillis();
         List<Iterator<NewOrderWareIn>> input = new ArrayList<>(numWare);
         for(int i = 0; i < numWare; i++){
-            AppendOnlyBuffer buffer = StorageUtils.loadAppendOnlyBufferUnknownSize(BASE_WORKLOAD_FILE_NAME+"1");
+            AppendOnlyBuffer buffer = StorageUtils.loadAppendOnlyBufferUnknownSize(BASE_WORKLOAD_FILE_NAME+(i+1));
             // calculate number of entries (i.e., transactions)
             int numTransactions = (int) buffer.size() / SCHEMA.getRecordSize();
             input.add( createWorkloadInputIterator(buffer, numTransactions) );

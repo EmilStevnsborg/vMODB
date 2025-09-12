@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.*;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 import static java.lang.System.Logger.Level.ERROR;
 import static java.lang.System.Logger.Level.WARNING;
@@ -26,15 +26,15 @@ public abstract class ModbHttpServer extends StoppableRunnable {
     protected static final List<HttpReadCompletionHandler> SSE_CLIENTS = new CopyOnWriteArrayList<>();
 
     // must be concurrent because it is accessed by different threads
-    protected static final List<Consumer<Long>> BATCH_COMMIT_CONSUMERS = new CopyOnWriteArrayList<>();
+    protected static final List<BiConsumer<Long, Long>> BATCH_COMMIT_CONSUMERS = new CopyOnWriteArrayList<>();
 
     private static final Set<Future<?>> TRACKED_FUTURES = ConcurrentHashMap.newKeySet();
 
     static {
         // register client as a batch commit consumer
-        BATCH_COMMIT_CONSUMERS.add(aLong -> {
+        BATCH_COMMIT_CONSUMERS.add( (_, numTIDsCommitted) -> {
             for (var sseClient : SSE_CLIENTS){
-                sseClient.sendToSseClient(aLong);
+                sseClient.sendToSseClient(numTIDsCommitted);
             }
         });
     }
@@ -244,12 +244,11 @@ public abstract class ModbHttpServer extends StoppableRunnable {
                                 this.processSseClient();
                                 return;
                             }
-                            case null, default -> {
+                            default -> {
                                 this.sendErrorMsgAndCloseConnection(ERROR_RESPONSE_BYTES);
                                 return;
                             }
-
-                    }
+                        }
                     }
                     case "POST" -> {
                         if(body.isEmpty()){
@@ -445,7 +444,7 @@ public abstract class ModbHttpServer extends StoppableRunnable {
     /**
      * Useful for managed experiments, that is, when workload is generated in place
      */
-    public void registerBatchCommitConsumer(Consumer<Long> consumer){
+    public void registerBatchCommitConsumer(BiConsumer<Long, Long> consumer){
         BATCH_COMMIT_CONSUMERS.add(consumer);
     }
 

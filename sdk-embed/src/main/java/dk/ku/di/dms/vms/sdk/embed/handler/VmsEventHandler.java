@@ -245,7 +245,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         if(thisBatch.numberOfTIDsBatch != batchMetadata.numberTIDsExecuted) {
             return;
         }
-        LOGGER.log(INFO, this.me.identifier + ": All TIDs for the batch " + thisBatch.batch + " have been executed");
+        LOGGER.log(DEBUG, this.me.identifier + ": All TIDs for the batch " + thisBatch.batch + " have been executed");
         thisBatch.setStatus(BatchContext.BATCH_COMPLETED);
         // if terminal, must send batch complete
         if (thisBatch.terminal) {

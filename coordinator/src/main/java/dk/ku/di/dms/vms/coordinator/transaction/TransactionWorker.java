@@ -8,7 +8,6 @@ import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static java.lang.System.Logger.Level.*;
 
@@ -121,8 +120,6 @@ public final class TransactionWorker extends StoppableRunnable {
         this.coordinatorQueue = coordinatorQueue;
     }
 
-    private final AtomicLong numTIDsSubmitted = new AtomicLong(0);
-
     @Override
     public void run() {
         LOGGER.log(INFO, "Starting transaction worker # " + this.id);
@@ -161,7 +158,6 @@ public final class TransactionWorker extends StoppableRunnable {
     }
 
     private long getTidNextBatch() {
-        this.numTIDsSubmitted.updateAndGet(x -> x + (this.tid - this.startingTidBatch));
         if(this.numWorkers == 1) return this.tid;
         return this.startingTidBatch + ((long) this.numWorkers * this.maxNumberOfTIDsBatch);
     }
@@ -336,10 +332,6 @@ public final class TransactionWorker extends StoppableRunnable {
         this.batchContext = new BatchContext(this.batchContext.batchOffset + this.numWorkers);
 
         return true;
-    }
-
-    public long getNumTIDsSubmitted() {
-        return this.numTIDsSubmitted.get();
     }
 
 }

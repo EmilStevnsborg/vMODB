@@ -51,9 +51,6 @@ public final class Main {
         vmsToHostMap.put("inventory_host", PROPERTIES.getProperty("inventory_host"));
         vmsToHostMap.put("order_host", PROPERTIES.getProperty("order_host"));
 
-        System.out.println(vmsToHostMap);
-        System.out.println(PROPERTIES);
-
         Scanner scanner = new Scanner(System.in);
         boolean running = true;
         while (running) {
@@ -71,7 +68,18 @@ public final class Main {
                     System.out.println("Tables created!");
                     break;
                 case "2":
-                    System.out.println("Option 2: \"Load services with data from tables in disk\" selected.");
+                    System.out.println("Option 2: \"Load services with tables in disk\" selected.");
+
+                    if(coordinator != null){
+                        long submitted = coordinator.getNumTIDsSubmitted();
+                        long committed = coordinator.getNumTIDsCommitted();
+                        System.out.println("Submitted: "+submitted+" Committed: "+committed);
+                        if(submitted > committed) {
+                            System.out.println("Cannot load services with tables in disk while transactions are executing: "+submitted+" > "+committed);
+                            break;
+                        }
+                    }
+
                     if(tables == null) {
                         System.out.println("Loading tables from disk...");
                         // the number of warehouses must be exactly the same otherwise lead to errors in reading from files
@@ -116,8 +124,8 @@ public final class Main {
                         System.out.print("Enter duration (ms): [press 0 for 10s] ");
                         runTime = Integer.parseInt(scanner.nextLine());
                         if (runTime == 0) runTime = 10000;
-                        if(runTime < (batchWindow*2)){
-                            System.out.print("Duration must be at least 2 * "+batchWindow+" (ms)");
+                        if(runTime < (batchWindow * 2)){
+                            System.out.print("Duration must be at least 2 * "+batchWindow+" (ms)\n");
                             continue;
                         }
                         break;
@@ -126,9 +134,9 @@ public final class Main {
                     while(true) {
                         System.out.println("Enter warm up period (ms): [press 0 for 2s] ");
                         warmUp = Integer.parseInt(scanner.nextLine());
-                        if (warmUp == 0) warmUp = 2000;
-                        if(warmUp >= runTime){
-                            System.out.print("Warm up must be lower than run time "+runTime+" (ms)");
+                        if (warmUp <= 0) warmUp = 2000;
+                        if(warmUp > runTime){
+                            System.out.print("Warm up must be lower than run time "+runTime+" (ms)\n");
                             continue;
                         }
                         break;
@@ -189,7 +197,7 @@ public final class Main {
     private static void printMenu(String menuType) {
         System.out.println("\n=== "+menuType+" ===");
         System.out.println("1. Create tables in disk");
-        System.out.println("2. Load services with data from tables in disk");
+        System.out.println("2. Load services with tables in disk");
         System.out.println("3. Create workload");
         System.out.println("4. Submit workload");
         System.out.println("5. Reset service states");

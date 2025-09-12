@@ -774,8 +774,8 @@ public final class Coordinator extends ModbHttpServer {
 
     private void updateBatchOffsetPendingCommit(BatchContext batchContext) {
         if(batchContext.batchOffset == this.batchOffsetPendingCommit){
-            this.numTIDsCommitted.updateAndGet(i -> i + batchContext.numTIDsOverall);
-            this.sendCommitCommandToVMSs(batchContext);
+            final long numTIDsCommitted = this.numTIDsCommitted.updateAndGet(i -> i + batchContext.numTIDsOverall);
+            this.sendCommitCommandToVMSs(batchContext, numTIDsCommitted);
             this.batchOffsetPendingCommit = batchContext.batchOffset + 1;
             // making this implementation order-independent, so not assuming batch commit are received in order
             BatchContext nextBatchContext = this.batchContextMap.get( this.batchOffsetPendingCommit );
@@ -860,7 +860,7 @@ public final class Coordinator extends ModbHttpServer {
     /**
      * Only send to non-terminals
      */
-    private void sendCommitCommandToVMSs(BatchContext batchContext){
+    private void sendCommitCommandToVMSs(BatchContext batchContext, long numTIDsCommitted){
         for(VmsNode vms : this.vmsMetadataMap.values()){
             if(batchContext.terminalVMSs.contains(vms.identifier)) {
                 LOGGER.log(DEBUG,"Leader: Batch ("+batchContext.batchOffset+") commit command not sent to "+ vms.identifier + " (terminal)");
@@ -880,8 +880,7 @@ public final class Coordinator extends ModbHttpServer {
         }
 
         if(!BATCH_COMMIT_CONSUMERS.isEmpty()) {
-            final long tid = this.numTIDsCommitted.get();
-            BATCH_COMMIT_CONSUMERS.forEach(c->c.accept(tid));
+            BATCH_COMMIT_CONSUMERS.forEach(c->c.accept(batchContext.batchOffset, numTIDsCommitted));
             /* must test both approaches in the experiments
             for (var task : BATCH_COMMIT_CONSUMERS){
                 submitBackgroundTask(()-> task.accept(tid));
@@ -895,11 +894,14 @@ public final class Coordinator extends ModbHttpServer {
     }
 
     public long getNumTIDsSubmitted(){
-        long sumTIDs = 0;
-        for(var txWorker : this.transactionWorkers){
-            sumTIDs += txWorker.t1().getNumTIDsSubmitted();
+        long nextBatchToCheck = this.batchOffsetPendingCommit;
+        while(this.batchContextMap.containsKey(nextBatchToCheck)){
+            nextBatchToCheck++;
         }
-        return sumTIDs;
+        if(this.batchContextMap.containsKey(nextBatchToCheck - 1)){
+            return this.batchContextMap.get(nextBatchToCheck - 1).lastTid;
+        }
+        return 0;
     }
 
     public CoordinatorOptions getOptions(){

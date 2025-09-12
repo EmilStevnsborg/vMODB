@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 import static java.lang.System.Logger.Level.INFO;
+import static java.lang.System.Logger.Level.WARNING;
 
 public final class ExperimentUtils {
 
@@ -28,69 +29,97 @@ public final class ExperimentUtils {
 
     private static boolean CONSUMER_REGISTERED = false;
 
+    private static int lastExperimentLastTID = 0;
+
     public static ExperimentStats runExperiment(Coordinator coordinator, List<Iterator<NewOrderWareIn>> input, int runTime, int warmUp) {
 
         // provide a consumer to avoid depending on the coordinator
         Function<NewOrderWareIn, Long> func = newOrderInputBuilder(coordinator);
 
-        if(!CONSUMER_REGISTERED) {
-            coordinator.registerBatchCommitConsumer((tid) -> BATCH_TO_FINISHED_TS_MAP.put(
-                    (long) BATCH_TO_FINISHED_TS_MAP.size() + 1,
-                    new BatchStats(BATCH_TO_FINISHED_TS_MAP.size() + 1, tid, System.currentTimeMillis())));
+        if(CONSUMER_REGISTERED) {
+            // clean up possible entries from previous run
+            BATCH_TO_FINISHED_TS_MAP.keySet().stream().max(Long::compareTo).ifPresent(
+                    highestKey -> lastExperimentLastTID = (int) BATCH_TO_FINISHED_TS_MAP.get(highestKey).lastTid);
+            BATCH_TO_FINISHED_TS_MAP.clear();
+        } else {
+            coordinator.registerBatchCommitConsumer((batchId, tid) -> BATCH_TO_FINISHED_TS_MAP.put(
+                    batchId,
+                    new BatchStats(batchId, tid, System.currentTimeMillis())));
             CONSUMER_REGISTERED = true;
         }
 
         int newRuntime = runTime + warmUp;
-
         WorkloadUtils.WorkloadStats workloadStats = WorkloadUtils.submitWorkload(input, newRuntime, func);
 
         // avoid submitting after experiment termination
         coordinator.clearTransactionInputs();
         LOGGER.log(INFO,"Transaction input queue(s) cleared.");
 
+        if(BATCH_TO_FINISHED_TS_MAP.isEmpty()) {
+            LOGGER.log(WARNING, "No batch of transactions completed!");
+            return new ExperimentStats(0, 0, 0, 0, 0, 0, 0, 0);
+        }
+
         long endTs = workloadStats.initTs() + newRuntime;
         long initTs = workloadStats.initTs() + warmUp;
-        int numCompletedWithWarmUp = 0;
-        int numCompleted = 0;
+        int numCompletedWithWarmUp;
+        int numCompletedDuringWarmUp = 0;
+        int numCompleted;
         List<Long> allLatencies = new ArrayList<>();
-        // calculate latency based on the batch
-        for(var workerEntry : workloadStats.submitted()){
-            for(var batchEntry : BATCH_TO_FINISHED_TS_MAP.entrySet()) {
-                if(batchEntry.getValue().endTs > endTs) continue;
-                if(!workerEntry.containsKey(batchEntry.getKey())) continue;
-                var initTsEntries = workerEntry.get(batchEntry.getKey());
-                numCompletedWithWarmUp += initTsEntries.size();
-                for (var initTsEntry : initTsEntries){
-                    if(initTsEntry >= initTs) {
-                        numCompleted += 1;
-                        allLatencies.add(batchEntry.getValue().endTs - initTsEntry);
-                    }
-                }
+
+        // find first batch that runs transactions after warm up
+        BatchStats prevBatchStats = null;
+        for(var batchStat : BATCH_TO_FINISHED_TS_MAP.entrySet()){
+            if(batchStat.getValue().endTs < initTs) {
+                prevBatchStats = batchStat.getValue();
+                numCompletedDuringWarmUp = (int) prevBatchStats.lastTid - lastExperimentLastTID;
+                continue;
             }
+            break;
         }
+
+        // if none, consider the first batch as the warmup
+        if(prevBatchStats == null) {
+            Long lowestKey = BATCH_TO_FINISHED_TS_MAP.keySet().stream().min(Long::compareTo).orElse(null);
+            prevBatchStats = BATCH_TO_FINISHED_TS_MAP.get(lowestKey);
+            numCompletedDuringWarmUp = (int) prevBatchStats.lastTid - lastExperimentLastTID;
+        }
+
+        BatchStats firstBatchStats = prevBatchStats;
+
+        // calculate latency based on the batch
+        while(BATCH_TO_FINISHED_TS_MAP.containsKey(prevBatchStats.batchId+1)){
+            BatchStats currBatchStats = BATCH_TO_FINISHED_TS_MAP.get(prevBatchStats.batchId+1);
+            if(currBatchStats.endTs > endTs) break;
+            allLatencies.add(currBatchStats.endTs - prevBatchStats.endTs);
+            prevBatchStats = currBatchStats;
+        }
+
+        numCompletedWithWarmUp = (int) prevBatchStats.lastTid - lastExperimentLastTID;
+        numCompleted = numCompletedWithWarmUp - numCompletedDuringWarmUp;
+        long actualRuntime = prevBatchStats.endTs - firstBatchStats.endTs;
 
         double average = allLatencies.stream().mapToLong(Long::longValue).average().orElse(0.0);
         allLatencies.sort(null);
         double percentile_50 = PercentileCalculator.calculatePercentile(allLatencies, 0.50);
         double percentile_75 = PercentileCalculator.calculatePercentile(allLatencies, 0.75);
         double percentile_90 = PercentileCalculator.calculatePercentile(allLatencies, 0.90);
-        long txPerSec = numCompleted / (runTime / 1000);
+        double txPerSec = numCompleted / ((double) actualRuntime / 1000L);
 
         System.out.println("Average latency: "+ average);
         System.out.println("Latency at 50th percentile: "+ percentile_50);
         System.out.println("Latency at 75th percentile: "+ percentile_75);
         System.out.println("Latency at 90th percentile: "+ percentile_90);
-        System.out.println("Number of completed transactions (with warm up): "+ numCompletedWithWarmUp);
-        System.out.println("Number of completed transactions: "+ numCompleted);
+        System.out.println("Number of completed transactions (during warm up): "+ numCompletedDuringWarmUp);
+        System.out.println("Number of completed transactions (after warm up): "+ numCompleted);
+        System.out.println("Number of completed transactions (total): "+ numCompletedWithWarmUp);
         System.out.println("Transactions per second: "+txPerSec);
         System.out.println();
-
-        resetBatchToFinishedTsMap();
 
         return new ExperimentStats(workloadStats.initTs(), numCompletedWithWarmUp, numCompleted, txPerSec, average, percentile_50, percentile_75, percentile_90);
     }
 
-    public record ExperimentStats(long initTs, int numCompletedWithWarmUp, int numCompleted, long txPerSec, double average,
+    public record ExperimentStats(long initTs, int numCompletedWithWarmUp, int numCompleted, double txPerSec, double average,
                                    double percentile_50, double percentile_75, double percentile_90){}
 
     public static void writeResultsToFile(int numWare, ExperimentStats expStats, int runTime, int warmUp,
@@ -138,10 +167,6 @@ public final class ExperimentUtils {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    private static void resetBatchToFinishedTsMap(){
-        BATCH_TO_FINISHED_TS_MAP.clear();
     }
 
     private static final Map<Long, BatchStats> BATCH_TO_FINISHED_TS_MAP = new ConcurrentHashMap<>();

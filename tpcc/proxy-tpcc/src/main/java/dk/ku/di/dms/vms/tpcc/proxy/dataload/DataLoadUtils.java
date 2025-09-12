@@ -144,9 +144,9 @@ public final class DataLoadUtils {
                     }
 
                     if(!errors.isEmpty()){
-                        LOGGER.log(WARNING, "Thread "+Thread.currentThread().threadId()+" finished with table "+table.getKey()+": "+count+" records sent and "+errors.size()+ " errors.");
+                        LOGGER.log(WARNING, "Thread "+Thread.currentThread().threadId()+" finished with table "+actualTable+": "+count+" records sent and "+errors.size()+ " errors.");
                     } else {
-                        LOGGER.log(INFO, "Thread "+Thread.currentThread().threadId()+" finished with table "+table.getKey()+": "+count+" records sent.");
+                        LOGGER.log(INFO, "Thread "+Thread.currentThread().threadId()+" finished with table "+actualTable+": "+count+" records sent.");
                     }
                     returnConnection(actualTable, client);
                 }
