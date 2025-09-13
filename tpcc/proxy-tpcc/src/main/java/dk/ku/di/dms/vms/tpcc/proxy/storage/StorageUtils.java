@@ -102,6 +102,10 @@ public final class StorageUtils {
         return numRecords * 2;
     }
 
+    private static int getDistrictOverflow(int numWare, int numRecords){
+        return numWare <= 4 ? numRecords : numRecords * 3;
+    }
+
     @SuppressWarnings("unchecked")
     public static Map<String, UniqueHashBufferIndex> createStockTables(EntityMetadata metadata, int numWare) {
         Map<String, UniqueHashBufferIndex> tables = new HashMap<>(numWare);
@@ -185,7 +189,7 @@ public final class StorageUtils {
             case "district" -> {
                 int maxRecords = numWare * TPCcConstants.NUM_DIST_PER_WARE;
                 LOGGER.log(INFO, "Creating "+maxRecords+" district records...");
-                int overflowDisk = getOverflow(maxRecords);
+                int overflowDisk = getDistrictOverflow(numWare, maxRecords);
                 long initTs = System.currentTimeMillis();
                 UniqueHashBufferIndex idx = buildHashIndex(tableName, schema, overflowDisk, true);
                 for(int w_id = 1; w_id <= numWare; w_id++){
@@ -240,7 +244,7 @@ public final class StorageUtils {
                 }
                 case "district" -> {
                     int maxRecords = numWare * TPCcConstants.NUM_DIST_PER_WARE;
-                    int overflowDisk = getOverflow(maxRecords);
+                    int overflowDisk = getDistrictOverflow(numWare, maxRecords);
                     LOGGER.log(INFO, "Loading "+maxRecords+" districts...");
                     UniqueHashBufferIndex idx = buildHashIndex(entry.getValue(), schema, overflowDisk, false);
                     tableToIndexMap.put(entry.getValue(), idx);

@@ -796,6 +796,7 @@ public final class Coordinator extends ModbHttpServer {
     // seal batch and send batch complete to all terminals...
     private void processNewBatchContext(BatchContext batchContext) {
         this.batchContextMap.put(batchContext.batchOffset, batchContext);
+        // LOGGER.log(DEBUG, "Sealing batch "+batchContext.batchOffset+" with "+batchContext.numTIDsOverall+" transactions.");
         // after storing batch context, send to vms workers
         for(var entry : batchContext.terminalVMSs) {
             this.vmsWorkerContainerMap.get(entry).queueMessage(
@@ -898,10 +899,7 @@ public final class Coordinator extends ModbHttpServer {
         while(this.batchContextMap.containsKey(nextBatchToCheck)){
             nextBatchToCheck++;
         }
-        if(this.batchContextMap.containsKey(nextBatchToCheck - 1)){
-            return this.batchContextMap.get(nextBatchToCheck - 1).lastTid;
-        }
-        return 0;
+        return this.batchContextMap.get(nextBatchToCheck - 1).lastTid;
     }
 
     public CoordinatorOptions getOptions(){

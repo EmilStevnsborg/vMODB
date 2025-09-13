@@ -146,7 +146,7 @@ public final class WorkloadUtils {
         List<Iterator<NewOrderWareIn>> input = new ArrayList<>(numWare);
         for(int i = 0; i < numWare; i++){
             AppendOnlyBuffer buffer = StorageUtils.loadAppendOnlyBufferUnknownSize(BASE_WORKLOAD_FILE_NAME+(i+1));
-            // calculate number of entries (i.e., transactions)
+            // calculate number of entries (i.e., transaction requests)
             int numTransactions = (int) buffer.size() / SCHEMA.getRecordSize();
             input.add( createWorkloadInputIterator(buffer, numTransactions) );
         }

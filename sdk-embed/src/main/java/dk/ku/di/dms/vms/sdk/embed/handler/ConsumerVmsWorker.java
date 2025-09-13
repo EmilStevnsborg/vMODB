@@ -16,6 +16,7 @@ import org.jctools.queues.MpscBlockingConsumerArrayQueue;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.CompletionHandler;
 import java.util.ArrayList;
@@ -201,7 +202,14 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         ByteBuffer buffer = MemoryManager.getTemporaryDirectBuffer(options.networkBufferSize());
         try{
             NetworkUtils.configure(this.channel, options.soBufferSize());
-            this.channel.connect(this.consumerVms.asInetSocketAddress()).get();
+            try {
+                this.channel.connect(this.consumerVms.asInetSocketAddress()).get();
+            } catch (Exception e){
+                // fallback to check if consumer is localhost
+                LOGGER.log(WARNING,this.me.identifier+ ": The node "+ this.consumerVms.host+" "+ this.consumerVms.port+" cannot be reached. Falling back to localhost attempt");
+                var localHostSocketAddress = new InetSocketAddress("localhost",  this.consumerVms.port);
+                this.channel.connect(localHostSocketAddress).get();
+            }
             this.state = CONNECTED;
             LOGGER.log(DEBUG,this.me.identifier+ ": The node "+ this.consumerVms.host+" "+ this.consumerVms.port+" status = "+this.state);
             String dataSchema = this.serdesProxy.serializeDataSchema(this.me.dataSchema);

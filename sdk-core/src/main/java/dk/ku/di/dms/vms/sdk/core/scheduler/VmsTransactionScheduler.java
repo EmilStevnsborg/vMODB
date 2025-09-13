@@ -292,7 +292,8 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         InboundEvent inboundEvent;
         if(this.mustWaitForInputEvent) {
             // before blocking, cleanup tasks from internal maps
-            this.cleanupTidMappings();
+            // FIXME find a way to be called during reset!!!!
+            // this.cleanupTidMappings();
             inboundEvent = this.transactionInputQueue.take();
             // disable block
             this.mustWaitForInputEvent = false;

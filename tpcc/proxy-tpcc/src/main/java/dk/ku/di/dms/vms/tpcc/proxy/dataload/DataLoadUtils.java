@@ -56,9 +56,8 @@ public final class DataLoadUtils {
         IngestionWorker.CONNECTION_POOL.clear();
     }
 
-    public static void ingestData(Map<String, QueueTableIterator> tableInputMap, Map<String, String> vmsToHostMap) {
+    public static void ingestData(Map<String, QueueTableIterator> tableInputMap, Map<String, String> vmsToHostMap, int numCpus) {
         releaseAllConnections();
-        int numCpus = Runtime.getRuntime().availableProcessors();
         ExecutorService threadPool = Executors.newFixedThreadPool(numCpus);
         BlockingQueue<Future<Void>> completionQueue = new ArrayBlockingQueue<>(numCpus);
         CompletionService<Void> service = new ExecutorCompletionService<>(threadPool, completionQueue);
@@ -98,8 +97,6 @@ public final class DataLoadUtils {
             }
 
             try {
-                // TODO pass mapping of vms to host so dont need to rely on properties
-                // String host = PROPER_TIES.getProperty(vms + "_host");
                 int port = TPCcConstants.VMS_TO_PORT_MAP.get(vms);
                 return new MinimalHttpClient(host, port);
             } catch (Exception e) {
@@ -133,7 +130,7 @@ public final class DataLoadUtils {
                     QueueTableIterator queue = table.getValue();
                     String entity;
                     int count = 0;
-                    LOGGER.log(INFO, "Thread "+Thread.currentThread().threadId()+" start loading data to table "+actualTable);
+                    LOGGER.log(INFO, "Thread "+Thread.currentThread().threadId()+" start loading data to table "+table.getKey());
                     List<String> errors = new ArrayList<>();
                     while ((entity = queue.poll()) != null) {
                         if(client.sendRequest("POST", entity, actualTable) != 200){
@@ -144,9 +141,9 @@ public final class DataLoadUtils {
                     }
 
                     if(!errors.isEmpty()){
-                        LOGGER.log(WARNING, "Thread "+Thread.currentThread().threadId()+" finished with table "+actualTable+": "+count+" records sent and "+errors.size()+ " errors.");
+                        LOGGER.log(WARNING, "Thread "+Thread.currentThread().threadId()+" finished with table "+table.getKey()+": "+count+" records sent and "+errors.size()+ " errors.");
                     } else {
-                        LOGGER.log(INFO, "Thread "+Thread.currentThread().threadId()+" finished with table "+actualTable+": "+count+" records sent.");
+                        LOGGER.log(INFO, "Thread "+Thread.currentThread().threadId()+" finished with table "+table.getKey()+": "+count+" records sent.");
                     }
                     returnConnection(actualTable, client);
                 }
