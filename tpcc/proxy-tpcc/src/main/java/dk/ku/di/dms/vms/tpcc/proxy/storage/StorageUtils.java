@@ -103,7 +103,7 @@ public final class StorageUtils {
     }
 
     private static int getDistrictOverflow(int numWare, int numRecords){
-        return numWare <= 4 ? numRecords : numRecords * 3;
+        return numWare < 2 ? numRecords : numRecords * 3;
     }
 
     @SuppressWarnings("unchecked")

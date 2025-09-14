@@ -99,12 +99,17 @@ public final class Main {
                     break;
                 case "3":
                     System.out.println("Option 3: \"Create workload\" selected.");
+
+                    if(numWare == 0){
+                        numWare = StorageUtils.getNumRecordsFromInDiskTable(metadata.entityToSchemaMap().get("warehouse"), "warehouse");
+                    }
                     if(numWare == 0) {
                         System.out.println("Enter number of warehouses: ");
                         numWare = Integer.parseInt(scanner.nextLine());
-                    } else {
-                        System.out.println("Number of warehouses: "+numWare);
                     }
+
+                    System.out.println("Number of warehouses: "+numWare);
+
                     System.out.println("Allow multi warehouse transactions? [0/1]");
                     boolean multiWarehouses = Integer.parseInt(scanner.nextLine()) > 0;
                     System.out.println("Enter number of transactions per warehouse: ");

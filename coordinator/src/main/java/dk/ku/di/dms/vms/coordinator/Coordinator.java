@@ -43,7 +43,6 @@ import java.nio.channels.CompletionHandler;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -770,12 +769,9 @@ public final class Coordinator extends ModbHttpServer {
         }
     }
 
-    private final AtomicLong numTIDsCommitted = new AtomicLong(0);
-
     private void updateBatchOffsetPendingCommit(BatchContext batchContext) {
         if(batchContext.batchOffset == this.batchOffsetPendingCommit){
-            final long numTIDsCommitted = this.numTIDsCommitted.updateAndGet(i -> i + batchContext.numTIDsOverall);
-            this.sendCommitCommandToVMSs(batchContext, numTIDsCommitted);
+            this.sendCommitCommandToVMSs(batchContext);
             this.batchOffsetPendingCommit = batchContext.batchOffset + 1;
             // making this implementation order-independent, so not assuming batch commit are received in order
             BatchContext nextBatchContext = this.batchContextMap.get( this.batchOffsetPendingCommit );
@@ -861,7 +857,7 @@ public final class Coordinator extends ModbHttpServer {
     /**
      * Only send to non-terminals
      */
-    private void sendCommitCommandToVMSs(BatchContext batchContext, long numTIDsCommitted){
+    private void sendCommitCommandToVMSs(BatchContext batchContext){
         for(VmsNode vms : this.vmsMetadataMap.values()){
             if(batchContext.terminalVMSs.contains(vms.identifier)) {
                 LOGGER.log(DEBUG,"Leader: Batch ("+batchContext.batchOffset+") commit command not sent to "+ vms.identifier + " (terminal)");
@@ -881,7 +877,7 @@ public final class Coordinator extends ModbHttpServer {
         }
 
         if(!BATCH_COMMIT_CONSUMERS.isEmpty()) {
-            BATCH_COMMIT_CONSUMERS.forEach(c->c.accept(batchContext.batchOffset, numTIDsCommitted));
+            BATCH_COMMIT_CONSUMERS.forEach(c->c.accept(batchContext.batchOffset, batchContext.lastTid));
             /* must test both approaches in the experiments
             for (var task : BATCH_COMMIT_CONSUMERS){
                 submitBackgroundTask(()-> task.accept(tid));
@@ -891,7 +887,11 @@ public final class Coordinator extends ModbHttpServer {
     }
 
     public long getNumTIDsCommitted() {
-        return this.numTIDsCommitted.get();
+        long nextBatchToCheck = this.batchOffsetPendingCommit;
+        if(this.batchContextMap.containsKey(nextBatchToCheck)){
+            return this.batchContextMap.get(nextBatchToCheck).lastTid;
+        }
+        return this.batchContextMap.get(nextBatchToCheck - 1).lastTid;
     }
 
     public long getNumTIDsSubmitted(){

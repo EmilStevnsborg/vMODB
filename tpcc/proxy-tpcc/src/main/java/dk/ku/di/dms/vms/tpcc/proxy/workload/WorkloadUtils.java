@@ -173,6 +173,7 @@ public final class WorkloadUtils {
     }
 
     public static void createWorkload(int numWare, int numTransactions, boolean allowMultiWarehouses){
+        deleteWorkloadInputFiles();
         LOGGER.log(INFO, "Generating "+(numTransactions * numWare)+" transactions ("+numTransactions+" per warehouse/worker)");
         long initTs = System.currentTimeMillis();
         for(int ware = 1; ware <= numWare; ware++) {
@@ -189,14 +190,28 @@ public final class WorkloadUtils {
         long endTs = System.currentTimeMillis();
         LOGGER.log(INFO, "Generated "+(numTransactions * numWare)+" transactions in "+(endTs-initTs)+" ms");
     }
+    
+    public static void deleteWorkloadInputFiles(){
+        String basePathStr = StorageUtils.getBasePath();
+        Path basePath = Paths.get(basePathStr);
+        try(var paths = Files.walk(basePath)){
+            var workloadInputFiles = paths.filter(path -> path.toString().contains(BASE_WORKLOAD_FILE_NAME)).toList();
+            for (var path : workloadInputFiles){
+                if(!path.toFile().delete()){
+                    LOGGER.log(ERROR, "Could not dele file path: \n"+path);
+                }
+            }
+        } catch (IOException e){
+            LOGGER.log(ERROR, "Error captured while trying to access base path: \n"+e);
+        }
+    }
 
     public static int getNumWorkloadInputFiles(){
         String basePathStr = StorageUtils.getBasePath();
         Path basePath = Paths.get(basePathStr);
-        try {
-            var paths = Files.walk(basePath)
-                .filter(path -> path.toString().contains(BASE_WORKLOAD_FILE_NAME)).toList();
-            return paths.size();
+        try(var paths = Files.walk(basePath)){
+            var workloadInputFiles = paths.filter(path -> path.toString().contains(BASE_WORKLOAD_FILE_NAME)).toList();
+            return workloadInputFiles.size();
         } catch (IOException e){
             LOGGER.log(ERROR, "Error captured while trying to access base path: \n"+e);
             return 0;
