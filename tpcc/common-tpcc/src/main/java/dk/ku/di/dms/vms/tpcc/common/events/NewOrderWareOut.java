@@ -40,16 +40,14 @@ public final class NewOrderWareOut {
     }
 
     @SuppressWarnings("unused")
-    public List<Integer> getId(){
-        if(this.allLocal) return List.of(this.w_id);
+    public Set<Integer> getId(){
+        if(this.allLocal) return Set.of(this.w_id);
         Set<Integer> set = new HashSet<>(4);
         List<Integer> list = new ArrayList<>(4);
         for (int supWare : this.supWares) {
-            if (set.add(supWare)) {
-                list.add(supWare);
-            }
+            set.add(supWare);
         }
-        return list;
+        return set;
     }
 
 }

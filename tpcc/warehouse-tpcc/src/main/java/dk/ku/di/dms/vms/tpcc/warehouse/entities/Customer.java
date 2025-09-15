@@ -80,6 +80,7 @@ public class Customer implements IEntity<Customer.CustomerId> {
         this.c_last = c_last;
         this.c_since = c_since;
         this.c_credit = c_credit;
+        this.c_credit_lim = c_credit_lim;
         this.c_balance = c_balance;
         this.c_ytd_payment = c_ytd_payment;
     }

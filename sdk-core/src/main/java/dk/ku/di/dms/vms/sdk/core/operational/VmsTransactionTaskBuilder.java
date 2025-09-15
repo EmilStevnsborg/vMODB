@@ -6,7 +6,7 @@ import dk.ku.di.dms.vms.modb.common.transaction.ITransactionContext;
 import dk.ku.di.dms.vms.modb.common.transaction.ITransactionManager;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.List;
+import java.util.Set;
 
 import static java.lang.System.Logger.Level.ERROR;
 
@@ -50,7 +50,7 @@ public final class VmsTransactionTaskBuilder {
 
         private volatile int status;
 
-        private final List<Object> partitionKeys;
+        private final Set<Object> partitionKeys;
 
         private VmsTransactionTask(long tid, long lastTid, long batch,
                                    VmsTransactionSignature signature,
@@ -64,21 +64,21 @@ public final class VmsTransactionTaskBuilder {
         }
 
         @SuppressWarnings("unchecked")
-        private static List<Object> getPartitionKeys(VmsTransactionSignature signature, Object inputEvent) {
-            List<Object> partitionIdAux;
+        private static Set<Object> getPartitionKeys(VmsTransactionSignature signature, Object inputEvent) {
+            Set<Object> partitionIdAux;
             try {
                 if (signature.executionMode() == ExecutionModeEnum.PARTITIONED) {
-                    if (List.class.isAssignableFrom(signature.partitionByMethod().getReturnType())) {
-                        partitionIdAux = (List<Object>) signature.partitionByMethod().invoke(inputEvent);
+                    if (Set.class.isAssignableFrom(signature.partitionByMethod().getReturnType())) {
+                        partitionIdAux = (Set<Object>) signature.partitionByMethod().invoke(inputEvent);
                     } else {
-                        partitionIdAux = List.of(signature.partitionByMethod().invoke(inputEvent));
+                        partitionIdAux = Set.of(signature.partitionByMethod().invoke(inputEvent));
                     }
                 } else {
-                    partitionIdAux = List.of();
+                    partitionIdAux = Set.of();
                 }
             } catch (InvocationTargetException | IllegalAccessException e){
                 LOGGER.log(ERROR, "Failed to obtain partition key(s) from method "+ signature.partitionByMethod().getName());
-                partitionIdAux = List.of();
+                partitionIdAux = Set.of();
             }
             return partitionIdAux;
         }
@@ -175,7 +175,7 @@ public final class VmsTransactionTaskBuilder {
             this.status = FAILED;
         }
 
-        public List<Object> partitionKeys() {
+        public Set<Object> partitionKeys() {
             return this.partitionKeys;
         }
 

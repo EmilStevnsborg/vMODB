@@ -61,10 +61,13 @@ curl -X GET http://localhost:8001/order/1/1/1
 
 ## Running experiments
 
+### Preliminaries
+
 When executing the project, a menu will show up on screen. The menu offers different functionalities to manage the parameters of a TPC-C experiment.
 
 Make sure warehouse-tpcc, inventory-tpcc, and order-tpcc are deployed before initializing an experiment through <i>TPC-C Proxy</i>.
 
+### Transaction workers (aka dispatchers)
 For number of warehouses == 8, it is recommended to increase the number of transaction workers to at least 2 in order to experience a higher throughput.
 
 For number of warehouses >= 16, it is recommended to increase the number of transaction workers to 4 to get the highest throughput possible.
@@ -73,6 +76,19 @@ For number of warehouses >= 32, make sure to increase the heap size to match the
 ```
 java --enable-preview --add-exports java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/jdk.internal.util=ALL-UNNAMED -jar tpcc/proxy-tpcc/target/proxy-tpcc-1.0-SNAPSHOT-jar-with-dependencies.jar -Xms100g
 ```
+
+### Transaction worker(s) input queue(s)
+
+The table below provides the parameters used in the experiments to preload transaction requests in the system:
+
+| Warehouse Number | Number of inputs |
+|------------------|------------------|
+| 1                | 300000           |
+| 2                | 300000           |
+| 4                | 250000           |
+| 8                | 200000           |
+| 16               | 100000           |
+| 32               | 100000           |
 
 ## Troubleshooting
 

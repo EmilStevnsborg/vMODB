@@ -22,7 +22,9 @@ public final class Main {
     private static int NUM_INGESTION_WORKERS;
 
     public static void main(String[] args) throws Exception {
-        if(args.length == 0) {
+        System.out.println("Select your deployment scheme: \n1 - Distributed \n2 - Local");
+        String choice = new Scanner(System.in).nextLine();
+        if(choice.equals("1")) {
             NUM_INGESTION_WORKERS = Runtime.getRuntime().availableProcessors();
             loadMenu("Main Menu");
         } else {

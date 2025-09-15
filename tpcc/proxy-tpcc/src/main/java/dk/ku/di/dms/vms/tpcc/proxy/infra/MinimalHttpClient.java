@@ -119,7 +119,6 @@ public final class MinimalHttpClient implements Closeable {
         }
 
         // body
-        //StringBuilder bodyBuilder = new StringBuilder();
         int remaining = contentLength;
         while (remaining > 0) {
             int read = this.socketChannel.read(this.readBuffer);
@@ -131,9 +130,6 @@ public final class MinimalHttpClient implements Closeable {
             remaining -= bytes.length;
             this.readBuffer.clear();
         }
-
-//        String fullResponse = headersPart + bodyBuilder;
-//        System.out.println("HTTP response:\n" + fullResponse);
         return status;
     }
 

@@ -19,7 +19,8 @@ import java.util.function.Function;
 import static dk.ku.di.dms.vms.tpcc.proxy.datagen.DataGenUtils.nuRand;
 import static dk.ku.di.dms.vms.tpcc.proxy.datagen.DataGenUtils.randomNumber;
 import static dk.ku.di.dms.vms.tpcc.proxy.infra.TPCcConstants.*;
-import static java.lang.System.Logger.Level.*;
+import static java.lang.System.Logger.Level.ERROR;
+import static java.lang.System.Logger.Level.INFO;
 
 public final class WorkloadUtils {
 
