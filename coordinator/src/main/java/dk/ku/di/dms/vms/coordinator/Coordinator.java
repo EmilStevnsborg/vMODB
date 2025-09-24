@@ -23,6 +23,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbort;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbortInfo;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
 import dk.ku.di.dms.vms.modb.common.serdes.VmsSerdesProxyBuilder;
@@ -736,7 +737,7 @@ public final class Coordinator extends ModbHttpServer {
             // receive metadata from all microservices
             case BatchContext batchContext -> this.processNewBatchContext(batchContext);
             case VmsNode vmsNode -> this.processVmsIdentifier(vmsNode);
-            case TransactionAbort.Payload txAbort -> this.processTransactionAbort(txAbort);
+            case TransactionAbortInfo.Payload txAbortInfo -> this.abortTransactionInCoordinator(txAbortInfo);
             case BatchComplete.Payload batchComplete -> this.processBatchComplete(batchComplete);
             case BatchCommitAck.Payload msg ->
                 // let's just ignore the ACKs. since the terminals have responded, that means the VMSs before them have processed the transactions in the batch
@@ -749,19 +750,32 @@ public final class Coordinator extends ModbHttpServer {
         }
     }
 
-    private void processTransactionAbort(TransactionAbort.Payload txAbort) {
-        System.out.println("Coordinator processTransactionAbort");
-        // send abort to all VMSs...
-        // later we can optimize the number of messages since some VMSs may not need to receive this abort
-        // cannot commit the batch unless the VMS is sure there will be no aborts...
-        // this is guaranteed by design, since the batch complete won't arrive unless all events of the batch arrive at the terminal VMSs
-        this.batchContextMap.get(txAbort.batch()).tidAborted = txAbort.tid();
-        // can reuse the same buffer since the message does not change across VMSs like the commit request
-        for (VmsNode vms : this.vmsMetadataMap.values()) {
+    private void multiCast(TransactionAbortInfo.Payload txAbortInfo)
+    {
+        this.batchContextMap.get(txAbortInfo.batch()).tidAborted = txAbortInfo.tid();
+        var txAbort = TransactionAbort.of(txAbortInfo.batch(), txAbortInfo.tid());
+
+        // use DAGs of transactions retracted to compute affected VMSes.
+        var affectedVMSes = this.vmsMetadataMap.values();
+        for (VmsNode vms : affectedVMSes) {
             // don't need to send to the vms that aborted
-//            if(vms.identifier.equalsIgnoreCase( txAbort. )) continue;
-            this.vmsWorkerContainerMap.get(vms.identifier).queueMessage(txAbort.tid());
+            if(vms.identifier.equals(txAbortInfo.vms())) {
+                System.out.println(STR."NOT Sending abort tid to vms identifier \{vms.identifier} == \{txAbortInfo.vms()}");
+                continue;
+            }
+
+            System.out.println(STR."Sending abort tid to vms identifier \{vms.identifier} != \{txAbortInfo.vms()}");
+            var message = TransactionAbort.of(txAbort.batch(), txAbort.tid());
+            this.vmsWorkerContainerMap.get(vms.identifier).queueMessage(message);
         }
+    }
+    private void abortTransactionInCoordinator(TransactionAbortInfo.Payload txAbortInfo)
+    {
+        System.out.println("Coordinator abort transaction");
+        // sending aborts
+        multiCast(txAbortInfo);
+
+        // rest is handled in VMS workers
     }
 
     private void processBatchComplete(BatchComplete.Payload batchComplete) {
@@ -803,7 +817,6 @@ public final class Coordinator extends ModbHttpServer {
 
     // seal batch and send batch complete to all terminals...
     private void processNewBatchContext(BatchContext batchContext) {
-        System.out.println("\nCoordinator processNewBatchContext\n");
         this.batchContextMap.put(batchContext.batchOffset, batchContext);
         // after storing batch context, send to vms workers
         for(var entry : batchContext.terminalVMSs) {

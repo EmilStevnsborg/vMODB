@@ -10,10 +10,35 @@ import java.util.Collections;
 public class Test
 {
 
-    public static void GetUnpaidBookings(HttpClient client)
+    // the customer will send one batch of 5, then another batch of 5, which fails on tid=8
+    public static void FailedFlightOrder(HttpClient client)
     {
-        var unpaidBookings = DataRetrieval.GetUnpaidBookings(client);
-        System.out.println(unpaidBookings);
+        // First inject some data
+        var numSeatsPerFlight = 10;
+        var flightSeats = DataCreation.CreateFlightSeats( numSeatsPerFlight, 0);
+        flightSeats.forEach((flightSeat) -> DataInjection.SendFlightSeat(client, flightSeat));
+
+        var numCustomers = 10;
+        var customers = DataCreation.CreateCustomers(numCustomers);
+        customers.forEach((customer) -> DataInjection.SendCustomer(client, customer));
+
+        for(int i = 0; i < 5; i++)
+        {
+            Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
+        }
+
+        // sleep so new event arrives as new batch
+        try
+        {
+            System.out.println("Stall ....");
+            Thread.sleep(3000);
+        } catch (InterruptedException e){}
+
+        // part of the same batch
+        for(int i = 5; i < 10; i++)
+        {
+            Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
+        }
     }
 
     public static void Scenario1(HttpClient client)

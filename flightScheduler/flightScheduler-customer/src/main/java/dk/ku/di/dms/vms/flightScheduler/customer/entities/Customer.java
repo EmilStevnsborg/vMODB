@@ -12,11 +12,14 @@ public final class Customer implements IEntity<Integer> {
     @Id
     public int customer_id;
     @Column
+    public int money;
+    @Column
     public String name;
 
-    public Customer(int customer_id, String name)
+    public Customer(int customer_id, int money, String name)
     {
         this.customer_id = customer_id;
+        this.money = money;
         this.name = name;
     }
 
@@ -28,6 +31,7 @@ public final class Customer implements IEntity<Integer> {
     public String toString() {
         return "{\n"
                 + "  \"customer_id\":" + customer_id + ",\n"
+                + "  \"money\":" + money + ",\n"
                 + "  \"name\":\"" + name + "\"\n"
                 + "}";
         }

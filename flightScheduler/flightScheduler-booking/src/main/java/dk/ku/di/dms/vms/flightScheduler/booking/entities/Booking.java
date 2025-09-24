@@ -11,7 +11,7 @@ import java.util.Date;
 @VmsTable(name="bookings")
 public class Booking implements IEntity<Integer>
 {
-    public Booking(int booking_id, int customer_id, int flight_id, String seat_number, Date timestamp)
+    public Booking(int booking_id, int customer_id, int flight_id, String seat_number, Date timestamp, int price)
     {
         this.booking_id = booking_id;
         this.customer_id = customer_id;
@@ -19,6 +19,8 @@ public class Booking implements IEntity<Integer>
         this.seat_number = seat_number;
         this.timestamp = timestamp;
         this.paid = 0;
+        this.price = price;
+
     }
     public Booking(){}
 
@@ -35,6 +37,8 @@ public class Booking implements IEntity<Integer>
     public Date timestamp;
     @Column
     public int paid;
+    @Column
+    public int price;
 
     public void BookingHasBeenPaid()
     {
@@ -49,7 +53,8 @@ public class Booking implements IEntity<Integer>
                 + "  \"flightId\":" + flight_id + ",\n"
                 + "  \"seatNumber\":\"" + seat_number + "\",\n"
                 + "  \"timestamp\":\"" + timestamp + "\",\n"
-                + "  \"paid\":\"" + paid + "\"\n"
+                + "  \"paid\":" + paid + ",\n"
+                + "  \"price\":" + price + "\n"
                 + "}";
     }
 }

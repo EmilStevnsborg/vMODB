@@ -266,7 +266,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         TransactionWrite entry = TransactionWrite.upsert(WriteType.INSERT, values);
         if(operationSet == null){
             operationSet = new OperationSetOfKey(WriteType.INSERT);
-            System.out.println(STR."Putting operationSet after insert into updatesPerKeyMap under key: \{key}");
+//            System.out.println(STR."Putting operationSet after insert into updatesPerKeyMap under key: \{key}");
             this.updatesPerKeyMap.put(key, operationSet);
         } else {
             operationSet.lastWriteType = WriteType.INSERT;
@@ -315,7 +315,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         if(operationSet == null){
             operationSet = new OperationSetOfKey(WriteType.UPDATE);
             this.updatesPerKeyMap.put(key, operationSet);
-            System.out.println(STR."Putting operationSet after Update into updatesPerKeyMap under key: \{key}");
+//            System.out.println(STR."Putting operationSet after Update into updatesPerKeyMap under key: \{key}");
         } else {
             operationSet.lastWriteType = WriteType.UPDATE;
         }
@@ -362,7 +362,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
             // that means we haven't had any previous transaction performing writes to this key
             operationSet = new OperationSetOfKey(WriteType.DELETE);
             this.updatesPerKeyMap.put( key, operationSet );
-            System.out.println(STR."Putting operationSet after removeOpt into updatesPerKeyMap under key: \{key}");
+//            System.out.println(STR."Putting operationSet after removeOpt into updatesPerKeyMap under key: \{key}");
             TransactionWrite entry = TransactionWrite.delete(WriteType.DELETE);
             operationSet.put(txCtx.tid, entry);
             this.appendWrite(txCtx, key);
@@ -460,6 +460,21 @@ public final class PrimaryIndex implements IMultiVersionIndex {
             this.rawIndex.flush();
         } else {
             LOGGER.log(WARNING, "No records have been flushed");
+        }
+    }
+
+    public void restoreStableState(long failedTid)
+    {
+        if (this.updatesPerKeyMap.isEmpty()) return;
+
+        // removing latest changes
+        var updatedKeys = this.updatesPerKeyMap.keySet();
+        Iterator<IKey> it = updatedKeys.iterator();
+        while(it.hasNext())
+        {
+            IKey key = it.next();
+            OperationSetOfKey operationSetOfKey = this.updatesPerKeyMap.get(key);
+            operationSetOfKey.removeDownToEntry(failedTid-1);
         }
     }
 

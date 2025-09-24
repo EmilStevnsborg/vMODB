@@ -8,6 +8,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbort;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbortInfo;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
 import dk.ku.di.dms.vms.modb.common.transaction.ITransactionManager;
@@ -32,6 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.function.Consumer;
 
 import static dk.ku.di.dms.vms.modb.common.schema.network.Constants.*;
 import static java.lang.System.Logger.Level.*;
@@ -47,7 +49,6 @@ import static java.lang.System.Logger.Level.*;
  */
 public final class VmsEventHandler extends ModbHttpServer {
 
-    private boolean abortInProgress;
     private static final System.Logger LOGGER = System.getLogger(VmsEventHandler.class.getName());
     
     /** SERVER SOCKET **/
@@ -124,6 +125,8 @@ public final class VmsEventHandler extends ModbHttpServer {
      */
     private final Map<Long, Map<String, Long>> tidToPrecedenceMap;
 
+    private Consumer<Boolean> pauseHandler;
+
     public static VmsEventHandler build(// to identify which vms this is
                                         VmsNode me,
                                         // to checkpoint private state
@@ -166,9 +169,6 @@ public final class VmsEventHandler extends ModbHttpServer {
                             IHttpHandler httpHandler,
                             IVmsSerdesProxy serdesProxy) throws IOException {
         super();
-
-        // abort
-        abortInProgress = false;
 
         // network and executor
         if(options.networkThreadPoolSize > 0){
@@ -219,17 +219,57 @@ public final class VmsEventHandler extends ModbHttpServer {
         LOGGER.log(INFO,this.me.identifier+": Accept handler setup");
     }
 
+    public void AddSchedulerPauseHandler(Consumer<Boolean> pauseHandler){
+        this.pauseHandler = pauseHandler;
+    }
+
+    public void pauseScheduler(boolean pause){
+        pauseHandler.accept(pause);
+    }
+
+    private void processAbort(TransactionAbort.Payload transactionAbort){
+        System.out.println("Processing abort");
+//        // pause the transactionScheduler safely
+//        pauseScheduler(true);
+
+        // cut the log
+
+        // restore stable state
+        restoreStableState(transactionAbort.batch(), transactionAbort.tid());
+
+        // update batch metadata
+
+//        // resume the transactionScheduler
+//        pauseScheduler(false);
+    }
+
+    private void abortTransaction(IVmsTransactionResult txResult){
+        System.out.println("Abort transaction");
+//        // pause the transactionScheduler safely
+//        pauseScheduler(true);
+
+        // cut the log
+
+        // send abort message
+        var eventOutput = txResult.getOutboundEventResult();
+        var abortMessage = TransactionAbortInfo.of(eventOutput.batch(), eventOutput.tid(), me.identifier);
+        System.out.println("Queing abort message");
+        this.leaderWorker.queueMessage(abortMessage);
+
+        // restore stable state
+        restoreStableState(abortMessage.batch(), abortMessage.tid());
+
+        // update batch metadata
+
+//        // resume the transactionScheduler
+//        pauseScheduler(false);
+    }
+
     public void processOutputEvent(IVmsTransactionResult txResult) {
-        System.out.println("VmsEventHandler.processOutputEvent");
         LOGGER.log(DEBUG,this.me.identifier+": New transaction result in event handler. TID = "+ txResult.tid());
 
         if (txResult.getOutboundEventResult().isAbort()) {
-            // abort
-            System.out.println("Abort event");
-            var eventOutput = txResult.getOutboundEventResult();
-            System.out.println(STR."Abort event batch: \{eventOutput.batch()}");
-            var abortMessage = TransactionAbort.of(eventOutput.batch(), eventOutput.tid());
-            this.leaderWorker.queueMessage(abortMessage);
+            abortTransaction(txResult);
             return;
         }
 
@@ -254,7 +294,7 @@ public final class VmsEventHandler extends ModbHttpServer {
      * but can only send the batch commit once
      */
     private void updateBatchStats(OutboundEventResult outputEvent) {
-        System.out.println("VmsEventHandler.updateBatchStats");
+//        System.out.println("VmsEventHandler.updateBatchStats");
         BatchMetadata batchMetadata = this.updateBatchMetadataAtomically(outputEvent);
         // not arrived yet
         if(!this.batchContextMap.containsKey(outputEvent.batch())) return;
@@ -266,7 +306,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         thisBatch.setStatus(BatchContext.BATCH_COMPLETED);
         // if terminal, must send batch complete
         if (thisBatch.terminal) {
-            System.out.println("VmsEventHandler.updateBatchStats TERMINAL BatchComplete to leaderWorker");
+//            System.out.println("VmsEventHandler.updateBatchStats TERMINAL BatchComplete to leaderWorker");
 //            LOGGER.log(DEBUG, this.me.identifier + ": Requesting leader worker to send batch " + thisBatch.batch + " complete");
             // must be queued in case leader is off and comes back online
             this.leaderWorker.queueMessage(BatchComplete.of(thisBatch.batch, this.me.identifier));
@@ -326,6 +366,13 @@ public final class VmsEventHandler extends ModbHttpServer {
         if(INFORM_BATCH_ACK) {
             this.leaderWorker.queueMessage(BatchCommitAck.of(batch, this.me.identifier));
         }
+    }
+
+    private void restoreStableState(long batch, long failedTid)
+    {
+        transactionManager.restoreStableState(failedTid);
+
+        // update trackingBatchMap and batchContextMap
     }
 
     /**
@@ -430,6 +477,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                 this.readBuffer.flip();
             }
             byte messageType = this.readBuffer.get();
+            System.out.println(STR."Read message from the vms \{messageType}");
             switch (messageType) {
                 case (BATCH_OF_EVENTS) -> {
                     int bufferSize = this.getBufferSize();
@@ -906,8 +954,8 @@ public final class VmsEventHandler extends ModbHttpServer {
                             return;
                         }
                         TransactionAbort.Payload txAbortPayload = TransactionAbort.read(this.readBuffer);
-                        System.out.println("Transaction (" + txAbortPayload.batch() + ") abort received from the leader?");
-                        this.processNewTransactionAbort(txAbortPayload);
+                        System.out.println("Transaction in batch (" + txAbortPayload.batch() + ") abort received from the leader?");
+                        processAbort(txAbortPayload);
                     }
                     case (BATCH_ABORT_REQUEST) -> {
                         if(this.readBuffer.remaining() < (BatchAbortRequest.SIZE - 1)){
@@ -993,7 +1041,6 @@ public final class VmsEventHandler extends ModbHttpServer {
                 // extract events batched
                 for (int i = 0; i < count; i++) {
                     payload = TransactionEvent.read(readBuffer);
-                    System.out.println(STR."VmsEventHandler.LeaderReadCompletionHandler.processBatchOfEvents read event from BATCH");
                     LOGGER.log(DEBUG, me.identifier+": Processed TID "+payload.tid());
                     if (vmsMetadata.queueToEventMap().containsKey(payload.event())) {
                         payloads.add(buildInboundEvent(payload));
@@ -1017,7 +1064,6 @@ public final class VmsEventHandler extends ModbHttpServer {
         private void processSingleEvent(ByteBuffer readBuffer) {
             try {
                 TransactionEvent.Payload payload = TransactionEvent.read(readBuffer);
-                System.out.println(STR."VmsEventHandler.LeaderReadCompletionHandler.processBatchOfEvents read SINGLE event: \n\{payload}\n");
                 LOGGER.log(DEBUG,me.identifier + ": 1 event received from the leader \n"+payload);
                 // send to scheduler.... drop if the event cannot be processed (not an input event in this vms)
                 if (vmsMetadata.queueToEventMap().containsKey(payload.event())) {
@@ -1076,14 +1122,6 @@ public final class VmsEventHandler extends ModbHttpServer {
                 LOGGER.log(INFO, me.identifier + ": Requesting checkpoint for batch " + batchCommitCommand.batch());
                 submitBackgroundTask(()->checkpoint(batchCommitCommand.batch(), batchMetadata.maxTidExecuted));
             }
-        }
-
-        private void processNewTransactionAbort(TransactionAbort.Payload transactionAbort){
-            // TODO actually stop reading/sending events
-            // stop processing events
-            abortInProgress = true;
-            // remove queued up events
-//            vmsInternalChannels.clearTransactionInputQueue();
         }
 
         @Override

@@ -17,6 +17,7 @@ public class Constants
     // pay booking
     public static final String PAY_BOOKING = "pay_booking";
     public static final String PAYMENT_SUCCEEDED = "payment_succeeded";
+    public static final String CUSTOMER_PAID = "customer_paid";
 
     // cancel booking
     public static final String CANCEL_BOOKING = "cancel_booking";

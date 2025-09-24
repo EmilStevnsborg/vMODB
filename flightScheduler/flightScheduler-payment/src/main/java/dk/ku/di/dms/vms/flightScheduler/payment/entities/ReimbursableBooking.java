@@ -17,12 +17,15 @@ public class ReimbursableBooking implements IEntity<Integer>
 
     @Column
     public int customer_id;
+    @Column
+    public int reimbursement;
 
     public ReimbursableBooking(){}
 
-    public ReimbursableBooking(int booking_id, int customer_id)
+    public ReimbursableBooking(int booking_id, int customer_id, int reimbursement)
     {
         this.booking_id = booking_id;
         this.customer_id = customer_id;
+        this.reimbursement = reimbursement;
     }
 }

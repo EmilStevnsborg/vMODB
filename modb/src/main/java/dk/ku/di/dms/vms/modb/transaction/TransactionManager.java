@@ -448,6 +448,15 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
         LOGGER.log(INFO, "Checkpoint for max TID "+maxTid+" finished at "+System.currentTimeMillis());
     }
 
+    @Override
+    public void restoreStableState(long failedTid)
+    {
+        for (Table table : this.catalog.values()) {
+            LOGGER.log(INFO, "restoring table "+table.getName());
+            table.primaryKeyIndex().restoreStableState(failedTid);
+        }
+    }
+
     /**
      * The idea of commit is to make the effects of the transaction (i.e., operations)
      * materialized in the underlying indexes. The primary index does not need such because
@@ -456,7 +465,6 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
     @Override
     public void commit(){
         TransactionContext txCtx = this.txCtxMap.get(Thread.currentThread().threadId());
-        System.out.println(STR."TransactionManager commit \{txCtx.tid}");
         for(var index : txCtx.indexes){
             index.installWrites(txCtx);
         }

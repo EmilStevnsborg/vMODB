@@ -100,6 +100,32 @@ public sealed class OneWriterMultiReadersLIFO<K extends Comparable<K>,V> permits
         }
     }
 
+    /**
+     * Remove all entries above the key
+     * Not safe if there are concurrent writers and the entry returned is the head
+     * @param key node identifier
+     */
+    public final Entry<K,V> removeDownToEntry(K key){
+        final Entry<K,V> floorEntry = this.floorEntry(key);
+        this.removePredecessors(floorEntry);
+        return floorEntry;
+    }
+
+    // help from AI
+    public final void removePredecessors(final Entry<K,V> entry) {
+        if (entry == null) {
+            this.head = null;
+            return;
+        }
+        Entry<K,V> curr = this.head;
+        while (curr != null && curr != entry) {
+            Entry<K,V> next = curr.next;
+            curr.next = null;  // no reference and gbc will pick it up
+            curr = next;
+        }
+        this.head = entry;
+    }
+
     public final void clear(){
         if(this.head == null) return;
         Entry<K,V> current = this.head;

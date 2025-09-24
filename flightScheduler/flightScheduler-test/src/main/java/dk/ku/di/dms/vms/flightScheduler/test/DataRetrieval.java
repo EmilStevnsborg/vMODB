@@ -1,5 +1,6 @@
 package dk.ku.di.dms.vms.flightScheduler.test;
 
+import dk.ku.di.dms.vms.flightScheduler.test.models.Customer;
 import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
 import dk.ku.di.dms.vms.modb.common.serdes.VmsSerdesProxyBuilder;
 
@@ -30,6 +31,26 @@ public class DataRetrieval
         } catch (Exception e) {
             System.err.println("Failed to get unpaid bookings: ");
             return new ArrayList<Integer>();
+        }
+    }
+
+    public static List<Customer> GetCustomers(HttpClient client)
+    {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:8769/customer"))
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+
+        try {
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            var payload = response.body();
+            Customer[] customersArray = SERDES.deserialize(payload, Customer[].class);
+            List<Customer> customers = List.of(customersArray);
+            return customers;
+        } catch (Exception e) {
+            System.err.println("Failed to get customers: ");
+            return new ArrayList<Customer>();
         }
     }
 }

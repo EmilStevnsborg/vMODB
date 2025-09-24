@@ -16,7 +16,8 @@ public final class Main
     public static void main(String[] args)
     {
 //        Test.GetUnpaidBookings(client);
-        Test.Scenario1(client);
+//        Test.Scenario1(client);
+        Test.FailedFlightOrder(client);
     }
 
     //

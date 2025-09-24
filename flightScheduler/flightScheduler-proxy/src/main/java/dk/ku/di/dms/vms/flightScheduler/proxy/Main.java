@@ -36,7 +36,8 @@ public final class Main
         // PayBooking
         TransactionDAG payBookingDag = TransactionBootstrap.name(PAY_BOOKING)
                 .input("a", "payment", PAY_BOOKING)
-                .terminal("b", "booking",  "a")
+                .internal("b", "booking", PAYMENT_SUCCEEDED, "a")
+                .terminal("c", "customer",  "b")
                 .build();
         transactionMap.put(payBookingDag.name, payBookingDag);
 

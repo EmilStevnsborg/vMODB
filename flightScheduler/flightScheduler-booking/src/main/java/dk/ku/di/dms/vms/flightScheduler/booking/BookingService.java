@@ -31,7 +31,8 @@ public class BookingService
 //        if (bookSeat.toString() != null) throw new RuntimeException();
         var order = bookSeat.orderFlight;
         var booking_id = booking_counter++;
-        var booking = new Booking(booking_id, order.customer_id, order.flight_id, order.seat_number, bookSeat.timestamp);
+        var price = 20;
+        var booking = new Booking(booking_id, order.customer_id, order.flight_id, order.seat_number, bookSeat.timestamp, price);
         bookingRepository.insert(booking); // booking validity is verified by prior services
 
         var seatBooked = new SeatBooked(booking.booking_id, order.customer_id, booking.flight_id, booking.seat_number, booking.timestamp);
@@ -41,11 +42,14 @@ public class BookingService
     // part of PayBooking
     @Inbound(values = {PAYMENT_SUCCEEDED})
     @Transactional(type=RW)
-    public void bookingHasBeenPaid(PaymentSucceeded paymentSucceeded)
+    public CustomerPaid bookingHasBeenPaid(PaymentSucceeded paymentSucceeded)
     {
         var bookingObject = bookingRepository.lookupByKey(paymentSucceeded.booking_id);
         bookingObject.BookingHasBeenPaid();
         bookingRepository.update(bookingObject);
+
+        var customerPaid = new CustomerPaid(bookingObject.customer_id, bookingObject.price);
+        return customerPaid;
     }
 
     // part of CancelBooking
@@ -60,7 +64,7 @@ public class BookingService
         // requires reimbursement, if it has been paid
         var bookingCancelled = new BookingCancelled(cancelBooking.booking_id, bookingObject.paid,
                                                     bookingObject.customer_id, bookingObject.flight_id,
-                                                    bookingObject.seat_number);
+                                                    bookingObject.seat_number, bookingObject.price);
         return bookingCancelled;
     }
 }

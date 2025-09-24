@@ -6,6 +6,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchComplete;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbort;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbortInfo;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 
 import java.lang.invoke.MethodHandles;
@@ -96,7 +97,7 @@ final class LeaderWorker extends StoppableRunnable {
         switch (message) {
             case BatchComplete.Payload o -> this.sendBatchComplete(o);
             case BatchCommitAck.Payload o -> this.sendBatchCommitAck(o);
-            case TransactionAbort.Payload o -> this.sendTransactionAbort(o);
+            case TransactionAbortInfo.Payload o -> this.sendTransactionAbort(o);
             case TransactionEvent.PayloadRaw o -> this.sendEvent(o);
             default -> LOGGER.log(WARNING, this.vmsNode.identifier +
                     ": Leader worker do not recognize message type: " + message.getClass().getName());
@@ -104,7 +105,7 @@ final class LeaderWorker extends StoppableRunnable {
     }
 
     public void queueMessage(Object message) {
-//        System.out.println(STR."LeaderWorker queueing message \{message.toString()}");
+        System.out.println(STR."LeaderWorker queueing message \{message.toString()}");
         this.sendMessage(message);
     }
 
@@ -159,9 +160,9 @@ final class LeaderWorker extends StoppableRunnable {
         this.write(payload);
     }
 
-    private void sendTransactionAbort(TransactionAbort.Payload payload) {
-        System.out.println("Sending transaction abort to leader");
-        TransactionAbort.write( this.writeBuffer, payload );
+    private void sendTransactionAbort(TransactionAbortInfo.Payload payload) {
+        System.out.println(STR."Sending transaction abort to leader \{payload}");
+        TransactionAbortInfo.write( this.writeBuffer, payload );
         this.write(payload);
     }
 

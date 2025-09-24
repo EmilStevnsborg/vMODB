@@ -113,6 +113,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     public void run() {
         LOGGER.log(INFO,this.vmsIdentifier+": Transaction scheduler has started");
         while(this.isRunning()) {
+            if (this.isPaused()) continue;
             try {
                 this.checkForNewEvents();
                 this.executeReadyTasks();

@@ -9,17 +9,26 @@ public abstract class StoppableRunnable implements Runnable {
 
     private volatile boolean running;
 
+    private volatile boolean paused;
+
     public StoppableRunnable() {
         // starts running as default
         this.running = true;
+        this.paused = false;
     }
 
     public boolean isRunning() {
         return this.running;
     }
+    public boolean isPaused() {
+        return this.paused;
+    }
 
     public void stop() {
         this.running = false;
+    }
+    public void pauseHandler(boolean pause) {
+        this.paused = pause;
     }
 
     public void giveUpCpu(int sleepTime){

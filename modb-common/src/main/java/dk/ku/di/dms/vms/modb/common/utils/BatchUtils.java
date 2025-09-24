@@ -2,7 +2,10 @@ package dk.ku.di.dms.vms.modb.common.utils;
 
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 
 import static dk.ku.di.dms.vms.modb.common.schema.network.Constants.BATCH_OF_EVENTS;
@@ -27,7 +30,8 @@ public final class BatchUtils {
         int idx = events.size() - remaining;
         while(idx < events.size() && remainingBytes > events.get(idx).totalSize()){
             TransactionEvent.writeWithinBatch( writeBuffer, events.get(idx) );
-//            System.out.println(STR."BatchUtils position after event insert: \{writeBuffer.position()}");
+
+//            System.out.println(STR."assemble add tid=\{events.get(idx).tid()} to bid=\{events.get(idx).batch()}");
             remainingBytes = remainingBytes - events.get(idx).totalSize();
             idx++;
             count++;
@@ -38,9 +42,29 @@ public final class BatchUtils {
         writeBuffer.putInt(5, count);
         writeBuffer.position(position);
 
-//        System.out.println(STR."BatchUtils BATCH_OF_EVENTS event count: \{count}");
-
         return remaining - count;
+    }
+
+
+    public static List<TransactionEvent.Payload> disAssembleBatchPayload(ByteBuffer byteBuffer) throws IOException
+    {
+        System.out.println("disAssembleBatchPayload");
+        var events = new ArrayList<TransactionEvent.Payload>();
+        while (byteBuffer.hasRemaining()) {
+            byte type = byteBuffer.get();
+            if (type != BATCH_OF_EVENTS) throw new IOException("Invalid type");
+
+            int segmentSize = byteBuffer.getInt();
+            int eventCount = byteBuffer.getInt();
+
+            System.out.println(STR."ThesisLogger BATCH_OF_EVENTS event count: \{eventCount}");
+
+            for (int i = 0; i < eventCount; i++) {
+                var event = TransactionEvent.read(byteBuffer);
+                events.add(event);
+            }
+        }
+        return events;
     }
 
 }

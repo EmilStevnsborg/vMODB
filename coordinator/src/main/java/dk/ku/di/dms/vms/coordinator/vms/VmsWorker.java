@@ -15,6 +15,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbort;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbortInfo;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
 import dk.ku.di.dms.vms.modb.common.utils.BatchUtils;
@@ -87,6 +88,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private State state;
 
     private final ILoggingHandler loggingHandler;
+    private final LoadFromLogs loadFromLogs;
 
     private final IVmsSerdesProxy serdesProxy;
 
@@ -165,7 +167,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             int totalSize = 0;
             TransactionEvent.PayloadRaw txEvent = this.queue.poll();
             if(txEvent == null) return;
-            System.out.println("SingleDequeue drain");
             totalSize += txEvent.totalSize();
             while(true) {
                 list.add(txEvent);
@@ -225,6 +226,8 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             this.loggingHandler = new ILoggingHandler() { };
         }
         this.serdesProxy = serdesProxy;
+
+        this.loadFromLogs = new LoadFromLogs(loggingHandler);
 
         // in
         this.messageQueue = new ConcurrentLinkedDeque<>();
@@ -388,7 +391,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private void processPendingLogging(){
         ByteBuffer writeBuffer;
         if((writeBuffer = this.loggingWriteBuffers.poll()) != null){
-            System.out.println("coordinator.VmsWorker.processPendingLogging.loggingWriteBuffers.poll: not null");
+            System.out.println("Logging writeBuffer");
             try {
                 writeBuffer.position(0);
                 this.loggingHandler.log(writeBuffer);
@@ -430,7 +433,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
     @Override
     public void queueTransactionEvent(TransactionEvent.PayloadRaw payloadRaw) {
-        System.out.println(STR."Coordinator queueTransactionEvent");
+//        System.out.println(STR."Coordinator queueTransactionEvent");
         this.transactionEventQueue.insert(payloadRaw);
     }
 
@@ -461,8 +464,9 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 this.loggingHandler.force();
             }
             case TransactionAbort.Payload o -> {
-                System.out.println("VmsWorker.sendMessage.TransactionAbort");
-                this.sendTransactionAbort(o);
+                System.out.println(STR."VmsWorker.sendMessage.TransactionAbort: \{message}");
+                this.abortInCoordinator(o);
+                this.loggingHandler.force();
             }
             case String o -> this.sendConsumerSet(o);
             default ->
@@ -470,13 +474,36 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         }
     }
 
-    private void sendTransactionAbort(TransactionAbort.Payload tidToAbort) {
+    private void abortInCoordinator(TransactionAbort.Payload payload)
+    {
+        System.out.println("VmsWorker calls abortInCoordinator");
+        // send the message
+        sendTransactionAbort(payload);
+
+        // wait for logs to be written to file. Ensure the buffer was actually written to the persistent logs.
+        try
+        {
+            System.out.println("\nWait for logging ....\n");
+            Thread.sleep(3000);
+        } catch (InterruptedException e){}
+
+        // load events and fix precedence, check if data is in memory
         ByteBuffer writeBuffer = retrieveByteBuffer();
-        TransactionAbort.write(writeBuffer, tidToAbort);
+        try {
+            loadFromLogs.loadEventsToResend(writeBuffer, payload.tid(), payload.batch());
+        } catch (IOException e) {
+            System.out.println(STR."Abort crashed in VmsWorker \{consumerVms.identifier}");
+        }
+
+        // read from buffer into fileChannel
+        writeBuffer.flip();
+    }
+    private void sendTransactionAbort(TransactionAbort.Payload payload) {
+        ByteBuffer writeBuffer = retrieveByteBuffer();
+        TransactionAbort.write(writeBuffer, payload);
         writeBuffer.flip();
         this.acquireLock();
         this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
-        LOGGER.log(WARNING,"Leader: Transaction abort sent to: " + this.consumerVms.identifier);
     }
 
     private void sendBatchCommitCommand(BatchCommitCommand.Payload batchCommitCommand) {
@@ -583,8 +610,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                     }
                     case TX_ABORT -> {
                         System.out.println("VmsWorker.VmsReadCompletionHandler.type.TX_ABORT");
-                        // get information of what
-                        TransactionAbort.Payload response = TransactionAbort.read(readBuffer);
+                        TransactionAbortInfo.Payload response = TransactionAbortInfo.read(readBuffer);
                         coordinatorQueue.add(response);
                     }
                     case EVENT -> LOGGER.log(INFO, "Leader: New event received from: " + consumerVms.identifier); // TODO probably here is important
@@ -684,10 +710,12 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private void sendBatchOfEvents(){
         System.out.println(STR."VmsWorker.sendBatchOfEvents for \{consumerVms.identifier}");
         int remaining = this.drained.size();
+        System.out.println(STR."Sending \{remaining} transaction events");
         int count = remaining;
         ByteBuffer writeBuffer;
         while(remaining > 0) {
             try {
+                // get new buffer and send new batch
                 writeBuffer = this.retrieveByteBuffer();
                 remaining = BatchUtils.assembleBatchPayload(remaining, this.drained, writeBuffer);
 

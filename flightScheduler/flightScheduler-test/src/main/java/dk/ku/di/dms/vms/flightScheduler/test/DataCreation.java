@@ -14,7 +14,7 @@ public class DataCreation
         var customers = Collections.synchronizedList(new ArrayList<Customer>());
         for (int i = 0; i < numCustomers; i++) {
             var name = "user" + i;
-            var customer = new Customer(i, name);
+            var customer = new Customer(i, 100, name);
             customers.add(customer);
         }
         return customers;

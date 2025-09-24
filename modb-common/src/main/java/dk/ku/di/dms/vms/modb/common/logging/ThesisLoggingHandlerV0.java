@@ -1,12 +1,9 @@
 package dk.ku.di.dms.vms.modb.common.logging;
 
-import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchComplete;
-import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
-
+import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
 
 import static dk.ku.di.dms.vms.modb.common.schema.network.Constants.*;
 
@@ -30,97 +27,92 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
 //        System.out.println("modb.common.logging.ThesisLoggingHandlerV0.close");
     }
 
-    private void disAssembleBatchPayload(ByteBuffer byteBuffer) throws IOException {
-        final int JUMP = (2 * Integer.BYTES);
-        while (byteBuffer.hasRemaining()) {
-            byte type = byteBuffer.get();
-            if (type != BATCH_OF_EVENTS) {
-                throw new IOException("Unknown message type: " + type);
-            }
+    @Override
+    // scan through logs and find the batch (batch may have logged in batches, need to look through whole log)
+    public int readBatch(ByteBuffer byteBuffer, long batch) throws IOException {
+        ByteBuffer metadataBuffer = ByteBuffer.allocate(1 + 2 * Integer.BYTES + 2 * Long.BYTES); // 25 bytes
+        byteBuffer.clear();
 
-            int segmentSize = byteBuffer.getInt();
-            int eventCount = byteBuffer.getInt();
+        if (fileChannel.size() == 0) return 0;
 
-//            System.out.println(STR."ThesisLogger BATCH_OF_EVENTS event count: \{eventCount}");
+        fileChannel.position(0);
+        System.out.println(STR."fileChannel.position()=\{fileChannel.position()} < \{fileChannel.size()}=fileChannel.size()");
 
-            for (int i = 0; i < eventCount; i++) {
-                long tid = byteBuffer.getLong();
-                long batch = byteBuffer.getLong();
-                int eventLength = byteBuffer.getInt();
+        while (fileChannel.position() < fileChannel.size()) {
+            metadataBuffer.clear();
+            long batchPosition = fileChannel.position();
 
-//                System.out.println(STR."Logging event... tid: \{tid}, batch: \{batch}, eventLength: \{eventLength}");
-
-                byte[] eventBytes = new byte[eventLength];
-                byteBuffer.get(eventBytes);
-
-                int payloadLength = byteBuffer.getInt();
-                int payloadStart = byteBuffer.position();
-                int payloadEnd = payloadStart + payloadLength;
-//                System.out.println(STR."Logging event... payloadLength: \{payloadLength}, payloadStart: \{payloadStart}");
-
-//                // this is just for testing
-//                byte[] payloadBytes = new byte[payloadLength];
-//                byteBuffer.get(payloadBytes);
-//                String payload = new String(payloadBytes, StandardCharsets.UTF_8);
-//                System.out.println(STR."Payload:\n\{payload}\n");
-//                byteBuffer.position(payloadStart);
-
-                int oldLimit = byteBuffer.limit();
-                byteBuffer.limit(payloadEnd);
-                while (byteBuffer.hasRemaining()) {
-                    this.fileChannel.write(byteBuffer);
+            while (metadataBuffer.hasRemaining()) {
+                int mn = fileChannel.read(metadataBuffer);
+                if (mn == -1) {
+                    throw new IOException("File too small");
                 }
-
-                byteBuffer.limit(oldLimit);
-
-//                System.out.println("Logging... Done writing payload to channel");
-                byteBuffer.position(payloadEnd);
-
-                int precedenceLength = byteBuffer.getInt();
-                byte[] precedenceBytes = new byte[precedenceLength];
-                byteBuffer.get(precedenceBytes);
-
-//                System.out.println(STR."ThesisLogger DECODE position after decoding: \{byteBuffer.position()}");
             }
+            metadataBuffer.flip();
+
+            byte type = metadataBuffer.get();
+            if (type != BATCH_OF_EVENTS) throw new IOException("expected BATCH_OF_EVENTS, got " + type);
+
+            int segmentSize = metadataBuffer.getInt();
+            int count = metadataBuffer.getInt();
+            long tid = metadataBuffer.getLong();
+            long bid = metadataBuffer.getLong();
+
+            if (bid != batch) {
+                System.out.println(STR."Batch is NOT bid in logs batch=\{batch} != \{bid}=bid");
+                batchPosition += segmentSize;
+                fileChannel.position(batchPosition);
+                continue;
+            }
+            System.out.println(STR."Batch IS bid in logs batch=\{batch} == \{bid}=bid");
+            System.out.println(STR."Get \{count} events");
+
+            if (byteBuffer.position() == 0)
+            {
+                // first time seeing a BATCH_OF_EVENTS
+                System.out.println("First time seeing BATCH_OF_EVENTS in log");
+                byteBuffer.limit(segmentSize);
+                fileChannel.position(batchPosition);
+            }
+            else
+            {
+                var metadataBytes = (1 + 2*Integer.BYTES);
+                // update the count
+                int oldCount = byteBuffer.getInt(5);
+                int newCount = oldCount + count;
+                int deltaSegmentSize = segmentSize-metadataBytes; // minus type, segmentSize, count
+                int newSegmentSize = segmentSize + deltaSegmentSize;
+                byteBuffer.putInt(1, newSegmentSize);
+                byteBuffer.putInt(5, newCount);
+
+                System.out.println(STR."Append new BATCH_OF_EVENTS in log to existing batch, old count=\{oldCount} new count=\{newCount}");
+
+                // set up the limits
+                var oldLimit = byteBuffer.limit();
+                var newLimit = oldLimit + deltaSegmentSize; // just add the events
+                byteBuffer.limit(newLimit);
+                byteBuffer.position(oldLimit);
+
+                fileChannel.position(batchPosition + metadataBytes);
+            }
+
+            // read the events
+            while (byteBuffer.hasRemaining()) {
+                int n = fileChannel.read(byteBuffer);
+                if (n == -1) throw new IOException("end of file");
+            }
+            System.out.println(STR."Batch is over fileChannel.position()=\{fileChannel.position()}");
         }
+        System.out.println(STR."Done reading batch \{batch}");
+        return 1;
     }
 
     @Override
     public void log(ByteBuffer byteBuffer) throws IOException {
-        byte type = byteBuffer.get(0);
-        System.out.println();
-        switch (type) {
-            // from and to server nodes
-            case HEARTBEAT:
-//                System.out.println(STR."logging heartbeat, type=\{HEARTBEAT}");
-                break;
-            case PRESENTATION:
-//                System.out.println(STR."logging presentation, type=\{PRESENTATION}");
-                break;
-            case CONSUMER_SET:
-//                System.out.println(STR."logging consumer set, type=\{CONSUMER_SET}");
-                break;
-
-            // events
-            case EVENT:
-//                System.out.println(STR."logging event, type=\{EVENT}");
-                break;
-            case BATCH_OF_EVENTS:
-//                System.out.println(STR."logging batch of events, type=\{BATCH_OF_EVENTS}");
-                disAssembleBatchPayload(byteBuffer);
-                break;
-            case TX_ABORT:
-//                System.out.println(STR."logging transaction abort, type=\{TX_ABORT}");
-                break;
-            case BATCH_COMPLETE:
-//                System.out.println(STR."logging batch complete, type=\{BATCH_COMPLETE}");
-                break;
-            default:
-//                System.out.println(STR."logging unspecified event type: \{type}");
-                break;
-        }
-        System.out.println();
-        byteBuffer.clear();
+        System.out.println("logging");
+        do {
+            this.fileChannel.write(byteBuffer);
+        } while(byteBuffer.hasRemaining());
     }
 
     @Override

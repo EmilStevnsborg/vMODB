@@ -87,4 +87,9 @@ public final class Constants {
      */
     public static final byte BATCH_ABORT_REQUEST = 11;
 
+    /**
+     *  This message is sent when a VMS has restored a stable state during abort to before the failed TID
+     */
+    public static final byte ABORT_STABLE_STATE = 18;
+
 }

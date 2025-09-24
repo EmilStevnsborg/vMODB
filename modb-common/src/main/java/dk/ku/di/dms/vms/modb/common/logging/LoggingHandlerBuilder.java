@@ -31,6 +31,7 @@ public final class LoggingHandlerBuilder {
             fileChannel = FileChannel.open(path,
                     StandardOpenOption.CREATE,
                     StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.READ,
                     StandardOpenOption.WRITE);
         } catch (IOException e) {
             throw new RuntimeException(e);

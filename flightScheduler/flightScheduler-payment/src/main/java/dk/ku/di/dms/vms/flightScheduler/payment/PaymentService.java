@@ -48,7 +48,8 @@ public class PaymentService
     {
         if (bookingCancelled.requires_reimbursement == 1)
         {
-            var reimbursableBooking = new ReimbursableBooking(bookingCancelled.booking_id, bookingCancelled.customer_id);
+            var reimbursableBooking = new ReimbursableBooking(bookingCancelled.booking_id,
+                    bookingCancelled.customer_id, bookingCancelled.reimbursement);
             this.reimbursableBookingRepository.insert(reimbursableBooking);
         }
         paymentRepository.deleteByKey(bookingCancelled.booking_id);
@@ -62,7 +63,7 @@ public class PaymentService
     {
         var reimbursableBooking = reimbursableBookingRepository.lookupByKey(reimburseBooking.booking_id);
 
-        var customerReimbursed = new CustomerReimbursed(reimbursableBooking.customer_id);
+        var customerReimbursed = new CustomerReimbursed(reimbursableBooking.customer_id, reimbursableBooking.reimbursement);
         reimbursableBookingRepository.deleteByKey(reimburseBooking.booking_id);
         return customerReimbursed;
     }

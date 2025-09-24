@@ -273,8 +273,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     // TODO sending batch of events (look for format)
     private void sendBatchOfEventsNonBlocking() {
         int remaining = this.drained.size();
-
-        System.out.println("ConsumerVmsWorker.sendBatchOfEventsNonBlocking remaining: " + remaining);
         int count = remaining;
         ByteBuffer writeBuffer = null;
         while(remaining > 0){
