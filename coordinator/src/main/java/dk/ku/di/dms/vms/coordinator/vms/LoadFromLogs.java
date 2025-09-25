@@ -16,6 +16,12 @@ public class LoadFromLogs
         this.loggingHandler = loggingHandler;
     }
 
+    // fix precedence and update log
+    public void fixPrecedence()
+    {
+
+    }
+
     public int loadEventsToResend(ByteBuffer byteBuffer, long failedTid, long batch) throws IOException {
         // fill buffer from file
         var result = loggingHandler.readBatch(byteBuffer, batch);
@@ -29,6 +35,19 @@ public class LoadFromLogs
         {
             System.out.println(STR."event in batch:\n\{event}");
         }
+
+        // fix precedence
+        var failedEventPrecedenceMap = events.stream()
+                .filter(e->e.tid() == failedTid)
+                .findFirst().get()
+                .precedenceMap(); // string
+        // find events with precedence to failedTid and update it.
+
+        events.replaceAll(e ->
+                e.precedenceMap().equals(failedTid) // not valid condition
+                        ? new TransactionEvent.Payload(e.tid(), e.batch(), e.event(), e.payload(), failedEventPrecedenceMap)
+                        : e
+        );
 
         var filteredEvents = events.stream()
                 .filter(e -> e.tid() > failedTid)

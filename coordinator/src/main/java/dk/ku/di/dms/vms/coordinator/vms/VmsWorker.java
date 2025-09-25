@@ -497,6 +497,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
         // read from buffer into fileChannel
         writeBuffer.flip();
+        returnByteBuffer(writeBuffer);
     }
     private void sendTransactionAbort(TransactionAbort.Payload payload) {
         ByteBuffer writeBuffer = retrieveByteBuffer();

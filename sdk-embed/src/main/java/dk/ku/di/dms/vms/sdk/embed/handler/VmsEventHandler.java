@@ -233,6 +233,10 @@ public final class VmsEventHandler extends ModbHttpServer {
 //        pauseScheduler(true);
 
         // cut the log
+        var affectedVMSes = this.consumerVmsContainerMap.values();
+        for (IVmsContainer vmsContainer : affectedVMSes){
+            vmsContainer.cutLog(transactionAbort.tid(), transactionAbort.batch());
+        }
 
         // restore stable state
         restoreStableState(transactionAbort.batch(), transactionAbort.tid());

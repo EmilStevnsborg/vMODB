@@ -48,7 +48,7 @@ public final class BatchUtils {
 
     public static List<TransactionEvent.Payload> disAssembleBatchPayload(ByteBuffer byteBuffer) throws IOException
     {
-        System.out.println("disAssembleBatchPayload");
+        System.out.println(STR."disAssembleBatchPayload");
         var events = new ArrayList<TransactionEvent.Payload>();
         while (byteBuffer.hasRemaining()) {
             byte type = byteBuffer.get();

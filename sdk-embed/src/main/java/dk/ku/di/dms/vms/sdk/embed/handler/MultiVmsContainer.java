@@ -3,6 +3,8 @@ package dk.ku.di.dms.vms.sdk.embed.handler;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 
+import java.nio.ByteBuffer;
+
 /**
  * A container of consumer VMS workers to facilitate
  * scalable pushing of transaction events
@@ -34,6 +36,14 @@ public final class MultiVmsContainer implements IVmsContainer {
             this.next = 0;
         } else {
             this.next += 1;
+        }
+    }
+
+    @Override
+    public void cutLog(long failedTid, long batch) {
+        System.out.println("MultiVmsContainer is cutting log for each worker");
+        for(ConsumerVmsWorker consumerVmsWorker : this.consumerVmsWorkers) {
+            consumerVmsWorker.cutLog(failedTid, batch);
         }
     }
 
