@@ -88,7 +88,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private State state;
 
     private final ILoggingHandler loggingHandler;
-    private final LoadFromLogs loadFromLogs;
+    private final FromLogs fromLogs;
 
     private final IVmsSerdesProxy serdesProxy;
 
@@ -227,7 +227,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         }
         this.serdesProxy = serdesProxy;
 
-        this.loadFromLogs = new LoadFromLogs(loggingHandler);
+        this.fromLogs = new FromLogs(loggingHandler);
 
         // in
         this.messageQueue = new ConcurrentLinkedDeque<>();
@@ -487,13 +487,14 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             Thread.sleep(3000);
         } catch (InterruptedException e){}
 
-        // load events and fix precedence, check if data is in memory
+        // fix precedence
         ByteBuffer writeBuffer = retrieveByteBuffer();
         try {
-            loadFromLogs.loadEventsToResend(writeBuffer, payload.tid(), payload.batch());
-        } catch (IOException e) {
-            System.out.println(STR."Abort crashed in VmsWorker \{consumerVms.identifier}");
+            fromLogs.fixPrecedence(writeBuffer, payload.tid(), payload.batch());
+        } catch (Exception e){
+            System.out.println("FixPrecedence failed");
         }
+
 
         // read from buffer into fileChannel
         writeBuffer.flip();

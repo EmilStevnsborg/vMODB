@@ -6,20 +6,46 @@ import dk.ku.di.dms.vms.modb.common.utils.BatchUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
+import java.util.List;
 
-public class LoadFromLogs
+public class FromLogs
 {
     private final ILoggingHandler loggingHandler;
-    public LoadFromLogs(ILoggingHandler loggingHandler)
+    public FromLogs(ILoggingHandler loggingHandler)
     {
         this.loggingHandler = loggingHandler;
     }
 
     // fix precedence and update log
-    public void fixPrecedence()
+    public void fixPrecedence(ByteBuffer byteBuffer, long failedTid, long batch) throws InterruptedException
     {
-
+        TransactionEvent.Payload failedEvent = null;
+        try {
+            failedEvent = loggingHandler.removeFailedEvent(byteBuffer, failedTid, batch);
+        } catch (Exception e) {
+            System.out.println(STR."removing failed event caused an error: \{e}");
+            e.printStackTrace();
+        }
+        if (failedEvent == null) {
+            return;
+        }
+        System.out.println(STR."Failed event: \{failedEvent}");
+        List<TransactionEvent.Payload> eventsInBatchInLogs = null;
+        try {
+            loggingHandler.readBatch(byteBuffer, batch);
+            var eventsInBatchInLogsTmp = BatchUtils.disAssembleBatchPayload(byteBuffer);
+            eventsInBatchInLogs = eventsInBatchInLogsTmp;
+        } catch (Exception e) {
+            System.out.println("Couldn't read batch");
+        }
+        System.out.println(STR."eventsInBatchInLogs count=\{eventsInBatchInLogs.size()}");
+        if (eventsInBatchInLogs == null) {
+            System.out.println("eventsInBatchInLogs is null");
+            return;
+        }
+        for (var event : eventsInBatchInLogs) {
+            System.out.println(STR."eventInBatchLogs: \{event}");
+        }
     }
 
     public int loadEventsToResend(ByteBuffer byteBuffer, long failedTid, long batch) throws IOException {

@@ -176,22 +176,37 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     }
 
     private void eventLoopLogging() {
-        while(this.isRunning()){
+//        while(this.isRunning()){
+//            try {
+//                if(this.loggingWriteBuffers.isEmpty()){
+//                    LOGGER.log(WARNING, me.identifier+": Going to block since no logging buffers");
+//                    this.drained.add(this.transactionEventQueue.take());
+//                    LOGGER.log(WARNING, me.identifier+": Woke up");
+//                }
+//                this.transactionEventQueue.drain(this.drained::add);
+//                if(this.drained.isEmpty()){
+//                    this.processPendingLogging();
+//                } else {
+//                    this.sendBatchOfEventsNonBlocking();
+//                }
+//            } catch (Exception e) {
+//                LOGGER.log(ERROR, this.me.identifier+ ": Error captured in event loop (logging) \n"+e);
+//            }
+//        }
+        int pollTimeout = 1;
+        while (this.isRunning()){
             try {
-                if(this.loggingWriteBuffers.isEmpty()){
-                    LOGGER.log(WARNING, me.identifier+": Going to block since no logging buffers");
-                    this.drained.add(this.transactionEventQueue.take());
-                    LOGGER.log(WARNING, me.identifier+": Woke up");
-                }
-                this.transactionEventQueue.drain(this.drained::add);
+                transactionEventQueue.drain(this.drained::add, this.options.networkBufferSize());
                 if(this.drained.isEmpty()){
+                    pollTimeout = Math.min(pollTimeout * 2, this.options.maxSleep());
                     this.processPendingLogging();
-                } else {
-                    this.sendBatchOfEventsNonBlocking();
+                    this.giveUpCpu(pollTimeout);
+                    continue;
                 }
-            } catch (Exception e) {
-                LOGGER.log(ERROR, this.me.identifier+ ": Error captured in event loop (logging) \n"+e);
-            }
+                pollTimeout = pollTimeout > 0 ? pollTimeout / 2 : 0;
+                this.sendBatchOfEventsNonBlocking();
+                this.processPendingLogging();
+            } catch (Exception e) {}
         }
     }
 
@@ -286,6 +301,8 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                 while(!this.tryAcquireLock()){
                     this.processPendingLogging();
                 }
+                // write drained in parts over channel. Continuously add the buffer for each part to logging
+                // once all parts have been written clear the drained
                 this.channel.write(writeBuffer, this.options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
             } catch (Exception e) {
                 this.failSafe(e, writeBuffer);
@@ -407,8 +424,19 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         var placeHolderBuffer = this.retrieveByteBuffer();
         System.out.println("ConsumerVmsWorker is cutting log");
         try {
+            // clear the transactionInput queue
+            transactionEventQueue.clear();
+
+            // some events may be in memory,
+            drained.clear();
+
+            // some may be in buffers not logged yet,
+            loggingWriteBuffers.stream().forEach(buffer -> returnByteBuffer(buffer));
+
+            // some may already have been logged
             System.out.println("ConsumerVmsWorker is cutting the persistent log");
             loggingHandler.cutLog(placeHolderBuffer, failedTid, batch);
+
         } catch (Exception e) {
             System.out.println("CUTTING THE LOG CAUSED AN EXCEPTION");
         }

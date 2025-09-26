@@ -12,6 +12,7 @@ import java.util.List;
 public interface ILoggingHandler {
 
     default void log(ByteBuffer byteBuffer) throws IOException { }
+    default TransactionEvent.Payload removeFailedEvent(ByteBuffer placeHolderBuffer, long failedTid, long batch) throws IOException { return null; }
     default void cutLog(ByteBuffer placeHolderBuffer, long failedTid, long batch) throws IOException { }
     default int readBatch(ByteBuffer byteBuffer, long batch) throws IOException { return 0; }
 

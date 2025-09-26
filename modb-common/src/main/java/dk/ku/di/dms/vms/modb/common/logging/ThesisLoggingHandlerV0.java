@@ -31,27 +31,17 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
         }
 //        System.out.println("modb.common.logging.ThesisLoggingHandlerV0.close");
     }
-
-    public class FailedEvent
-    {
-        public TransactionEvent.Payload event;
-        public long batchPosition;
-        public FailedEvent(TransactionEvent.Payload event, long batchPosition) {
-            this.event = event;
-            this.batchPosition = batchPosition;
-        }
-    }
-
-    private FailedEvent findFailedEvent(ByteBuffer placeHolderBuffer, long failedTid, long batch) throws IOException
+    @Override
+    public TransactionEvent.Payload removeFailedEvent(ByteBuffer placeHolderBuffer, long failedTid, long batch) throws IOException
     {
         ByteBuffer metadataBuffer = ByteBuffer.allocate(1 + 2 * Integer.BYTES + 2 * Long.BYTES); // 25 bytes
         placeHolderBuffer.clear();
 
         long batchPosition = 0;
-        long writePosition = batchPosition;
         fileChannel.position(batchPosition);
         System.out.println(STR."fileChannel.position()=\{fileChannel.position()} < \{fileChannel.size()}=fileChannel.size()");
 
+        TransactionEvent.Payload failedEvent = null;
         while (fileChannel.position() < fileChannel.size()) {
             metadataBuffer.clear();
 
@@ -84,26 +74,89 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
                 for (var event : events) {
                     if (event.tid() == failedTid) {
                         System.out.println(STR."FAILED EVENT IS \{event}");
-                        return new FailedEvent(event, batchPosition);
+                        failedEvent = event;
+                        break;
                     }
                 }
-            } else {
-                batchPosition += segmentSize;
+                if (failedEvent != null) // shift whole file
+                {
+                    var bytesToShift = segmentSize;
+                    // update current batch
+                    var filteredEvents = events.stream().filter(e -> e.tid() != failedTid)
+                            .map(e -> TransactionEvent.of(e.tid(), e.batch(), e.event(), e.payload(), e.precedenceMap()))
+                            .toList();
+                    var remainingEvents = filteredEvents.size();
+                    if (remainingEvents > 0) {
+                        while (remainingEvents > 0) {
+                            remainingEvents = BatchUtils.assembleBatchPayload(remainingEvents, filteredEvents, placeHolderBuffer);
+                        }
+
+                        // write to file
+                        placeHolderBuffer.flip();
+                        var newSegmentSize = placeHolderBuffer.getInt(1);
+                        placeHolderBuffer.limit(newSegmentSize);
+                        fileChannel.position(batchPosition);
+                        while (placeHolderBuffer.hasRemaining()) {
+                            fileChannel.write(placeHolderBuffer);
+                        }
+                        bytesToShift -= newSegmentSize;
+                    }
+                    System.out.println(STR."Must shift rest of file by \{bytesToShift} bytes, "+
+                                       STR."because oldsegsize=\{segmentSize} with " +
+                                       STR."remainingEvents=\{remainingEvents} and count=\{count}");
+
+                    // Advance to next batch
+                    batchPosition += segmentSize;
+                    long readPosition = batchPosition;
+                    long writePosition = batchPosition - bytesToShift;
+                    placeHolderBuffer.limit(placeHolderBuffer.capacity());
+
+                    System.out.println(STR."Prior readPosition=\{batchPosition-segmentSize}, new readPosition=\{readPosition}, " +
+                                       STR."prior writePosition=\{batchPosition-segmentSize}, new ritePosition=\{writePosition}");
+
+                    System.out.println("Advancing to next batch");
+
+                    // Shift remaining file content
+                    while (readPosition < fileChannel.size()) {
+                        System.out.println(STR."readPosition=\{readPosition}");
+                        placeHolderBuffer.clear();
+
+                        int read = fileChannel.read(placeHolderBuffer, readPosition);
+                        if (read == -1) break;
+
+                        placeHolderBuffer.flip();
+                        System.out.println("Before writing");
+                        fileChannel.write(placeHolderBuffer, writePosition);
+                        System.out.println("After writing");
+
+                        readPosition += read;
+                        writePosition += read;
+                    }
+                    fileChannel.truncate(writePosition);
+                    break;
+                }
+                else // advance to next part
+                {
+                    batchPosition += segmentSize;
+                    fileChannel.position(batchPosition);
+                }
             }
-            fileChannel.position(batchPosition);
+            else
+            {
+                batchPosition += segmentSize;
+                fileChannel.position(batchPosition);
+            }
         }
-        return null;
+        return failedEvent;
     }
 
     // used in coordinator vms workers
-    public void fixPrecedence(ByteBuffer placeHolderBuffer, long failedTid, long batch) throws IOException {
-        ByteBuffer metadataBuffer = ByteBuffer.allocate(1 + 2 * Integer.BYTES + 2 * Long.BYTES); // 25 bytes
+    public void fixPrecedence(ByteBuffer placeHolderBuffer, long failedTid, long batch) throws IOException
+    {
         placeHolderBuffer.clear();
         if (fileChannel.size() == 0) return;
-        var failedEvent = findFailedEvent(placeHolderBuffer, failedTid, batch);
-        if (failedEvent == null) return;
 
-        // save for later
+        // go through log,
     }
 
     private void readMetadata(ByteBuffer metadataBuffer) throws IOException
@@ -132,7 +185,7 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
         long batchPosition = 0;
         long writePosition = batchPosition;
         fileChannel.position(batchPosition);
-        System.out.println(STR."fileChannel.position()=\{fileChannel.position()} < \{fileChannel.size()}=fileChannel.size()");
+//        System.out.println(STR."fileChannel.position()=\{fileChannel.position()} < \{fileChannel.size()}=fileChannel.size()");
 
         while (fileChannel.position() < fileChannel.size())
         {
@@ -145,10 +198,8 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
             long tid = metadataBuffer.getLong();
             long bid = metadataBuffer.getLong();
 
-            System.out.println(STR."WritePosition=\{writePosition}");
-            if (bid != batch) {
-                System.out.println(STR."Batch is NOT bid in logs batch=\{batch} != \{bid}=bid at position=\{batchPosition}");
-
+            if (bid != batch)
+            {
                 // write this batch to an earlier position
                 if (writePosition < batchPosition)
                 {
@@ -176,7 +227,6 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
             }
             else // correct batch
             {
-                System.out.println(STR."Batch IS bid in logs batch=\{batch} == \{bid}=bid at position=\{batchPosition}");
                 // read batch into buffer
                 fileChannel.position(batchPosition);
                 placeHolderBuffer.clear();
@@ -189,7 +239,8 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
                 placeHolderBuffer.flip();
                 var events = BatchUtils.disAssembleBatchPayload(placeHolderBuffer);
                 for (var event : events) {
-                    System.out.println(STR."e.tid()=\{event.tid()} ?= failedTid=\{failedTid}");
+                    System.out.println(event.tid() < failedTid ? "KEEP " : "DONT keep " +
+                                       STR."e.tid()=\{event.tid()} ?= failedTid=\{failedTid}");
                 }
 
                 var filteredEvents = events.stream()
@@ -198,18 +249,12 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
                         .toList();
                 var remainingEvents = filteredEvents.size();
 
-                for (var event : filteredEvents) {
-                    System.out.println(STR."e.tid()=\{event.tid()} < failedTid=\{failedTid}");
-                }
-
                 if (remainingEvents == 0) // dont log anything
                 {
-                    System.out.println(STR."DONT log anything from bid=\{bid}");
                     batchPosition += segmentSize;
                 }
                 else if (remainingEvents == count) // no changes
                 {
-                    System.out.println(STR."LOG WHOLE batch");
                     placeHolderBuffer.limit(segmentSize);
                     while (placeHolderBuffer.hasRemaining()) {
                         fileChannel.write(placeHolderBuffer, writePosition);
@@ -219,9 +264,10 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
                 }
                 else // log the events that are remaining
                 {
-                    System.out.println(STR."LOG SOME of the batch");
                     placeHolderBuffer.clear();
-                    BatchUtils.assembleBatchPayload(remainingEvents, filteredEvents, placeHolderBuffer);
+                    while (remainingEvents > 0) {
+                        remainingEvents = BatchUtils.assembleBatchPayload(remainingEvents, filteredEvents, placeHolderBuffer);
+                    }
 
                     // write buffer into file
                     var newSegmentSize = placeHolderBuffer.getInt(5);
@@ -276,13 +322,12 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
                 fileChannel.position(batchPosition);
                 continue;
             }
-            System.out.println(STR."Batch IS bid in logs batch=\{batch} == \{bid}=bid");
-            System.out.println(STR."Get \{count} events");
+            System.out.println(STR."Batch IS bid in logs batch=\{batch} == \{bid}=bid, Get \{count} events");
 
             if (byteBuffer.position() == 0)
             {
                 // first time seeing a BATCH_OF_EVENTS
-                System.out.println("First time seeing BATCH_OF_EVENTS in log");
+//                System.out.println("First time seeing BATCH_OF_EVENTS in log");
                 byteBuffer.limit(segmentSize);
                 fileChannel.position(batchPosition);
             }
@@ -297,7 +342,7 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
                 byteBuffer.putInt(1, newSegmentSize);
                 byteBuffer.putInt(5, newCount);
 
-                System.out.println(STR."Append new BATCH_OF_EVENTS in log to existing batch, old count=\{oldCount} new count=\{newCount}");
+//                System.out.println(STR."Append new BATCH_OF_EVENTS in log to existing batch, old count=\{oldCount} new count=\{newCount}");
 
                 // set up the limits
                 var oldLimit = byteBuffer.limit();
@@ -313,7 +358,6 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
                 int n = fileChannel.read(byteBuffer);
                 if (n == -1) throw new IOException("end of file");
             }
-            System.out.println(STR."Batch is over fileChannel.position()=\{fileChannel.position()}");
         }
         System.out.println(STR."Done reading batch \{batch}");
         return 1;
