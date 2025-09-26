@@ -17,7 +17,7 @@ public final class BatchUtils {
     public static int assembleBatchPayload(int remaining, List<TransactionEvent.PayloadRaw> events, ByteBuffer writeBuffer){
         int remainingBytes = writeBuffer.remaining();
 
-//        System.out.println(STR."BatchUtils type: \{BATCH_OF_EVENTS}");
+        System.out.println(STR."BatchUtils type: \{BATCH_OF_EVENTS}");
         writeBuffer.put(BATCH_OF_EVENTS);
         // jump 2 integers
         writeBuffer.position(1 + JUMP);
@@ -30,8 +30,6 @@ public final class BatchUtils {
         int idx = events.size() - remaining;
         while(idx < events.size() && remainingBytes > events.get(idx).totalSize()){
             TransactionEvent.writeWithinBatch( writeBuffer, events.get(idx) );
-
-//            System.out.println(STR."assemble add tid=\{events.get(idx).tid()} to bid=\{events.get(idx).batch()}");
             remainingBytes = remainingBytes - events.get(idx).totalSize();
             idx++;
             count++;
@@ -58,7 +56,7 @@ public final class BatchUtils {
             int segmentSize = byteBuffer.getInt();
             int eventCount = byteBuffer.getInt();
 
-            System.out.println(STR."ThesisLogger BATCH_OF_EVENTS event count: \{eventCount}");
+//            System.out.println(STR."ThesisLogger BATCH_OF_EVENTS event count: \{eventCount}");
 
             for (int i = 0; i < eventCount; i++) {
                 var event = TransactionEvent.read(byteBuffer);

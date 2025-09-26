@@ -227,7 +227,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         }
         this.serdesProxy = serdesProxy;
 
-        this.fromLogs = new FromLogs(loggingHandler);
+        this.fromLogs = new FromLogs(loggingHandler, serdesProxy);
 
         // in
         this.messageQueue = new ConcurrentLinkedDeque<>();
@@ -489,11 +489,11 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
         // fix precedence
         ByteBuffer writeBuffer = retrieveByteBuffer();
-        try {
-            fromLogs.fixPrecedence(writeBuffer, payload.tid(), payload.batch());
-        } catch (Exception e){
-            System.out.println("FixPrecedence failed");
-        }
+        var failedEvent = fromLogs.removeFailedEvent(writeBuffer, payload.tid(), payload.batch());
+        System.out.println(STR."FAILED EVENT: \{failedEvent}");
+        if (failedEvent != null) fromLogs.fixPrecedence(writeBuffer, failedEvent);
+
+        // continuously load events from logs and send them
 
 
         // read from buffer into fileChannel

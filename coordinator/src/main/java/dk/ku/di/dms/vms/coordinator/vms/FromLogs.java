@@ -2,22 +2,27 @@ package dk.ku.di.dms.vms.coordinator.vms;
 
 import dk.ku.di.dms.vms.modb.common.logging.ILoggingHandler;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
+import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
 import dk.ku.di.dms.vms.modb.common.utils.BatchUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 
 public class FromLogs
 {
     private final ILoggingHandler loggingHandler;
-    public FromLogs(ILoggingHandler loggingHandler)
+    private final IVmsSerdesProxy serdesProxy;
+    public FromLogs(ILoggingHandler loggingHandler, IVmsSerdesProxy serdesProxy)
     {
         this.loggingHandler = loggingHandler;
+        this.serdesProxy = serdesProxy;
     }
 
-    // fix precedence and update log
-    public void fixPrecedence(ByteBuffer byteBuffer, long failedTid, long batch) throws InterruptedException
+    // remove failedEvent and update log
+    public TransactionEvent.Payload removeFailedEvent(ByteBuffer byteBuffer, long failedTid, long batch)
     {
         TransactionEvent.Payload failedEvent = null;
         try {
@@ -27,74 +32,48 @@ public class FromLogs
             e.printStackTrace();
         }
         if (failedEvent == null) {
-            return;
+            return null;
         }
-        System.out.println(STR."Failed event: \{failedEvent}");
+        return failedEvent;
+    }
+
+    // fix precedence and update log
+    public void fixPrecedence(ByteBuffer byteBuffer, TransactionEvent.Payload failedEvent)
+    {
+        try
+        {
+            Function<String, Map<String, Integer>> deserializer = s -> serdesProxy.<String, Integer>deserializeMap(s);
+            Function<Map<String, Integer>, String> serializer = m -> serdesProxy.serialize(m, Map.class);
+            var failedEventPrecedenceMap = deserializer.apply(failedEvent.precedenceMap());
+
+            loggingHandler.fixPrecedence(
+                    byteBuffer,
+                    failedEvent.tid(), failedEvent.batch(),
+                    failedEventPrecedenceMap,
+                    deserializer, serializer
+            );
+            this.readBatch(byteBuffer, failedEvent.batch());
+        } catch (Exception e)
+        {
+            System.out.println("fixPrecedence failed");
+            e.printStackTrace();
+        }
+    }
+
+    private void readBatch(ByteBuffer byteBuffer, long batch)
+    {
+        System.out.println("readBatch");
         List<TransactionEvent.Payload> eventsInBatchInLogs = null;
         try {
             loggingHandler.readBatch(byteBuffer, batch);
             var eventsInBatchInLogsTmp = BatchUtils.disAssembleBatchPayload(byteBuffer);
             eventsInBatchInLogs = eventsInBatchInLogsTmp;
+            System.out.println(STR."eventsInBatchInLogs size=\{eventsInBatchInLogs.size()}");
+            for (var event : eventsInBatchInLogs) {
+                System.out.println(STR."eventInBatchLogs: \{event}");
+            }
         } catch (Exception e) {
             System.out.println("Couldn't read batch");
         }
-        System.out.println(STR."eventsInBatchInLogs count=\{eventsInBatchInLogs.size()}");
-        if (eventsInBatchInLogs == null) {
-            System.out.println("eventsInBatchInLogs is null");
-            return;
-        }
-        for (var event : eventsInBatchInLogs) {
-            System.out.println(STR."eventInBatchLogs: \{event}");
-        }
-    }
-
-    public int loadEventsToResend(ByteBuffer byteBuffer, long failedTid, long batch) throws IOException {
-        // fill buffer from file
-        var result = loggingHandler.readBatch(byteBuffer, batch);
-        if (result != 1) return 0;
-
-        // flip to read
-        byteBuffer.flip();
-        var events = BatchUtils.disAssembleBatchPayload(byteBuffer);
-        System.out.println(STR."eventsSize=\{events.size()}");
-        for (var event : events)
-        {
-            System.out.println(STR."event in batch:\n\{event}");
-        }
-
-        // fix precedence
-        var failedEventPrecedenceMap = events.stream()
-                .filter(e->e.tid() == failedTid)
-                .findFirst().get()
-                .precedenceMap(); // string
-        // find events with precedence to failedTid and update it.
-
-        events.replaceAll(e ->
-                e.precedenceMap().equals(failedTid) // not valid condition
-                        ? new TransactionEvent.Payload(e.tid(), e.batch(), e.event(), e.payload(), failedEventPrecedenceMap)
-                        : e
-        );
-
-        var filteredEvents = events.stream()
-                .filter(e -> e.tid() > failedTid)
-                        .toList();
-
-        for (var filteredEvent : filteredEvents)
-        {
-            System.out.println(STR."event that needs to be resend:\n\{filteredEvent}");
-        }
-
-        var filteredRawEvents = filteredEvents.stream()
-                .map(e -> TransactionEvent.of(e.tid(), e.batch(), e.event(), e.payload(), e.precedenceMap()))
-                .toList();
-
-        // clear buffer to write new batch
-        byteBuffer.clear();
-        BatchUtils.assembleBatchPayload(filteredRawEvents.size(), filteredRawEvents, byteBuffer);
-
-        // flip to read when writing to channel
-        byteBuffer.flip();
-
-        return 1;
     }
 }
