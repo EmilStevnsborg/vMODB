@@ -141,6 +141,7 @@ public final class VmsApplication {
                 options.vmsThreadPoolSize());
 
         eventHandler.AddSchedulerPauseHandler(transactionScheduler::pauseHandler);
+        eventHandler.AddSchedulerTaskClearer(transactionScheduler::taskClearer);
         return new VmsApplication( vmsName, vmsMetadata, catalog, eventHandler, transactionManager, transactionScheduler, vmsInternalPubSubService );
     }
 

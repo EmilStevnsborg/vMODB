@@ -752,7 +752,6 @@ public final class Coordinator extends ModbHttpServer {
 
     private void multiCast(TransactionAbortInfo.Payload txAbortInfo)
     {
-        this.batchContextMap.get(txAbortInfo.batch()).tidAborted = txAbortInfo.tid();
         var txAbort = TransactionAbort.of(txAbortInfo.batch(), txAbortInfo.tid());
 
         // use DAGs of transactions retracted to compute affected VMSes.
@@ -769,11 +768,50 @@ public final class Coordinator extends ModbHttpServer {
             this.vmsWorkerContainerMap.get(vms.identifier).queueMessage(message);
         }
     }
+    private void fixMetadata(long failedTid, long failedTidBatch)
+    {
+        // batch/BatchContext
+        var relevantBatches  = batchContextMap.keySet()
+                .stream()
+                .filter(b -> b > failedTidBatch)
+                .sorted()
+                .toList();
+
+        for(var batchContextKey : relevantBatches)
+        {
+            var batchContext = batchContextMap.get(batchContextKey);
+
+            // if previous batch was removed, update the batchContext previousBatchPerVms
+            if (batchContextKey > failedTidBatch)
+            {
+            }
+
+            if (batchContextKey == failedTidBatch)
+            {
+                // remove one tid from batch
+                batchContext.numTIDsOverall -= 1;
+                if (batchContext.numTIDsOverall == 0)
+                {
+                    // advance to next batch
+                    batchOffsetPendingCommit += 1;
+                    return;
+                }
+                // assume new lastTid is the one prior to failedTid
+                if (batchContext.lastTid == failedTid)
+                {
+                    batchContext.lastTid -= 1;
+                }
+            }
+        }
+    }
     private void abortTransactionInCoordinator(TransactionAbortInfo.Payload txAbortInfo)
     {
         System.out.println("Coordinator abort transaction");
         // sending aborts
         multiCast(txAbortInfo);
+
+        // fix metadata
+        fixMetadata(txAbortInfo.tid(), txAbortInfo.batch());
 
         // rest is handled in VMS workers
     }
@@ -817,6 +855,7 @@ public final class Coordinator extends ModbHttpServer {
 
     // seal batch and send batch complete to all terminals...
     private void processNewBatchContext(BatchContext batchContext) {
+        System.out.println("Coordinator processNewBatchContext");
         this.batchContextMap.put(batchContext.batchOffset, batchContext);
         // after storing batch context, send to vms workers
         for(var entry : batchContext.terminalVMSs) {

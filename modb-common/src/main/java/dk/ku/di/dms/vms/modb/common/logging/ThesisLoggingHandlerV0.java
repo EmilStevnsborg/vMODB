@@ -1,10 +1,8 @@
 package dk.ku.di.dms.vms.modb.common.logging;
 
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
-import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
 import dk.ku.di.dms.vms.modb.common.utils.BatchUtils;
 
-import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -42,6 +40,7 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
         fileChannel.position(batchPosition);
 
         TransactionEvent.Payload failedEvent = null;
+
         while (fileChannel.position() < fileChannel.size()) {
             metadataBuffer.clear();
 
@@ -81,11 +80,18 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
                 if (failedEvent != null) // shift whole file
                 {
                     var bytesToShift = segmentSize;
+
                     // update current batch
                     var filteredEvents = events.stream().filter(e -> e.tid() != failedTid)
                             .map(e -> TransactionEvent.of(e.tid(), e.batch(), e.event(), e.payload(), e.precedenceMap()))
                             .toList();
                     var remainingEvents = filteredEvents.size();
+
+                    // there are no more events
+                    if (remainingEvents == 0)
+                    {
+                        //
+                    }
                     placeHolderBuffer.clear();
                     if (remainingEvents > 0) {
                         while (remainingEvents > 0) {
@@ -148,6 +154,7 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
     }
 
     // used in coordinator vms workers
+    @Override
     public void fixPrecedence(ByteBuffer placeHolderBuffer,
                               long failedTid, long batch,
                               Map<String, Integer> precedenceMapOfFailedEvent,
@@ -161,7 +168,6 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
         long batchPosition = 0;
         fileChannel.position(batchPosition);
 
-        int numPrecedencesTotal = precedenceMapOfFailedEvent.keySet().size();
         // all keys in precedenceMapOfFailedEvent set to false
         Set<String> precedenceToUpdate = new HashSet<>(precedenceMapOfFailedEvent.keySet());
 
@@ -201,8 +207,6 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
                     System.out.println(STR."Update precedence=\{precedence} for event=\{event.tid()} to precedenceId=\{newPrecedenceTid}");
                     updated = true;
                 }
-
-                System.out.println("Checked events");
                 if (updated) {
                     batchUpdated = true;
                     var updatedEvent = new TransactionEvent.Payload(
@@ -258,12 +262,13 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
     // It assumes that batches may have been logged scattered and in between each other
     // thus traversing and updating the entire file is necessary
     @Override
-    public void cutLog(ByteBuffer placeHolderBuffer, long failedTid, long batch) throws IOException
+    public int cutLog(ByteBuffer placeHolderBuffer, long failedTid, long batch) throws IOException
     {
         ByteBuffer metadataBuffer = ByteBuffer.allocate(1 + 2 * Integer.BYTES + 2 * Long.BYTES); // 25 bytes
         placeHolderBuffer.clear();
 
-        if (fileChannel.size() == 0) return;
+        if (fileChannel.size() == 0) return -1;
+        int eventsInFailedBatch = 0;
 
         long batchPosition = 0;
         long writePosition = batchPosition;
@@ -281,7 +286,7 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
             long tid = metadataBuffer.getLong();
             long bid = metadataBuffer.getLong();
 
-            if (bid != batch)
+            if (bid < batch)
             {
                 // write this batch to an earlier position
                 if (writePosition < batchPosition)
@@ -308,7 +313,11 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
                     batchPosition += segmentSize;
                 }
             }
-            else // correct batch
+            else if (bid > batch) // don't write batch
+            {
+                batchPosition += segmentSize; // jump to next segment
+            }
+            else // relevant
             {
                 // read batch into buffer
                 fileChannel.position(batchPosition);
@@ -331,6 +340,7 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
                         .map(e -> TransactionEvent.of(e.tid(), e.batch(), e.event(), e.payload(), e.precedenceMap()))
                         .toList();
                 var remainingEvents = filteredEvents.size();
+                eventsInFailedBatch += remainingEvents;
 
                 if (remainingEvents == 0) // dont log anything
                 {
@@ -353,7 +363,7 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
                     }
 
                     // write buffer into file
-                    var newSegmentSize = placeHolderBuffer.getInt(5);
+                    var newSegmentSize = placeHolderBuffer.getInt(1);
                     placeHolderBuffer.limit(newSegmentSize);
                     while (placeHolderBuffer.hasRemaining()) {
                         fileChannel.write(placeHolderBuffer);
@@ -366,6 +376,7 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
         }
         System.out.println(STR."File was truncated from \{fileChannel.size()} bytes to \{writePosition} bytes");
         fileChannel.truncate(writePosition);
+        return eventsInFailedBatch;
     }
 
     @Override
@@ -374,7 +385,9 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
         ByteBuffer metadataBuffer = ByteBuffer.allocate(1 + 2 * Integer.BYTES + 2 * Long.BYTES); // 25 bytes
         byteBuffer.clear();
 
-        if (fileChannel.size() == 0) return 0;
+        int eventsInFailedBatch = 0;
+
+        if (fileChannel.size() == 0) return eventsInFailedBatch;
         fileChannel.position(0);
 
         while (fileChannel.position() < fileChannel.size()) {
@@ -441,7 +454,8 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
             }
         }
         System.out.println(STR."Done reading batch \{batch}");
-        return 1;
+        eventsInFailedBatch = byteBuffer.getInt(5);
+        return eventsInFailedBatch;
     }
 
     @Override
@@ -450,6 +464,35 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
         do {
             this.fileChannel.write(byteBuffer);
         } while(byteBuffer.hasRemaining());
+    }
+
+    @Override
+    public SegmentMetadata loadSegment(ByteBuffer byteBuffer, long filePosition) throws IOException
+    {
+        ByteBuffer metadataBuffer = ByteBuffer.allocate(1 + 2 * Integer.BYTES + 2 * Long.BYTES); // 25 bytes
+        fileChannel.position(filePosition);
+
+        // read metadata
+        System.out.println("Reading metadata");
+        readMetadata(metadataBuffer);
+        var segmentSize = metadataBuffer.getInt(1);
+        var bid = metadataBuffer.getLong(17);
+
+        System.out.println(STR."Read metadata bid=\{bid}");
+
+        byteBuffer.clear();
+        byteBuffer.limit(segmentSize);
+        fileChannel.position(filePosition);
+        while (byteBuffer.hasRemaining()) {
+            fileChannel.read(byteBuffer);
+        }
+
+        var segmentMetadata = new SegmentMetadata(
+                fileChannel.position() == fileChannel.size() ? -1 : fileChannel.position(),
+                bid
+        );
+
+        return segmentMetadata;
     }
 
     @Override

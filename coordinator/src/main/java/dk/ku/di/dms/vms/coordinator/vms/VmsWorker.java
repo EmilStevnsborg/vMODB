@@ -488,17 +488,30 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         } catch (InterruptedException e){}
 
         // fix precedence
-        ByteBuffer writeBuffer = retrieveByteBuffer();
+        ByteBuffer writeBuffer;
+        writeBuffer = retrieveByteBuffer();
         var failedEvent = fromLogs.removeFailedEvent(writeBuffer, payload.tid(), payload.batch());
         System.out.println(STR."FAILED EVENT: \{failedEvent}");
         if (failedEvent != null) fromLogs.fixPrecedence(writeBuffer, failedEvent);
+        returnByteBuffer(writeBuffer);
 
         // continuously load events from logs and send them
-
-
-        // read from buffer into fileChannel
-        writeBuffer.flip();
-        returnByteBuffer(writeBuffer);
+        long filePosition;
+        filePosition = 0;
+        while (filePosition != -1)
+        {
+            writeBuffer = retrieveByteBuffer();
+            var segmentMetadata = fromLogs.loadSegment(writeBuffer, filePosition, failedEvent.tid(), failedEvent.batch());
+            filePosition = segmentMetadata.nextFilePosition;
+            if (segmentMetadata.bid < failedEvent.batch()) {
+                System.out.println(STR."Skipping bid=\{segmentMetadata.bid}");
+                returnByteBuffer(writeBuffer);
+                continue;
+            }
+            writeBuffer.flip();
+            System.out.println(STR."loadSegment filePosition=\{filePosition}");
+            this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
+        }
     }
     private void sendTransactionAbort(TransactionAbort.Payload payload) {
         ByteBuffer writeBuffer = retrieveByteBuffer();

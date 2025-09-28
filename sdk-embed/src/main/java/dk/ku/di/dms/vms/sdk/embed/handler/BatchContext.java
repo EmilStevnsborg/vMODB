@@ -37,7 +37,7 @@ public final class BatchContext {
                 batchCommitRequest.numberOfTIDsBatch(), false);
     }
 
-    private BatchContext(long batch, long previousBatch, int numberOfTIDsBatch, boolean terminal) {
+    public BatchContext(long batch, long previousBatch, int numberOfTIDsBatch, boolean terminal) {
         this.batch = batch;
         this.previousBatch = previousBatch;
         // this.status = Status.OPEN.value; // always start with 0 anyway

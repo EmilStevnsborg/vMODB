@@ -126,6 +126,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     private final Map<Long, Map<String, Long>> tidToPrecedenceMap;
 
     private Consumer<Boolean> pauseHandler;
+    private Consumer<Long> taskClearer;
 
     public static VmsEventHandler build(// to identify which vms this is
                                         VmsNode me,
@@ -223,50 +224,100 @@ public final class VmsEventHandler extends ModbHttpServer {
         this.pauseHandler = pauseHandler;
     }
 
-    public void pauseScheduler(boolean pause){
-        pauseHandler.accept(pause);
+    public void AddSchedulerTaskClearer(Consumer<Long> taskClearer){
+        this.taskClearer = taskClearer;
     }
 
+    private void pauseScheduler(boolean pause){
+        pauseHandler.accept(pause);
+    }
+    private void fixTrackingBatch(long failedTidBatch, int eventsInBatchAfterCut)
+    {
+        var trackedBatchKeys = trackingBatchMap.keySet();
+        for(var trackedBatchKey : trackedBatchKeys) {
+            if (trackedBatchKey < failedTidBatch) continue;
+            if (trackedBatchKey > failedTidBatch) {
+                trackingBatchMap.put(trackedBatchKey, new BatchMetadata());
+                continue;
+            }
+
+            // trackedBatchKey == failedTidBatch
+            var failedTidBatchMetadata = trackingBatchMap.get(trackedBatchKey);
+            failedTidBatchMetadata.numberTIDsExecuted = eventsInBatchAfterCut;
+        }
+    }
+    private void fixBatchContext(long failedTidBatch)
+    {
+        var currentBatchContext = this.batchContextMap.get(failedTidBatch);
+        if (currentBatchContext == null) return;
+
+        // no more events in batch
+        if (currentBatchContext.numberOfTIDsBatch-1 == 0)
+        {
+        }
+
+        var newBatchContext = new BatchContext(failedTidBatch,
+                                               currentBatchContext.previousBatch,
+                              currentBatchContext.numberOfTIDsBatch-1,
+                                               currentBatchContext.terminal);
+        this.batchContextMap.put(failedTidBatch, newBatchContext);
+    }
+
+    // for affected vms
     private void processAbort(TransactionAbort.Payload transactionAbort){
         System.out.println("Processing abort");
-//        // pause the transactionScheduler safely
-//        pauseScheduler(true);
+        // pause the transactionScheduler safely
+        pauseScheduler(true);
+
 
         // cut the log
+        int eventsInBatchAfterCut = 0;
         var affectedVMSes = this.consumerVmsContainerMap.values();
         for (IVmsContainer vmsContainer : affectedVMSes){
-            vmsContainer.cutLog(transactionAbort.tid(), transactionAbort.batch());
+            eventsInBatchAfterCut = vmsContainer.cutLog(transactionAbort.tid(), transactionAbort.batch());
+            System.out.println(STR."Cutting log for vmsContainer=\{vmsContainer.identifier()}, tids left=\{eventsInBatchAfterCut}");
         }
 
         // restore stable state
         restoreStableState(transactionAbort.batch(), transactionAbort.tid());
 
         // update batch metadata
+        fixTrackingBatch(transactionAbort.tid(), eventsInBatchAfterCut);
 
-//        // resume the transactionScheduler
-//        pauseScheduler(false);
+        // resume the transactionScheduler
+        pauseScheduler(false);
     }
 
+    // for vms that failed
     private void abortTransaction(IVmsTransactionResult txResult){
         System.out.println("Abort transaction");
-//        // pause the transactionScheduler safely
-//        pauseScheduler(true);
+        // pause the transactionScheduler safely
+        pauseScheduler(true);
+
+        var eventOutput = txResult.getOutboundEventResult();
 
         // cut the log
+        int eventsInBatchAfterCut = 0;
+        var affectedVMSes = this.consumerVmsContainerMap.values();
+        for (IVmsContainer vmsContainer : affectedVMSes){
+            eventsInBatchAfterCut = vmsContainer.cutLog(eventOutput.tid(), eventOutput.batch());
+            System.out.println(STR."Cutting log for vmsContainer=\{vmsContainer.identifier()}, tids left=\{eventsInBatchAfterCut}");
+        }
 
         // send abort message
-        var eventOutput = txResult.getOutboundEventResult();
         var abortMessage = TransactionAbortInfo.of(eventOutput.batch(), eventOutput.tid(), me.identifier);
-        System.out.println("Queing abort message");
+        System.out.println("Queueing abort message");
         this.leaderWorker.queueMessage(abortMessage);
 
         // restore stable state
         restoreStableState(abortMessage.batch(), abortMessage.tid());
 
         // update batch metadata
+        fixTrackingBatch(abortMessage.batch(), eventsInBatchAfterCut);
+        fixBatchContext(abortMessage.batch());
 
-//        // resume the transactionScheduler
-//        pauseScheduler(false);
+        // resume the transactionScheduler
+        pauseScheduler(false);
     }
 
     public void processOutputEvent(IVmsTransactionResult txResult) {

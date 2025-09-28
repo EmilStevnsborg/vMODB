@@ -202,6 +202,13 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
      */
     private boolean mustWaitForInputEvent = false;
 
+    @Override
+    public void taskClearer(long failedTid)
+    {
+        lastTidFinished.get(failedTid)
+        transactionTaskMap.keySet().removeIf(tid -> tid >= failedTid);
+    }
+
     private void executeReadyTasks() {
         Long nextTid = this.lastTidToTidMap.get(this.lastTidFinished.get());
         // if nextTid == null then the scheduler must block until a new event arrive to progress
@@ -312,11 +319,12 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     }
 
     private void processNewEvent(InboundEvent inboundEvent) {
+        System.out.println(STR."scheduler inboundEvent.tid=\{inboundEvent.tid()} " +
+                           STR."transactionTaskMap.containsKey(inboundEvent.tid())=\{this.transactionTaskMap.containsKey(inboundEvent.tid())}");
         if (this.transactionTaskMap.containsKey(inboundEvent.tid())) {
             LOGGER.log(WARNING, this.vmsIdentifier+": Event TID has already been processed! Queue '" + inboundEvent.event() + "' Batch: " + inboundEvent.batch() + " TID: " + inboundEvent.tid());
             return;
         }
-        System.out.println("VmsTransactionScheduler.processNewEvent Processing event");
         this.transactionTaskMap.put(inboundEvent.tid(), this.vmsTransactionTaskBuilder.build(
                 inboundEvent.tid(),
                 inboundEvent.lastTid(),

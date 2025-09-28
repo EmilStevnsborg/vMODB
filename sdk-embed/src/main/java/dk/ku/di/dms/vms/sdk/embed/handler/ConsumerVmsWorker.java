@@ -420,9 +420,10 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     }
 
     @Override
-    public void cutLog(long failedTid, long batch) {
+    public int cutLog(long failedTid, long batch) {
         var placeHolderBuffer = this.retrieveByteBuffer();
         System.out.println("ConsumerVmsWorker is cutting log");
+        int tidsLeftInBatch = -1;
         try {
             // clear the transactionInput queue
             transactionEventQueue.clear();
@@ -435,12 +436,13 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
 
             // some may already have been logged
             System.out.println("ConsumerVmsWorker is cutting the persistent log");
-            loggingHandler.cutLog(placeHolderBuffer, failedTid, batch);
+            tidsLeftInBatch = loggingHandler.cutLog(placeHolderBuffer, failedTid, batch);
 
         } catch (Exception e) {
             System.out.println("CUTTING THE LOG CAUSED AN EXCEPTION");
         }
         returnByteBuffer(placeHolderBuffer);
+        return tidsLeftInBatch;
     }
 
     @Override

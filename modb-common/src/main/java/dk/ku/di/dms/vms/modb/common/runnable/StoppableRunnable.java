@@ -31,6 +31,8 @@ public abstract class StoppableRunnable implements Runnable {
         this.paused = pause;
     }
 
+    public void taskClearer(long failedTid) {}
+
     public void giveUpCpu(int sleepTime){
         if(sleepTime > 0){
             try { sleep(sleepTime); } catch (InterruptedException ignored) { }

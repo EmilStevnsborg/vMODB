@@ -6,7 +6,7 @@ import java.nio.ByteBuffer;
 
 public interface IVmsContainer {
     void queue(TransactionEvent.PayloadRaw payload);
-    void cutLog(long failedTid, long batch);
+    int cutLog(long failedTid, long batch);
     String identifier();
 
     default void stop() { }

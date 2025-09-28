@@ -40,11 +40,13 @@ public final class MultiVmsContainer implements IVmsContainer {
     }
 
     @Override
-    public void cutLog(long failedTid, long batch) {
+    public int cutLog(long failedTid, long batch) {
         System.out.println("MultiVmsContainer is cutting log for each worker");
+        int tidsLeft = -1;
         for(ConsumerVmsWorker consumerVmsWorker : this.consumerVmsWorkers) {
-            consumerVmsWorker.cutLog(failedTid, batch);
+            tidsLeft = consumerVmsWorker.cutLog(failedTid, batch);
         }
+        return tidsLeft;
     }
 
     @Override

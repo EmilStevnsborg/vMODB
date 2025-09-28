@@ -1,5 +1,6 @@
 package dk.ku.di.dms.vms.coordinator.vms;
 
+import dk.ku.di.dms.vms.modb.common.logging.SegmentMetadata;
 import dk.ku.di.dms.vms.modb.common.logging.ILoggingHandler;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
@@ -31,9 +32,6 @@ public class FromLogs
             System.out.println(STR."removing failed event caused an error: \{e}");
             e.printStackTrace();
         }
-        if (failedEvent == null) {
-            return null;
-        }
         return failedEvent;
     }
 
@@ -52,11 +50,51 @@ public class FromLogs
                     failedEventPrecedenceMap,
                     deserializer, serializer
             );
-            this.readBatch(byteBuffer, failedEvent.batch());
+//            this.readBatch(byteBuffer, failedEvent.batch());
         } catch (Exception e)
         {
             System.out.println("fixPrecedence failed");
             e.printStackTrace();
+        }
+    }
+
+    // skip bid < failedTidBatch, send bid > failedTidBatch, filter bid == failedTidBatch by tid > failedTid
+    public SegmentMetadata loadSegment(ByteBuffer byteBuffer, long filePosition, long failedTid, long failedTidBatch)
+    {
+        System.out.println(STR."FromLogs.loadSegment byteBuffer.position=\{byteBuffer.position()}, byteBuffer.limit=\{byteBuffer.limit()}");
+        try {
+            var segmentMetadata = loggingHandler.loadSegment(byteBuffer, filePosition);
+            if (segmentMetadata.bid != failedTidBatch) return segmentMetadata;
+            System.out.println(STR."filePosition=\{filePosition}, nextFilePosition=\{segmentMetadata.nextFilePosition}");
+            // deconstruct first segment
+            byteBuffer.flip();
+            System.out.println(STR."loaded byteBuffer.position=\{byteBuffer.position()}, byteBuffer.limit=\{byteBuffer.limit()}");
+            var events = BatchUtils.disAssembleBatchPayload(byteBuffer);
+            var filteredEvents = events
+                    .stream().filter(e->e.tid()>failedTid)
+                    .toList();
+            for (var filteredEvent : filteredEvents)
+            {
+                System.out.println(STR."First segment send: \{filteredEvent}");
+            }
+            var filteredRawEvents = filteredEvents
+                    .stream()
+                    .map(e ->
+                            TransactionEvent.of(
+                                    e.tid(), e.batch(),
+                                    e.event(), e.payload(),
+                                    e.precedenceMap()))
+                    .toList();;
+            var remainingEvents = filteredRawEvents.size();
+            byteBuffer.clear();
+            System.out.println(STR."after filtering byteBuffer.position=\{byteBuffer.position()}}");
+            while (remainingEvents > 0) {
+                remainingEvents = BatchUtils.assembleBatchPayload(remainingEvents, filteredRawEvents, byteBuffer);
+            }
+            byteBuffer.limit(byteBuffer.getInt(1));
+            return segmentMetadata;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 

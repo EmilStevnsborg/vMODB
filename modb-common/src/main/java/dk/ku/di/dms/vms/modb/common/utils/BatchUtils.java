@@ -17,7 +17,6 @@ public final class BatchUtils {
     public static int assembleBatchPayload(int remaining, List<TransactionEvent.PayloadRaw> events, ByteBuffer writeBuffer){
         int remainingBytes = writeBuffer.remaining();
 
-        System.out.println(STR."BatchUtils type: \{BATCH_OF_EVENTS}");
         writeBuffer.put(BATCH_OF_EVENTS);
         // jump 2 integers
         writeBuffer.position(1 + JUMP);
@@ -49,19 +48,17 @@ public final class BatchUtils {
 //        System.out.println(STR."disAssembleBatchPayload");
         byteBuffer.position(0);
         var events = new ArrayList<TransactionEvent.Payload>();
-        while (byteBuffer.hasRemaining()) {
-            byte type = byteBuffer.get();
-            if (type != BATCH_OF_EVENTS) throw new IOException("Invalid type");
+        byte type = byteBuffer.get();
+        if (type != BATCH_OF_EVENTS) throw new IOException("Invalid type");
 
-            int segmentSize = byteBuffer.getInt();
-            int eventCount = byteBuffer.getInt();
+        int segmentSize = byteBuffer.getInt();
+        int eventCount = byteBuffer.getInt();
 
 //            System.out.println(STR."ThesisLogger BATCH_OF_EVENTS event count: \{eventCount}");
 
-            for (int i = 0; i < eventCount; i++) {
-                var event = TransactionEvent.read(byteBuffer);
-                events.add(event);
-            }
+        for (int i = 0; i < eventCount; i++) {
+            var event = TransactionEvent.read(byteBuffer);
+            events.add(event);
         }
         return events;
     }
