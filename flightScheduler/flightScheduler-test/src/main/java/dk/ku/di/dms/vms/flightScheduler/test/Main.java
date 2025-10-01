@@ -17,7 +17,9 @@ public final class Main
     {
 //        Test.GetUnpaidBookings(client);
 //        Test.Scenario1(client);
-        Test.FailedFlightOrder(client);
+//        Test.FailedFlightOrder(client);
+//        Test.FailedPayment(client);
+        Test.RecoveryTest(client);
     }
 
     //

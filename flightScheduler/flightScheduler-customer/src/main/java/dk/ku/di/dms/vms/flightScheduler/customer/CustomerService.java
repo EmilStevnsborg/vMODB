@@ -25,19 +25,15 @@ public class CustomerService
 
     // part of OrderFlight
     @Inbound(values = {SEAT_BOOKED})
-    @Transactional(type=R)
+    @Transactional(type=RW)
     public void seatBookedConfirmed(SeatBooked seatBooked)
     {
-        Customer customer = this.customerRepository.lookupByKey(seatBooked.customer_id );
+        Customer customer = this.customerRepository.lookupByKey(seatBooked.customer_id);
         if(customer == null){
             throw new RuntimeException(STR."Customer \{seatBooked.customer_id} cannot be found!");
         }
-        // failure test
-        if (seatBooked.customer_id == 7)
-        {
-            System.out.println(seatBooked.customer_id + " failed");
-            throw new RuntimeException();
-        }
+        customer.addSeat(seatBooked.seat_number);
+        this.customerRepository.update(customer);
     }
 
 
@@ -45,10 +41,19 @@ public class CustomerService
     @Transactional(type=RW)
     public void customerPaid(CustomerPaid customerPaid)
     {
+        System.out.println(STR."customerPaid for cId=\{customerPaid.customer_id}");
+
         Customer customer = this.customerRepository.lookupByKey(customerPaid.customer_id);
-        customer.money -= customerPaid.price;
+        customer.deduct(customerPaid.price);
         this.customerRepository.update(customer);
-        System.out.println(STR."\{customer.name} with id \{customer.customer_id} has paid with \{customerPaid.price}");
+        System.out.println(STR."cId=\{customer.customer_id} has customerPaid");
+
+        // failure test
+        if (customerPaid.customer_id == 7)
+        {
+            System.out.println(STR."cId=\{customerPaid.customer_id} failed");
+            throw new RuntimeException();
+        }
     }
 
     // part of ReimburseBooking

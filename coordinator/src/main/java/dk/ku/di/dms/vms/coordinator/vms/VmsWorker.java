@@ -190,7 +190,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                                     VmsWorkerOptions options,
                                     IVmsSerdesProxy serdesProxy) throws IOException {
 
-        System.out.println("coordinator.vms.VmsWorker has been built.");
+        System.out.println(STR."VmsWorker has been built for \{consumerVms.identifier}");
         return new VmsWorker(me, consumerVms, coordinatorQueue,
                 channelFactory, options, serdesProxy);
     }
@@ -261,6 +261,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     }
 
     private void connect() throws IOException, InterruptedException, ExecutionException {
+        System.out.println(STR."VmsWorker tries to connect to \{consumerVms.identifier}");
         this.channel = channelFactory.get();
         NetworkUtils.configure(this.channel, options.networkBufferSize());
         // if not active, maybe set tcp_nodelay to true?
@@ -270,6 +271,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     @SuppressWarnings("BusyWait")
     public void initHandshakeProtocol(){
         int waitTime = 1000;
+        System.out.println(STR."VmsWorker Attempting connection to \{consumerVms.identifier} via initHandshakeProtocol");
         LOGGER.log(INFO, "Leader: Attempting connection to "+this.consumerVms.identifier);
         while(true) {
             try {
@@ -277,11 +279,14 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 LOGGER.log(INFO, "Leader: Connection established to "+this.consumerVms.identifier);
                 break;
             } catch (IOException | InterruptedException | ExecutionException e) {
+                System.out.println(STR."VmsWorker connect threw Exception");
                 LOGGER.log(ERROR, "Leader: Connection attempt to " + this.consumerVms.identifier + " failed. Retrying in "+waitTime/1000+" second(s)...");
                 try {
                     sleep(waitTime);
                     waitTime = waitTime + 1000;
-                } catch (InterruptedException ignored) { }
+                } catch (InterruptedException ignored) {
+                    System.out.println(STR."VmsWorker connect was InterruptedException");
+                }
             }
         }
 
@@ -480,22 +485,18 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         // send the message
         sendTransactionAbort(payload);
 
-        // wait for logs to be written to file. Ensure the buffer was actually written to the persistent logs.
-        try
-        {
-            System.out.println("\nWait for logging ....\n");
-            Thread.sleep(3000);
-        } catch (InterruptedException e){}
+        // buffers may not have been written to logs?
 
         // fix precedence
         ByteBuffer writeBuffer;
         writeBuffer = retrieveByteBuffer();
         var failedEvent = fromLogs.removeFailedEvent(writeBuffer, payload.tid(), payload.batch());
         System.out.println(STR."FAILED EVENT: \{failedEvent}");
+
         if (failedEvent != null) fromLogs.fixPrecedence(writeBuffer, failedEvent);
         returnByteBuffer(writeBuffer);
 
-        // continuously load events from logs and send them
+        // RESEND events later than failedTid
         long filePosition;
         filePosition = 0;
         while (filePosition != -1)
@@ -503,13 +504,17 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             writeBuffer = retrieveByteBuffer();
             var segmentMetadata = fromLogs.loadSegment(writeBuffer, filePosition, failedEvent.tid(), failedEvent.batch());
             filePosition = segmentMetadata.nextFilePosition;
+
+            if (segmentMetadata.eventCount == 0) {
+                returnByteBuffer(writeBuffer);
+                continue;
+            }
+
             if (segmentMetadata.bid < failedEvent.batch()) {
-                System.out.println(STR."Skipping bid=\{segmentMetadata.bid}");
                 returnByteBuffer(writeBuffer);
                 continue;
             }
             writeBuffer.flip();
-            System.out.println(STR."loadSegment filePosition=\{filePosition}");
             this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
         }
     }
@@ -644,6 +649,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             } catch (Exception e){
                 LOGGER.log(ERROR, "Leader: Unknown error captured:"+e.getMessage(), e);
                 e.printStackTrace(System.out);
+                System.out.println("Vms crashed");
                 return;
             }
             if(readBuffer.hasRemaining()){
@@ -660,6 +666,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
         @Override
         public void failed(Throwable exc, Integer startPosition) {
+            System.out.println("VmsReadCompletionHandler failed");
             if(state == LEADER_PRESENTATION_SENT){
                 state = VMS_PRESENTATION_RECEIVE_FAILED;
                 LOGGER.log(WARNING,"It was not possible to receive a presentation message from consumer VMS: "+exc.getMessage());
@@ -725,7 +732,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private void sendBatchOfEvents(){
         System.out.println(STR."VmsWorker.sendBatchOfEvents for \{consumerVms.identifier}");
         int remaining = this.drained.size();
-        System.out.println(STR."Sending \{remaining} transaction events");
+//        System.out.println(STR."Sending \{remaining} transaction events");
         int count = remaining;
         ByteBuffer writeBuffer;
         while(remaining > 0) {

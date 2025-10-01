@@ -61,22 +61,19 @@ public class FromLogs
     // skip bid < failedTidBatch, send bid > failedTidBatch, filter bid == failedTidBatch by tid > failedTid
     public SegmentMetadata loadSegment(ByteBuffer byteBuffer, long filePosition, long failedTid, long failedTidBatch)
     {
-        System.out.println(STR."FromLogs.loadSegment byteBuffer.position=\{byteBuffer.position()}, byteBuffer.limit=\{byteBuffer.limit()}");
         try {
             var segmentMetadata = loggingHandler.loadSegment(byteBuffer, filePosition);
             if (segmentMetadata.bid != failedTidBatch) return segmentMetadata;
-            System.out.println(STR."filePosition=\{filePosition}, nextFilePosition=\{segmentMetadata.nextFilePosition}");
             // deconstruct first segment
             byteBuffer.flip();
-            System.out.println(STR."loaded byteBuffer.position=\{byteBuffer.position()}, byteBuffer.limit=\{byteBuffer.limit()}");
             var events = BatchUtils.disAssembleBatchPayload(byteBuffer);
             var filteredEvents = events
                     .stream().filter(e->e.tid()>failedTid)
                     .toList();
-            for (var filteredEvent : filteredEvents)
-            {
-                System.out.println(STR."First segment send: \{filteredEvent}");
-            }
+//            for (var filteredEvent : filteredEvents)
+//            {
+//                System.out.println(STR."First segment send: \{filteredEvent}");
+//            }
             var filteredRawEvents = filteredEvents
                     .stream()
                     .map(e ->
@@ -86,8 +83,12 @@ public class FromLogs
                                     e.precedenceMap()))
                     .toList();;
             var remainingEvents = filteredRawEvents.size();
+            if (remainingEvents == 0) {
+                segmentMetadata.eventCount = 0;
+                return segmentMetadata;
+            }
+
             byteBuffer.clear();
-            System.out.println(STR."after filtering byteBuffer.position=\{byteBuffer.position()}}");
             while (remainingEvents > 0) {
                 remainingEvents = BatchUtils.assembleBatchPayload(remainingEvents, filteredRawEvents, byteBuffer);
             }

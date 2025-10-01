@@ -20,7 +20,6 @@ public class Booking implements IEntity<Integer>
         this.timestamp = timestamp;
         this.paid = 0;
         this.price = price;
-
     }
     public Booking(){}
 
@@ -40,7 +39,7 @@ public class Booking implements IEntity<Integer>
     @Column
     public int price;
 
-    public void BookingHasBeenPaid()
+    public void bookingHasBeenPaid()
     {
         this.paid = 1;
     }
@@ -49,9 +48,9 @@ public class Booking implements IEntity<Integer>
     public String toString() {
         return "{\n"
                 + "  \"booking_id\":" + booking_id + ",\n"
-                + "  \"customerId\":" + customer_id + "\n"
-                + "  \"flightId\":" + flight_id + ",\n"
-                + "  \"seatNumber\":\"" + seat_number + "\",\n"
+                + "  \"customer_id\":" + customer_id + ",\n"
+                + "  \"flight_id\":" + flight_id + ",\n"
+                + "  \"seat_number\":\"" + seat_number + "\",\n"
                 + "  \"timestamp\":\"" + timestamp + "\",\n"
                 + "  \"paid\":" + paid + ",\n"
                 + "  \"price\":" + price + "\n"

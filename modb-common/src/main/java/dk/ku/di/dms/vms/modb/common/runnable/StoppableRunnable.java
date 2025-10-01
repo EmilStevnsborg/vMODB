@@ -27,9 +27,13 @@ public abstract class StoppableRunnable implements Runnable {
     public void stop() {
         this.running = false;
     }
-    public void pauseHandler(boolean pause) {
-        this.paused = pause;
+    public void pause() {
+        this.paused = true;
     }
+    public void resume() {
+        this.paused = false;
+    }
+    public void pauseHandler(boolean pause) {}
 
     public void taskClearer(long failedTid) {}
 

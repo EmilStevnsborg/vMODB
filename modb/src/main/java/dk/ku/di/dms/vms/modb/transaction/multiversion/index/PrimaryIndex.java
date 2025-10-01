@@ -266,7 +266,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         TransactionWrite entry = TransactionWrite.upsert(WriteType.INSERT, values);
         if(operationSet == null){
             operationSet = new OperationSetOfKey(WriteType.INSERT);
-//            System.out.println(STR."Putting operationSet after insert into updatesPerKeyMap under key: \{key}");
+//            System.out.println(STR."Putting operationSet after doInsert under key=\{key} and tid=\{txCtx.tid}");
             this.updatesPerKeyMap.put(key, operationSet);
         } else {
             operationSet.lastWriteType = WriteType.INSERT;
@@ -280,6 +280,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
             return false;
         }
         OperationSetOfKey operationSet = this.updatesPerKeyMap.get(key);
+//        System.out.println(STR."Putting operationSet after upsert under key=\{key} and tid=\{txCtx.tid}");
         boolean exists;
         if (operationSet != null){
             exists = operationSet.lastWriteType != WriteType.DELETE;
@@ -315,7 +316,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         if(operationSet == null){
             operationSet = new OperationSetOfKey(WriteType.UPDATE);
             this.updatesPerKeyMap.put(key, operationSet);
-//            System.out.println(STR."Putting operationSet after Update into updatesPerKeyMap under key: \{key}");
+//            System.out.println(STR."Putting operationSet after doUpdate under key=\{key} and tid=\{txCtx.tid}");
         } else {
             operationSet.lastWriteType = WriteType.UPDATE;
         }
@@ -362,7 +363,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
             // that means we haven't had any previous transaction performing writes to this key
             operationSet = new OperationSetOfKey(WriteType.DELETE);
             this.updatesPerKeyMap.put( key, operationSet );
-//            System.out.println(STR."Putting operationSet after removeOpt into updatesPerKeyMap under key: \{key}");
+//            System.out.println(STR."Putting operationSet after removeOpt under key=\{key} and tid=\{txCtx.tid}");
             TransactionWrite entry = TransactionWrite.delete(WriteType.DELETE);
             operationSet.put(txCtx.tid, entry);
             this.appendWrite(txCtx, key);
@@ -465,6 +466,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
 
     public void restoreStableState(long failedTid)
     {
+        System.out.println("PrimaryIndex restoring stable state");
         if (this.updatesPerKeyMap.isEmpty()) return;
 
         // removing latest changes
@@ -506,6 +508,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
 
     @Override
     public Iterator<Object[]> iterator(TransactionContext txCtx, IKey[] keys) {
+        System.out.println(STR."PrimaryIndex iterator txCtx.tid=\{txCtx.tid}");
         return new MultiVersionIterator(txCtx, keys);
     }
 

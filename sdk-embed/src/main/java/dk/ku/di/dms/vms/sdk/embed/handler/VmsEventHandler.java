@@ -283,6 +283,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         // update batch metadata
         fixTrackingBatch(transactionAbort.tid(), eventsInBatchAfterCut);
+        taskClearer.accept(transactionAbort.tid());
 
         // resume the transactionScheduler
         pauseScheduler(false);
@@ -290,7 +291,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
     // for vms that failed
     private void abortTransaction(IVmsTransactionResult txResult){
-        System.out.println("Abort transaction");
+        System.out.println(STR."Abort tId=\{txResult.tid()}");
         // pause the transactionScheduler safely
         pauseScheduler(true);
 
@@ -316,6 +317,12 @@ public final class VmsEventHandler extends ModbHttpServer {
         fixTrackingBatch(abortMessage.batch(), eventsInBatchAfterCut);
         fixBatchContext(abortMessage.batch());
 
+        try {
+            taskClearer.accept(abortMessage.tid());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         // resume the transactionScheduler
         pauseScheduler(false);
     }
@@ -324,6 +331,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         LOGGER.log(DEBUG,this.me.identifier+": New transaction result in event handler. TID = "+ txResult.tid());
 
         if (txResult.getOutboundEventResult().isAbort()) {
+            System.out.println(STR."tId=\{txResult.tid()} failed");
             abortTransaction(txResult);
             return;
         }
@@ -532,7 +540,6 @@ public final class VmsEventHandler extends ModbHttpServer {
                 this.readBuffer.flip();
             }
             byte messageType = this.readBuffer.get();
-            System.out.println(STR."Read message from the vms \{messageType}");
             switch (messageType) {
                 case (BATCH_OF_EVENTS) -> {
                     int bufferSize = this.getBufferSize();

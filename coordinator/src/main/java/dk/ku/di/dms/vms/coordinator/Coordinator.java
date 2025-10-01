@@ -561,6 +561,7 @@ public final class Coordinator extends ModbHttpServer {
         public void completed(AsynchronousSocketChannel channel, Void void_) {
             ByteBuffer buffer = null;
             try {
+                System.out.println("AcceptCompletionHandler");
                 NetworkUtils.configure(channel, options.getSoBufferSize());
 
                 // right now I cannot discern whether it is a VMS or follower. perhaps I can keep alive channels from leader election?
@@ -677,6 +678,7 @@ public final class Coordinator extends ModbHttpServer {
          * Still need to define what to do with connections from replicas....
          */
         private void processServerPresentationMessage(AsynchronousSocketChannel channel, ByteBuffer buffer) {
+            System.out.println("ServerPresentationMessage in coordinator");
             // server
             ServerNode newServer = Presentation.readServer(buffer);
 
@@ -812,8 +814,6 @@ public final class Coordinator extends ModbHttpServer {
 
         // fix metadata
         fixMetadata(txAbortInfo.tid(), txAbortInfo.batch());
-
-        // rest is handled in VMS workers
     }
 
     private void processBatchComplete(BatchComplete.Payload batchComplete) {

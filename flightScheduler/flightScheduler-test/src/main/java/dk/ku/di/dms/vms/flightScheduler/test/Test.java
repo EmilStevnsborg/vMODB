@@ -3,12 +3,117 @@ package dk.ku.di.dms.vms.flightScheduler.test;
 import dk.ku.di.dms.vms.flightScheduler.test.models.Customer;
 import dk.ku.di.dms.vms.flightScheduler.test.models.FlightSeat;
 
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.stream.Collectors;
 
 public class Test
 {
+    // kill a VMS
+    public static void RecoveryTest(HttpClient client)
+    {
+        // First inject some data
+        var numSeatsPerFlight = 20;
+        var flightSeats = DataCreation.CreateFlightSeats( numSeatsPerFlight, 0);
+        flightSeats.forEach((flightSeat) -> DataInjection.SendFlightSeat(client, flightSeat));
+
+        var numCustomers = 20;
+        var customers = DataCreation.CreateCustomers(numCustomers);
+        customers.forEach((customer) -> DataInjection.SendCustomer(client, customer));
+
+        for(int i = 0; i < 10; i++)
+        {
+            Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
+        }
+
+        // channel dies
+
+//        try
+//        {
+//            System.out.println("Stall ....");
+//            Thread.sleep(3000);
+//        } catch (InterruptedException e){}
+//
+//        // this will throw a channel exception
+//        for(int i = 10; i < 20; i++)
+//        {
+//            Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
+//        }
+    }
+
+    public static void FailedPayment(HttpClient client)
+    {
+        // First inject some data
+        var numSeatsPerFlight = 10;
+        var flightSeats = DataCreation.CreateFlightSeats( numSeatsPerFlight, 0);
+        flightSeats.forEach((flightSeat) -> DataInjection.SendFlightSeat(client, flightSeat));
+
+        var numCustomers = 10;
+        var customers = DataCreation.CreateCustomers(numCustomers);
+        customers.forEach((customer) -> DataInjection.SendCustomer(client, customer));
+
+        // order some flights
+        for(int i = 0; i < 10; i++)
+        {
+            Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
+        }
+
+
+        // sleep so new event arrives as new batch
+        try
+        {
+            System.out.println("Stall ....");
+            Thread.sleep(2000);
+        } catch (InterruptedException e){}
+
+        var customersBefore = DataRetrieval.GetCustomers(client);
+        var customersBeforeMap = customersBefore
+                .stream()
+                .collect(Collectors
+                        .toMap(c -> c.customer_id, c->c)
+                );
+
+        var unpaidBookings = DataRetrieval.GetUnpaidBookings(client);
+        for(var unpaidBooking : unpaidBookings)
+        {
+            Transactions.PayBooking(client, unpaidBooking.booking_id, "visa");
+        }
+
+        // sleep so new event arrives as new batch
+        try
+        {
+            System.out.println("Stall ....");
+            Thread.sleep(3000);
+        } catch (InterruptedException e){}
+
+        System.out.println("Stop stalling");
+
+        var customersAfter = DataRetrieval.GetCustomers(client);
+        var bookingsAfterMap = DataRetrieval.GetBookings(client)
+                .stream()
+                .collect(Collectors
+                        .toMap(b -> b.customer_id, b->b)
+                );
+
+        for (var customer : customersAfter)
+        {
+            var customerBooking = bookingsAfterMap.get(customer.customer_id);
+            if (customerBooking == null)
+            {
+                System.out.println(STR."cId=\{customer.customer_id} booking is null");
+                continue;
+            }
+            var moneyBeforePayment = customersBeforeMap.get(customer.customer_id).money;
+            var moneyAfterPayment = customer.money;
+
+            System.out.println(STR."cId=\{customer.customer_id}, money before is \{moneyBeforePayment}, " +
+                               STR."and after paying(\{customerBooking.paid}) of price \{customerBooking.price}, " +
+                               STR."money is now \{moneyAfterPayment}"
+            );
+        }
+    }
 
     // the customer will send one batch of 5, then another batch of 5, which fails on tid=8
     public static void FailedFlightOrder(HttpClient client)
@@ -87,7 +192,7 @@ public class Test
 
         for (int i = 0; i < numBookingsToPay; i++)
         {
-            Transactions.PayBooking(client, unpaidBookings.get(i), "VISA");
+            Transactions.PayBooking(client, unpaidBookings.get(i).booking_id, "VISA");
         }
         var reimbursableBookings = unpaidBookings.subList(0, numBookingsToPay);
         // Wait a bit for the system to process the data
@@ -107,7 +212,7 @@ public class Test
         var numReimbursableBookings = 10;
         for (int i = 0; i < numReimbursableBookings; i++)
         {
-            Transactions.CancelBooking(client, reimbursableBookings.get(i));
+            Transactions.CancelBooking(client, reimbursableBookings.get(i).booking_id);
         }
         // Wait a bit for the system to process the data
         try
@@ -133,13 +238,13 @@ public class Test
         // 20 PayBookings
         for (var unpaidBooking : unpaidBookings)
         {
-            Transactions.PayBooking(client, unpaidBooking, "MASTERCARD");
+            Transactions.PayBooking(client, unpaidBooking.booking_id, "MASTERCARD");
         }
 
         // 10 ReimburseBooking
         for (var reimbursableBooking : reimbursableBookings)
         {
-            Transactions.ReimburseBooking(client, reimbursableBooking);
+            Transactions.ReimburseBooking(client, reimbursableBooking.booking_id);
         }
     }
 

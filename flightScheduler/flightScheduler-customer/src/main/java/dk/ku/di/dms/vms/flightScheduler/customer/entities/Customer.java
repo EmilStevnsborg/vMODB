@@ -15,6 +15,8 @@ public final class Customer implements IEntity<Integer> {
     public int money;
     @Column
     public String name;
+    @Column
+    public String seat_number;
 
     public Customer(int customer_id, int money, String name)
     {
@@ -26,13 +28,23 @@ public final class Customer implements IEntity<Integer> {
     @SuppressWarnings("unused")
     public Customer(){}
 
+    public void addSeat(String seat_number)
+    {
+        this.seat_number = seat_number;
+    }
+    public void deduct(int amount)
+    {
+        var newMoney = this.money - amount;
+        this.money = newMoney;
+    }
 
     @Override
     public String toString() {
         return "{\n"
                 + "  \"customer_id\":" + customer_id + ",\n"
                 + "  \"money\":" + money + ",\n"
-                + "  \"name\":\"" + name + "\"\n"
+                + "  \"name\":\"" + name + "\",\n"
+                + "  \"seat_number\":\"" + seat_number + "\""
                 + "}";
         }
 }

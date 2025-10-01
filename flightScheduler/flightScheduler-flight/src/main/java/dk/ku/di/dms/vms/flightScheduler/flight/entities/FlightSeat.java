@@ -33,6 +33,11 @@ public final class FlightSeat implements IEntity<FlightSeat.FlightSeatId> {
             this.flight_id = flight_id;
             this.seat_number = seat_number;
         }
+
+        @Override
+        public String toString() {
+            return "[flight_id=" + flight_id + ", seat_number=" + seat_number + "]";
+        }
     }
 
     @Id

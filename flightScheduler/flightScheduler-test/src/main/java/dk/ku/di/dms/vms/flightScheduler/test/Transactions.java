@@ -20,8 +20,6 @@ public class Transactions
                     }
                     """;
 
-        System.out.println("Sending: \n" + orderJson);
-
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:8766/orderFlight"))
                 .header("Content-Type", "application/json")

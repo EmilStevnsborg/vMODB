@@ -42,13 +42,16 @@ public class BookingService
     // part of PayBooking
     @Inbound(values = {PAYMENT_SUCCEEDED})
     @Transactional(type=RW)
+    @Outbound(CUSTOMER_PAID)
     public CustomerPaid bookingHasBeenPaid(PaymentSucceeded paymentSucceeded)
     {
-        var bookingObject = bookingRepository.lookupByKey(paymentSucceeded.booking_id);
-        bookingObject.BookingHasBeenPaid();
-        bookingRepository.update(bookingObject);
+        System.out.println(STR."paymentSucceeded for bId=\{paymentSucceeded.booking_id}");
+        var booking = bookingRepository.lookupByKey(paymentSucceeded.booking_id);
+        booking.bookingHasBeenPaid();
+        bookingRepository.update(booking);
 
-        var customerPaid = new CustomerPaid(bookingObject.customer_id, bookingObject.price);
+        var customerPaid = new CustomerPaid(booking.customer_id, booking.price);
+        System.out.println(STR."return customerPaid for cId=\{customerPaid.customer_id}");
         return customerPaid;
     }
 

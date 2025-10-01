@@ -36,23 +36,13 @@ public class FlightService
         {
             throw new RuntimeException("orderFlight is null");
         }
-        FlightSeat flightSeat = this.flightRepository.lookupByKey(new FlightSeat.FlightSeatId(orderFlight.flight_id, orderFlight.seat_number));
-//        System.out.println(STR."Trying to order flight: \n\{flightSeat.toString()}");
-
-        if(flightSeat == null)
-        {
-            // abort
-            throw new RuntimeException("flightSeat is null");
-        }
-        if (flightSeat.occupied != 0)
-        {
-            // abort
-            throw new RuntimeException("flightSeat is already occupied");
-        }
+        var flightSeatId = new FlightSeat.FlightSeatId(orderFlight.flight_id, orderFlight.seat_number);
+        FlightSeat flightSeat = this.flightRepository.lookupByKey(flightSeatId);
 
         // update occupied status
         flightSeat.occupied = 1;
         this.flightRepository.update(flightSeat);
+//        System.out.println(STR."fsId=\{flightSeatId} has been ordered \{flightSeat}");
 
         return new BookSeat(new Date(), orderFlight);
     }

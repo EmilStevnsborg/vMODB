@@ -473,12 +473,10 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
         fileChannel.position(filePosition);
 
         // read metadata
-        System.out.println("Reading metadata");
         readMetadata(metadataBuffer);
         var segmentSize = metadataBuffer.getInt(1);
+        var eventCount = metadataBuffer.getInt(5);
         var bid = metadataBuffer.getLong(17);
-
-        System.out.println(STR."Read metadata bid=\{bid}");
 
         byteBuffer.clear();
         byteBuffer.limit(segmentSize);
@@ -489,7 +487,7 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
 
         var segmentMetadata = new SegmentMetadata(
                 fileChannel.position() == fileChannel.size() ? -1 : fileChannel.position(),
-                bid
+                bid, eventCount
         );
 
         return segmentMetadata;

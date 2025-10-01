@@ -34,10 +34,12 @@ public class PaymentService
     @Transactional(type=W)
     public PaymentSucceeded payBooking(PayBooking payBooking)
     {
+        System.out.println(STR."payBooking for bId=\{payBooking.booking_id}");
         var payment = new Payment(payBooking.booking_id, payBooking.payment_method);
-        paymentRepository.insert(payment);
+        paymentRepository.upsert(payment);
 
         var paymentSucceeded = new PaymentSucceeded(payBooking.booking_id);
+        System.out.println(STR."return paymentSucceeded for bId=\{paymentSucceeded.booking_id}");
         return paymentSucceeded;
     }
 

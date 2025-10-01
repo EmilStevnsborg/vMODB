@@ -113,7 +113,14 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     public void run() {
         LOGGER.log(INFO,this.vmsIdentifier+": Transaction scheduler has started");
         while(this.isRunning()) {
-            if (this.isPaused()) continue;
+
+            // stops scheduling new tasks
+            synchronized(this) {
+                while(this.isPaused()) {
+                    try { wait(); } catch(InterruptedException e) { Thread.currentThread().interrupt(); return; }
+                }
+            }
+
             try {
                 this.checkForNewEvents();
                 this.executeReadyTasks();
@@ -203,13 +210,52 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     private boolean mustWaitForInputEvent = false;
 
     @Override
+    public void pauseHandler(boolean pause) {
+        System.out.println(STR."VmsTransactionScheduler Setting paused to \{pause}");
+        synchronized (this) {
+            if (pause) {
+                pause();
+            } else {
+                resume();
+                notifyAll();
+            }
+        }
+    }
+    @Override
     public void taskClearer(long failedTid)
     {
-        lastTidFinished.get(failedTid)
-        transactionTaskMap.keySet().removeIf(tid -> tid >= failedTid);
+        var lastTidToTidMapIterator = lastTidToTidMap.entrySet().iterator();
+        while (lastTidToTidMapIterator.hasNext()) {
+            var entry = lastTidToTidMapIterator.next();
+            if (entry == null) break;
+
+            if (entry.getKey() >= failedTid) {
+//                System.out.println(STR."Removing last TID=\{entry.getKey()}");
+                lastTidToTidMapIterator.remove();
+            }
+            if (entry.getValue() == failedTid) {
+//                System.out.println(STR."Removing last TID=\{entry.getKey()} because entry.getValue()=\{entry.getValue()}=failedTid");
+                lastTidToTidMapIterator.remove();
+                lastTidFinished.set(entry.getKey());
+                mustWaitForInputEvent = true;
+            }
+        }
+
+        var transactionTaskMapIterator = transactionTaskMap.entrySet().iterator();
+        while (transactionTaskMapIterator.hasNext()) {
+            var entry = transactionTaskMapIterator.next();
+            if (entry == null) break;
+
+            var taskTid = entry.getKey();
+            if (taskTid >= failedTid) {
+                System.out.println(STR."Removing task for tid=\{taskTid}");
+                transactionTaskMapIterator.remove();
+            }
+        }
     }
 
-    private void executeReadyTasks() {
+    private void executeReadyTasks()
+    {
         Long nextTid = this.lastTidToTidMap.get(this.lastTidFinished.get());
         // if nextTid == null then the scheduler must block until a new event arrive to progress
         if(nextTid == null) {
@@ -218,6 +264,10 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             return;
         }
         VmsTransactionTask task = this.transactionTaskMap.get( nextTid );
+        if (task == null) {
+            System.out.println(STR."Task is null for tid=\{nextTid}");
+            return;
+        }
         while(true) {
             if(task.isScheduled()){
                 return;
@@ -230,6 +280,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             if (task.isFailed()) {
                 return;
             }
+//            System.out.println(STR."Execute task tid=\{task.tid()}");
             switch (task.signature().executionMode()) {
                 case SINGLE_THREADED -> {
                     if (!this.canSingleThreadTaskRun()) {
@@ -270,16 +321,23 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     }
 
     private void submitPartitionedTaskForExecution(VmsTransactionTask task) {
-        this.partitionKeyTrackingMap.addAll(task.partitionKeys());
-        this.numPartitionedTasksRunning.incrementAndGet();
-        task.signalReady();
-        LOGGER.log(DEBUG, this.vmsIdentifier+": Scheduling partitioned task for execution:\n"+ task);
+        synchronized (this) {
+//            System.out.println(STR."submitSingleThreadTaskForExecution task.tid=\{task.tid()} isPaused=\{isPaused()}");
+            if (isPaused()) return;
+            this.partitionKeyTrackingMap.addAll(task.partitionKeys());
+            this.numPartitionedTasksRunning.incrementAndGet();
+            task.signalReady();
+        }
         this.sharedTaskPool.submit(task);
     }
 
     private void submitSingleThreadTaskForExecution(VmsTransactionTask task) {
-        this.singleThreadTaskRunning = true;
-        task.signalReady();
+        synchronized (this) {
+//            System.out.println(STR."submitSingleThreadTaskForExecution task.tid=\{task.tid()} isPaused=\{isPaused()}");
+            if (isPaused()) return; // don't start while paused
+            this.singleThreadTaskRunning = true;
+            task.signalReady();
+        }
         // can the scheduler itself run it? if so, avoid a context switch cost
         // but blocks the scheduler until the task finishes
         this.sharedTaskPool.submit(task);
@@ -319,8 +377,9 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     }
 
     private void processNewEvent(InboundEvent inboundEvent) {
-        System.out.println(STR."scheduler inboundEvent.tid=\{inboundEvent.tid()} " +
-                           STR."transactionTaskMap.containsKey(inboundEvent.tid())=\{this.transactionTaskMap.containsKey(inboundEvent.tid())}");
+//        System.out.println(STR."scheduler inboundEvent.tid=\{inboundEvent.tid()} " +
+//                           STR."transactionTaskMap.containsKey(inboundEvent.tid())=\{this.transactionTaskMap.containsKey(inboundEvent.tid())} " +
+//                           STR."inboundEvent.lastTid()=\{inboundEvent.lastTid()}");
         if (this.transactionTaskMap.containsKey(inboundEvent.tid())) {
             LOGGER.log(WARNING, this.vmsIdentifier+": Event TID has already been processed! Queue '" + inboundEvent.event() + "' Batch: " + inboundEvent.batch() + " TID: " + inboundEvent.tid());
             return;
@@ -336,9 +395,12 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         ));
         // mark the last tid, so we can get the next to execute when appropriate
         if(this.lastTidToTidMap.containsKey(inboundEvent.lastTid())){
+//            System.out.println(STR."containsKey inboundEvent.lastTid()=\{inboundEvent.lastTid()}, " +
+//                    STR."lastTidToTidMap.get(inboundEvent.lastTid())=\{lastTidToTidMap.get(inboundEvent.lastTid())}");
             LOGGER.log(ERROR, "Inbound event is attempting to overwrite precedence of TIDs. \nOriginal last TID:" +
                     this.lastTidToTidMap.get(inboundEvent.lastTid()) + "\n Corrupt event:" + inboundEvent);
         } else {
+//            System.out.println(STR."inboundEvent.lastTid()=\{inboundEvent.lastTid()} inboundEvent.tid()=\{inboundEvent.tid()}");
             this.lastTidToTidMap.put(inboundEvent.lastTid(), inboundEvent.tid());
         }
     }

@@ -29,13 +29,11 @@ public class FlightHttpHandler extends DefaultHttpHandler
     // http://host/flight/{id}
     @Override
     public String getAsJson(String uri) {
+        System.out.println(STR."Getting flight seats");
         String[] split = uri.split("/");
-        int flightId = Integer.parseInt(split[split.length - 1]);
-        this.transactionManager.beginTransaction(0, 0, 0,true);
-        var flightSeats = this.repository.getFlightSeats(flightId)
-                .stream()
-                .map(FlightSeat::toString)
-                .collect(Collectors.toList());
+        int flight_id = Integer.parseInt(split[split.length - 1]);
+        this.transactionManager.beginTransaction(-1, -1, -1,true);
+        var flightSeats = this.repository.getFlightSeats(flight_id);
 
         return flightSeats.toString();
     }
