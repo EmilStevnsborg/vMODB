@@ -34,6 +34,7 @@ public class StorageUtils {
     private static final boolean SEC_IDX_IN_MEMORY_STORAGE = true;
 
     public static ReadWriteIndex<IKey> createUniqueIndex(Schema schema, int[] columnsIndex, String indexName){
+        System.out.println("createUniqueIndex");
         if(SEC_IDX_IN_MEMORY_STORAGE){
             return new UniqueHashMapIndex(schema, columnsIndex);
         }
@@ -42,6 +43,7 @@ public class StorageUtils {
     }
 
     public static ReadWriteIndex<IKey> createNonUniqueIndex(Schema schema, int[] columnsIndex, String indexName){
+        System.out.println("createNonUniqueIndex");
         if(SEC_IDX_IN_MEMORY_STORAGE){
             return new NonUniqueHashMapIndex(schema, columnsIndex);
         } else {
@@ -51,6 +53,7 @@ public class StorageUtils {
     }
 
     private static OrderedRecordBuffer[] loadOrderedBuffers(int numBuckets, int bucketSize, String fileName){
+        System.out.println("loadOrderedBuffers");
         long sizeInBytes = (long) numBuckets * bucketSize;
         MemorySegment segment;
         try {
@@ -71,6 +74,7 @@ public class StorageUtils {
     }
 
     public static PrimaryIndex createPrimaryIndex(String tableName, Schema schema, boolean isCheckpointing, boolean isTruncating, boolean isChaining, int maxRecords) {
+        System.out.println("createPrimaryIndex");
         if(isCheckpointing){
             // map this to a file, so whenever a batch commit event arrives, it can trigger checkpointing the entire file
             RecordBufferContext recordBufferContext = StorageUtils.loadRecordBuffer(maxRecords, schema.getRecordSizeWithHeader(), tableName, isTruncating);
@@ -96,6 +100,7 @@ public class StorageUtils {
     }
 
     public static OrderedRecordBuffer loadOrderedRecordBuffer(long address, int size){
+        System.out.println("loadOrderedRecordBuffer");
         AppendOnlyBufferOld appendOnlyBuffer = new AppendOnlyBufferOld(address, size);
         return new OrderedRecordBuffer(appendOnlyBuffer);
     }
@@ -104,12 +109,14 @@ public class StorageUtils {
      * Must consider the header in the record size
      */
     public static RecordBufferContext loadRecordBuffer(int maxNumberOfRecords, int recordSize, String fileName, boolean truncate){
+        System.out.println("loadRecordBuffer");
         long sizeInBytes = (long) maxNumberOfRecords * recordSize;
         MemorySegment segment = mapFileIntoMemorySegment(sizeInBytes, fileName, truncate);
         return RecordBufferContext.build(segment, fileName);
     }
 
     public static AppendOnlyBuffer loadAppendOnlyBuffer(int maxNumberOfRecords, int recordSize, String fileName, boolean truncate){
+        System.out.println("loadAppendOnlyBuffer");
         long sizeInBytes = (long) maxNumberOfRecords * recordSize;
         MemorySegment segment = mapFileIntoMemorySegment(sizeInBytes, fileName, truncate);
         return new AppendOnlyBuffer(segment, fileName);
@@ -119,7 +126,6 @@ public class StorageUtils {
         MemorySegment segment = mapFileIntoMemorySegment(fileName);
         return new AppendOnlyBuffer(segment, fileName);
     }
-
     private static MemorySegment mapFileIntoMemorySegment(String fileName) {
         File file = buildFile(fileName);
         try {
@@ -139,6 +145,18 @@ public class StorageUtils {
             FileChannel fc = FileChannel.open(Path.of(file.toURI()), options);
             LOGGER.log(DEBUG, "Attempt to open file in directory completed successfully: "+file.getAbsolutePath());
             return mapFileChannelIntoMemorySegment(fc, bytes);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static MemorySegment mapFileIntoMemorySegment(String fileName, boolean truncate) {
+        File file = buildFile(fileName);
+        try {
+            StandardOpenOption[] options = buildFileOpenOptions(truncate);
+            FileChannel fc = FileChannel.open(Path.of(file.toURI()), options);
+            LOGGER.log(DEBUG, "Attempt to open file in directory completed successfully: "+file.getAbsolutePath());
+            return mapFileChannelIntoMemorySegment(fc, file.length());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -173,8 +191,9 @@ public class StorageUtils {
         return fc.map(FileChannel.MapMode.READ_WRITE, 0, bytes, Arena.global());
     }
 
-    private static StandardOpenOption[] buildFileOpenOptions(boolean truncate) {
+    public static StandardOpenOption[] buildFileOpenOptions(boolean truncate) {
         StandardOpenOption[] options;
+//        System.out.println(STR."buildFileOpenOptions truncating=\{truncate}");
         if(truncate){
             options = new StandardOpenOption[]{
                     StandardOpenOption.CREATE,

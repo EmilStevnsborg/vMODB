@@ -86,7 +86,12 @@ public final class VmsApplication {
         Map<String, VmsDataModel> vmsDataModelMap = VmsMetadataLoader.buildVmsDataModel( entityToVirtualMicroservice, entityToTableNameMap );
 
         boolean isCheckpointing = options.isCheckpointing();
-        boolean isTruncating = options.isTruncating();
+        boolean isRecovering = options.recoveryEnabled();
+
+        // never truncating if recovering
+        boolean isTruncating = isRecovering ? false : options.isTruncating();
+        System.out.println(STR."VmsApplication isRecovering=\{isRecovering} ? false : options.isTruncating()=\{options.isTruncating()}");
+
         if(!isCheckpointing){
             String checkpointingStr = System.getProperty("checkpointing");
             if(Boolean.parseBoolean(checkpointingStr)){
@@ -98,7 +103,7 @@ public final class VmsApplication {
         Map<String, Table> catalog = EmbedMetadataLoader.loadCatalog(vmsDataModelMap, entityToTableNameMap, isCheckpointing, isTruncating, options.getMaxRecords());
 
         // operational API and checkpoint API
-        TransactionManager transactionManager = new TransactionManager(catalog, isCheckpointing);
+        TransactionManager transactionManager = new TransactionManager(catalog, isCheckpointing, isRecovering);
 
         Map<String, Object> tableToRepositoryMap = EmbedMetadataLoader.loadRepositoryClasses( vmsClasses, entityToTableNameMap, catalog,  transactionManager );
         Map<String, List<Object>> vmsToRepositoriesMap = EmbedMetadataLoader.mapRepositoriesToVms(vmsClasses, entityToTableNameMap, tableToRepositoryMap);
@@ -130,7 +135,7 @@ public final class VmsApplication {
 
         VmsEmbedInternalChannels vmsInternalPubSubService = new VmsEmbedInternalChannels();
 
-        VmsEventHandler eventHandler = VmsEventHandler.build(vmsIdentifier, transactionManager, vmsInternalPubSubService, vmsMetadata, options, httpHandler, serdes);
+        VmsEventHandler eventHandler = VmsEventHandler.build(vmsIdentifier, transactionManager, vmsInternalPubSubService, vmsMetadata, options, httpHandler, serdes, options.recoveryEnabled());
 
         StoppableRunnable transactionScheduler = VmsTransactionScheduler.build(
                 vmsName,
@@ -142,6 +147,7 @@ public final class VmsApplication {
 
         eventHandler.AddSchedulerPauseHandler(transactionScheduler::pauseHandler);
         eventHandler.AddSchedulerTaskClearer(transactionScheduler::taskClearer);
+        eventHandler.AddSchedulerRecoveryHandler(transactionScheduler::recover);
         return new VmsApplication( vmsName, vmsMetadata, catalog, eventHandler, transactionManager, transactionScheduler, vmsInternalPubSubService );
     }
 
@@ -149,6 +155,7 @@ public final class VmsApplication {
      * This method setups the VMS TCP socket accept and the scheduler thread
      */
     public void start(){
+        System.out.println("Starting VMS application...");
         this.eventHandler.run();
         Thread.ofPlatform().name("vms-transaction-scheduler-"+this.name)
                 .inheritInheritableThreadLocals(false)

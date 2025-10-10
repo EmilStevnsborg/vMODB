@@ -221,6 +221,15 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             }
         }
     }
+
+    @Override
+    public void recover(long lastCommitBatch,  long lastCommitTid)
+    {
+        System.out.println(STR."Scheduler setting lastTidFinished=lastCommitTid=\{lastCommitTid}, " +
+                           STR."where lastCommitBatch=\{lastCommitBatch}");
+        lastTidFinished.set(lastCommitTid);
+    }
+
     @Override
     public void taskClearer(long failedTid)
     {
@@ -377,9 +386,9 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     }
 
     private void processNewEvent(InboundEvent inboundEvent) {
-//        System.out.println(STR."scheduler inboundEvent.tid=\{inboundEvent.tid()} " +
-//                           STR."transactionTaskMap.containsKey(inboundEvent.tid())=\{this.transactionTaskMap.containsKey(inboundEvent.tid())} " +
-//                           STR."inboundEvent.lastTid()=\{inboundEvent.lastTid()}");
+        System.out.println(STR."scheduler inboundEvent.tid=\{inboundEvent.tid()} " +
+                           STR."transactionTaskMap.containsKey(inboundEvent.tid())=\{this.transactionTaskMap.containsKey(inboundEvent.tid())} " +
+                           STR."inboundEvent.lastTid()=\{inboundEvent.lastTid()}");
         if (this.transactionTaskMap.containsKey(inboundEvent.tid())) {
             LOGGER.log(WARNING, this.vmsIdentifier+": Event TID has already been processed! Queue '" + inboundEvent.event() + "' Batch: " + inboundEvent.batch() + " TID: " + inboundEvent.tid());
             return;

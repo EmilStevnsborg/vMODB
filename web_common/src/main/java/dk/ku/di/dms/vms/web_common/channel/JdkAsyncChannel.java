@@ -47,7 +47,7 @@ public final class JdkAsyncChannel implements IChannel {
     }
 
     public void close() {
-        try { this.channel.close(); } catch (IOException ignored) { }
+        try { this.channel.close(); System.out.println("Closing channel"); } catch (IOException ignored) {}
     }
 
 }

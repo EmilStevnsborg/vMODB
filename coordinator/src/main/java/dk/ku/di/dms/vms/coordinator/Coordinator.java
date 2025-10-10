@@ -19,6 +19,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitCommand;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitInfo;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchComplete;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.Presentation;
+import dk.ku.di.dms.vms.modb.common.schema.network.control.Recovery;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
@@ -309,7 +310,6 @@ public final class Coordinator extends ModbHttpServer {
             do {
                 // tends to be faster than blocking
                 while ((message = this.coordinatorQueue.poll(250, TimeUnit.MILLISECONDS)) != null) {
-                    System.out.println("\nCoordinator queue polled\n");
                     this.processVmsMessage(message);
                 }
             } while (this.isRunning());
@@ -464,14 +464,13 @@ public final class Coordinator extends ModbHttpServer {
 
         @Override
         public void queueMessage(Object object){
-            System.out.println("Coordinator.VmsWorkerContainer.queueMessage: "+object);
             // always goes to first
             this.vmsWorkers[0].queueMessage(object);
         }
 
         @Override
         public void queueTransactionEvent(TransactionEvent.PayloadRaw payload){
-            System.out.println("\nCoordinator.VmsWorkerContainer.queueTransactionEvent");
+//            System.out.println("\nCoordinator.VmsWorkerContainer.queueTransactionEvent");
             this.queueFunc.accept(payload);
         }
     }
@@ -561,7 +560,6 @@ public final class Coordinator extends ModbHttpServer {
         public void completed(AsynchronousSocketChannel channel, Void void_) {
             ByteBuffer buffer = null;
             try {
-                System.out.println("AcceptCompletionHandler");
                 NetworkUtils.configure(channel, options.getSoBufferSize());
 
                 // right now I cannot discern whether it is a VMS or follower. perhaps I can keep alive channels from leader election?
@@ -678,7 +676,6 @@ public final class Coordinator extends ModbHttpServer {
          * Still need to define what to do with connections from replicas....
          */
         private void processServerPresentationMessage(AsynchronousSocketChannel channel, ByteBuffer buffer) {
-            System.out.println("ServerPresentationMessage in coordinator");
             // server
             ServerNode newServer = Presentation.readServer(buffer);
 
@@ -712,7 +709,7 @@ public final class Coordinator extends ModbHttpServer {
      * having this info avoids having to contact all internal/terminal nodes to inform the precedence of events
      */
     public void queueTransactionInput(TransactionInput transactionInput){
-        System.out.println("Coordinator inserting transactionInput into queue");
+//        System.out.println("Coordinator inserting transactionInput into queue");
         this.transactionInputConsumer.accept(transactionInput);
     }
 
@@ -734,13 +731,13 @@ public final class Coordinator extends ModbHttpServer {
     }
 
     private void processVmsMessage(Object message) {
-        System.out.println(STR."Coordinator processVmsMessage: \{message}");
         switch (message) {
             // receive metadata from all microservices
             case BatchContext batchContext -> this.processNewBatchContext(batchContext);
             case VmsNode vmsNode -> this.processVmsIdentifier(vmsNode);
             case TransactionAbortInfo.Payload txAbortInfo -> this.abortTransactionInCoordinator(txAbortInfo);
             case BatchComplete.Payload batchComplete -> this.processBatchComplete(batchComplete);
+            case Recovery.Payload recovery -> this.processRecoveryInCoordinator(recovery);
             case BatchCommitAck.Payload msg ->
                 // let's just ignore the ACKs. since the terminals have responded, that means the VMSs before them have processed the transactions in the batch
                 // not sure if this is correct since we have to wait for all VMSs to respond...
@@ -816,6 +813,28 @@ public final class Coordinator extends ModbHttpServer {
         fixMetadata(txAbortInfo.tid(), txAbortInfo.batch());
     }
 
+
+    //////////////////////////////////////////////////////////
+    //////////////////////// RECOVERY ////////////////////////
+    //////////////////////////////////////////////////////////
+
+
+    private void multiCast(Recovery.Payload recovery)
+    {
+        // use DAGs of transactions retracted to compute affected VMSes.
+        var affectedVMSes = this.vmsMetadataMap.values();
+        for (VmsNode vms : affectedVMSes) {
+            this.vmsWorkerContainerMap.get(vms.identifier).queueMessage(recovery);
+        }
+    }
+
+    // A VmsWorker has queued the recovery message
+    private void processRecoveryInCoordinator(Recovery.Payload recovery)
+    {
+        System.out.println("Coordinator processRecoveryInCoordinator");
+        multiCast(recovery);
+    }
+
     private void processBatchComplete(BatchComplete.Payload batchComplete) {
         System.out.println("Coordinator processBatchComplete");
         // what if ACKs from VMSs take too long? or never arrive?
@@ -859,7 +878,7 @@ public final class Coordinator extends ModbHttpServer {
         this.batchContextMap.put(batchContext.batchOffset, batchContext);
         // after storing batch context, send to vms workers
         for(var entry : batchContext.terminalVMSs) {
-            System.out.println("Sending batchContext " + batchContext.batchOffset + " to " + entry);
+//            System.out.println("Sending batchContext " + batchContext.batchOffset + " to " + entry);
             this.vmsWorkerContainerMap.get(entry).queueMessage(
                     BatchCommitInfo.of(batchContext.batchOffset,
                             batchContext.previousBatchPerVms.get(entry),

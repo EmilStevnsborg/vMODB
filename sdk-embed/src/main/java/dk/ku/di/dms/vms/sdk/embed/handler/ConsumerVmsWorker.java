@@ -1,10 +1,12 @@
 package dk.ku.di.dms.vms.sdk.embed.handler;
 
+import dk.ku.di.dms.vms.modb.common.logging.FromLogs;
 import dk.ku.di.dms.vms.modb.common.logging.ILoggingHandler;
 import dk.ku.di.dms.vms.modb.common.logging.LoggingHandlerBuilder;
 import dk.ku.di.dms.vms.modb.common.memory.MemoryManager;
 import dk.ku.di.dms.vms.modb.common.runnable.StoppableRunnable;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.Presentation;
+import dk.ku.di.dms.vms.modb.common.schema.network.control.Recovery;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
@@ -14,10 +16,14 @@ import dk.ku.di.dms.vms.web_common.NetworkUtils;
 import dk.ku.di.dms.vms.web_common.channel.IChannel;
 import org.jctools.queues.MpscBlockingConsumerArrayQueue;
 
+import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
+import java.nio.channels.AsynchronousCloseException;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.CompletionHandler;
+import java.nio.channels.WritePendingException;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
@@ -25,6 +31,7 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import static dk.ku.di.dms.vms.sdk.embed.handler.ConsumerVmsWorker.State.*;
@@ -66,8 +73,12 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     private final IdentifiableNode consumerVms;
     
     private final IChannel channel;
+    private boolean consumerIsRecovering;
+    private Consumer<Recovery.Payload> leaderQueueRecovery;
+    private Supplier<long[]> getLatestCommittedInfo;
 
     private final ILoggingHandler loggingHandler;
+    private final FromLogs fromLogs;
 
     private final IVmsSerdesProxy serdesProxy;
 
@@ -83,7 +94,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
 
     private State state;
 
-    protected enum State { NEW, CONNECTED, PRESENTATION_SENT, READY }
+    protected enum State { NEW, CONNECTED, DISCONNECTED, PRESENTATION_SENT, READY }
 
     private final WriteCompletionHandler writeCompletionHandler = new WriteCompletionHandler();
 
@@ -93,22 +104,30 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                                   VmsNode me,
                                   IdentifiableNode consumerVms,
                                   Supplier<IChannel> channelSupplier,
+                                  Consumer<Recovery.Payload> leaderQueueRecovery,
+                                  Supplier<long[]> getLatestCommittedInfo,
                                   VmsEventHandler.VmsHandlerOptions options,
                                   IVmsSerdesProxy serdesProxy) {
 
         System.out.println(STR."ConsumerVmsWorker has been built for \{consumerVms.identifier}");
         return new ConsumerVmsWorker(me, consumerVms,
-                channelSupplier.get(), options, serdesProxy);
+                channelSupplier.get(), leaderQueueRecovery,
+                getLatestCommittedInfo, options, serdesProxy);
     }
 
     private ConsumerVmsWorker(VmsNode me,
                              IdentifiableNode consumerVms,
                              IChannel channel,
+                             Consumer<Recovery.Payload> leaderQueueRecovery,
+                             Supplier<long[]> getLatestCommittedInfo,
                              VmsEventHandler.VmsHandlerOptions options,
                              IVmsSerdesProxy serdesProxy) {
         this.me = me;
         this.consumerVms = consumerVms;
         this.channel = channel;
+        this.consumerIsRecovering = false;
+        this.leaderQueueRecovery = leaderQueueRecovery;
+        this.getLatestCommittedInfo = getLatestCommittedInfo;
 
         ILoggingHandler loggingHandler;
         var logIdentifier = me.identifier+"_"+consumerVms.identifier;
@@ -125,6 +144,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
 
         this.loggingHandler = loggingHandler;
         this.serdesProxy = serdesProxy;
+        this.fromLogs = new FromLogs(loggingHandler, serdesProxy);
         this.options = options;
         this.transactionEventQueue = new MpscBlockingConsumerArrayQueue<>(1024*1500);
         this.state = NEW;
@@ -151,6 +171,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
             LOGGER.log(WARNING, this.me.identifier+ ": Finishing prematurely worker for consumer VMS "+this.consumerVms.identifier+" because connection failed");
             return;
         }
+        System.out.println(STR."consumerVmsWorker for consumer=\{consumerVms.identifier}, this.options.logging()=\{this.options.logging()}");
         if(this.options.logging()){
             this.eventLoopLogging();
         } else {
@@ -176,26 +197,14 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     }
 
     private void eventLoopLogging() {
-//        while(this.isRunning()){
-//            try {
-//                if(this.loggingWriteBuffers.isEmpty()){
-//                    LOGGER.log(WARNING, me.identifier+": Going to block since no logging buffers");
-//                    this.drained.add(this.transactionEventQueue.take());
-//                    LOGGER.log(WARNING, me.identifier+": Woke up");
-//                }
-//                this.transactionEventQueue.drain(this.drained::add);
-//                if(this.drained.isEmpty()){
-//                    this.processPendingLogging();
-//                } else {
-//                    this.sendBatchOfEventsNonBlocking();
-//                }
-//            } catch (Exception e) {
-//                LOGGER.log(ERROR, this.me.identifier+ ": Error captured in event loop (logging) \n"+e);
-//            }
-//        }
         int pollTimeout = 1;
         while (this.isRunning()){
             try {
+                if (consumerIsRecovering)
+                {
+                    reconnect();
+                }
+
                 transactionEventQueue.drain(this.drained::add, this.options.networkBufferSize());
                 if(this.drained.isEmpty()){
                     pollTimeout = Math.min(pollTimeout * 2, this.options.maxSleep());
@@ -208,6 +217,29 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                 this.processPendingLogging();
             } catch (Exception e) {}
         }
+    }
+
+
+    private void reconnect() {
+        System.out.println(STR."Reconnect to consumer VMS \{this.consumerVms.identifier} with state=\{this.state}");
+        if (this.state == DISCONNECTED)
+        {
+            System.out.println(STR."Trying to connect to consumer VMS \{this.consumerVms.identifier}");
+            var connected = connect();
+
+            if (!connected) {
+                try { sleep(2000); } catch (InterruptedException ignored) { }
+                return;
+            }
+        }
+        System.out.println(STR."Connected to \{this.consumerVms.identifier}");
+        // send the events
+        var latestCommittedInfo = this.getLatestCommittedInfo.get();
+        var latestCommittedBatch = latestCommittedInfo[0];
+//        sendUncommittedEvents(latestCommittedBatch);
+
+        consumerIsRecovering = false;
+        System.out.println(STR."Reconnected to \{this.consumerVms.identifier}");
     }
 
     /**
@@ -235,6 +267,8 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         } catch (Exception e) {
             // check if connection is still online. if so, try again
             // otherwise, retry connection in a few minutes
+            System.out.println(STR."Could not connect to consumer \{consumerVms.identifier}");
+            e.printStackTrace();
             LOGGER.log(ERROR, me.identifier + ": Caught an error while trying to connect to consumer VMS: " + this.consumerVms.identifier);
             return false;
         } finally {
@@ -243,6 +277,61 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         }
         this.state = READY;
         return true;
+    }
+
+    private void sendUncommittedEvents(long latestCommittedBatch)
+    {
+        ByteBuffer writeBuffer;
+        long filePosition;
+        filePosition = 0;
+        while (filePosition != -1)
+        {
+            writeBuffer = retrieveByteBuffer();
+            var segmentMetadata = fromLogs.loadSegment(writeBuffer, filePosition);
+            filePosition = segmentMetadata.nextFilePosition;
+
+            // ignore batches prior to latest committed batch
+            if (segmentMetadata.bid <= latestCommittedBatch) {
+                returnByteBuffer(writeBuffer);
+                continue;
+            }
+            writeBuffer.flip();
+            this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
+        }
+    }
+
+    // you are a consumer worker of the restarted VMS
+    //      1. cut log of uncommitted batches
+    @Override
+    public void recover(long latestCommittedBatch)
+    {
+//        cutLog(latestCommittedBatch);
+    }
+
+    // consumer vms has crashed
+    //      1. this may have not been registered yest
+    public void initializeRecoveryInVms()
+    {
+        if (consumerIsRecovering) return;
+
+        System.out.println("Initializing recovery in ConsumerVmsWorker");
+        consumerIsRecovering = true;
+        this.state = DISCONNECTED;
+
+        // inform coordinator
+        var recoveryMessage = Recovery.of(consumerVms);
+        this.leaderQueueRecovery.accept(recoveryMessage);
+    }
+
+    // called from the VmsEventHandler
+    @Override
+    public void processRecoveryInVms()
+    {
+        // message from coordinator comes while already recovering
+        if (consumerIsRecovering) return;
+
+        consumerIsRecovering = true;
+        this.state = DISCONNECTED;
     }
 
     private void processPendingLogging(){
@@ -404,6 +493,28 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
 
         @Override
         public void failed(Throwable exc, ByteBuffer byteBuffer) {
+            System.out.println(STR."(ConsumerVmsWorker) Writing to Consumer \{consumerVms.identifier} failed");
+
+            if (exc instanceof AsynchronousCloseException) {
+                System.out.println("Channel failed due to AsynchronousCloseException");
+                initializeRecoveryInVms();
+            }
+            else if (exc instanceof ClosedChannelException) {
+                System.out.println("Channel failed due to ClosedChannelException");
+                initializeRecoveryInVms();
+            }
+            else if (exc instanceof WritePendingException) {
+                System.out.println("Channel failed due to WritePendingException");
+                initializeRecoveryInVms();
+            }
+            else if (exc instanceof IOException) {
+                System.out.println("Channel failed due to IOException");
+                initializeRecoveryInVms();
+            }
+            else {
+                System.out.println(STR."Channel failed due to something else \{exc.getMessage()}");
+            }
+
             releaseLock();
             LOGGER.log(ERROR, me.identifier+": ERROR on writing batch of events to "+consumerVms.identifier+": \n"+exc);
             byteBuffer.position(0);

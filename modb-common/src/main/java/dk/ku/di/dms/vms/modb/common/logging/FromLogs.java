@@ -1,7 +1,5 @@
-package dk.ku.di.dms.vms.coordinator.vms;
+package dk.ku.di.dms.vms.modb.common.logging;
 
-import dk.ku.di.dms.vms.modb.common.logging.SegmentMetadata;
-import dk.ku.di.dms.vms.modb.common.logging.ILoggingHandler;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
 import dk.ku.di.dms.vms.modb.common.utils.BatchUtils;
@@ -95,6 +93,18 @@ public class FromLogs
             byteBuffer.limit(byteBuffer.getInt(1));
             return segmentMetadata;
         } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // load each segment later than last committed batch
+    public SegmentMetadata loadSegment(ByteBuffer byteBuffer, long filePosition)
+    {
+        try
+        {
+            var segmentMetadata = loggingHandler.loadSegment(byteBuffer, filePosition);
+            return segmentMetadata;
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }

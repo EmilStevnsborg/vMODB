@@ -464,6 +464,22 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         }
     }
 
+    public void loadSnapshot()
+    {
+        //
+        this.rawIndex.lock();
+
+        // no need to load into memory, since critical functions will just look up persistent storage if needed.
+//        var it = this.rawIndex.iterator();
+//        while(it.hasNext()) {
+//            IKey key = it.next();
+//            var record = rawIndex.lookupByKey(key);
+//            updatesPerKeyMap.put(key, record);
+//        }
+
+        this.rawIndex.unlock();
+    }
+
     public void restoreStableState(long failedTid)
     {
         System.out.println("PrimaryIndex restoring stable state");

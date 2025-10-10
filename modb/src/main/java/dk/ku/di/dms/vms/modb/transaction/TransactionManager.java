@@ -11,6 +11,7 @@ import dk.ku.di.dms.vms.modb.definition.Table;
 import dk.ku.di.dms.vms.modb.definition.key.IKey;
 import dk.ku.di.dms.vms.modb.definition.key.KeyUtils;
 import dk.ku.di.dms.vms.modb.definition.key.SimpleKey;
+import dk.ku.di.dms.vms.modb.index.unique.UniqueHashBufferIndex;
 import dk.ku.di.dms.vms.modb.query.analyzer.Analyzer;
 import dk.ku.di.dms.vms.modb.query.analyzer.QueryTree;
 import dk.ku.di.dms.vms.modb.query.analyzer.exception.AnalyzerException;
@@ -25,10 +26,20 @@ import dk.ku.di.dms.vms.modb.query.planner.SimplePlanner;
 import dk.ku.di.dms.vms.modb.transaction.multiversion.index.IMultiVersionIndex;
 import dk.ku.di.dms.vms.modb.transaction.multiversion.index.NonUniqueSecondaryIndex;
 import dk.ku.di.dms.vms.modb.transaction.multiversion.index.PrimaryIndex;
+import dk.ku.di.dms.vms.modb.utils.LongPairStore;
 
+import java.io.File;
+import java.io.IOException;
+import java.lang.foreign.Arena;
+import java.lang.foreign.MemorySegment;
+import java.nio.channels.FileChannel;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static dk.ku.di.dms.vms.modb.utils.StorageUtils.*;
+import static java.lang.System.Logger.Level.DEBUG;
 import static java.lang.System.Logger.Level.INFO;
 
 /**
@@ -61,14 +72,22 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
     private final Map<String, Table> catalog;
 
     private final boolean checkpointing;
+    private final boolean recovering;
 
-    public TransactionManager(Map<String, Table> catalog, boolean checkpointing){
+    private LongPairStore committedInfo;
+
+    public TransactionManager(Map<String, Table> catalog, boolean checkpointing, boolean recovering){
         this.planner = new SimplePlanner();
         this.analyzer = new Analyzer(catalog);
         this.catalog = catalog;
         this.queryPlanCacheMap = new ConcurrentHashMap<>();
         this.checkpointing = checkpointing;
         this.txCtxMap = new ConcurrentHashMap<>();
+        this.recovering = recovering;
+
+        String filename = "committed_batches";
+        var truncate = recovering ? false : true;
+        committedInfo = new LongPairStore(filename, truncate);
     }
 
     private boolean fkConstraintViolation(TransactionContext txCtx, Table table, Object[] values){
@@ -430,8 +449,8 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
      * TIDs are not necessarily a sequence.
      */
     @Override
-    public void checkpoint(long maxTid){
-        System.out.println("TransactionManager checkpoint");
+    public void checkpoint(long batch, long maxTid){
+        System.out.println(STR."TransactionManager checkpointing batch=\{batch} and maxTid=\{maxTid}");
         LOGGER.log(INFO, "Checkpoint for max TID "+maxTid+" started at "+System.currentTimeMillis());
         if(this.checkpointing) {
             System.out.println(STR."TransactionManager checkpointing is \{this.checkpointing} ");
@@ -439,6 +458,9 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
                 LOGGER.log(INFO, "Checkpointing table "+table.getName());
                 table.primaryKeyIndex().checkpoint(maxTid); // checkpointing here
             }
+
+            this.committedInfo.put(batch, maxTid);
+
         } else {
             LOGGER.log(INFO, "Checkpoint disabled. Starting only garbage collection for max TID "+maxTid);
             for (Table table : this.catalog.values()) {
@@ -446,6 +468,12 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
             }
         }
         LOGGER.log(INFO, "Checkpoint for max TID "+maxTid+" finished at "+System.currentTimeMillis());
+    }
+
+    @Override
+    public long[] latestCommitInfo()
+    {
+        return committedInfo.getLatest();
     }
 
     @Override

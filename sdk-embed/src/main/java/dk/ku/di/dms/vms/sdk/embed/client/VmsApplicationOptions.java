@@ -12,6 +12,7 @@ public final class VmsApplicationOptions {
     private final int port;
 
     private final String[] packages;
+    private final boolean recoverable;
 
     private final int networkBufferSize;
 
@@ -37,10 +38,19 @@ public final class VmsApplicationOptions {
 
     public static VmsApplicationOptions build(String host, int port, String[] packages) {
         Properties properties = ConfigUtils.loadProperties();
-        return build(properties, host, port, packages);
+        return build(properties, host, port, packages, false);
+    }
+
+    public static VmsApplicationOptions build(String host, int port, String[] packages, boolean recoverable) {
+        Properties properties = ConfigUtils.loadProperties();
+        return build(properties, host, port, packages, recoverable);
     }
 
     public static VmsApplicationOptions build(Properties properties, String host, int port, String[] packages) {
+        return build(properties, host, port, packages, false);
+    }
+
+    public static VmsApplicationOptions build(Properties properties, String host, int port, String[] packages, boolean recoverable) {
 
         System.out.println("Properties: \n" + properties.toString());
 
@@ -72,6 +82,7 @@ public final class VmsApplicationOptions {
                 host,
                 port,
                 packages,
+                recoverable,
                 networkBufferSize == 0 ? MemoryUtils.DEFAULT_PAGE_SIZE : networkBufferSize,
                 networkThreadPoolSize,
                 numVmsWorkers,
@@ -85,13 +96,14 @@ public final class VmsApplicationOptions {
                 maxSleep);
     }
 
-    private VmsApplicationOptions(String host, int port, String[] packages,
+    private VmsApplicationOptions(String host, int port, String[] packages, boolean recoverable,
                                   int networkBufferSize, int networkThreadPoolSize, int numVmsWorkers,
                                   int vmsThreadPoolSize, int networkSendTimeout, int soBufferSize,
                                   boolean logging, boolean checkpointing, boolean truncating, int maxRecords, int maxSleep) {
         this.host = host;
         this.port = port;
         this.packages = packages;
+        this.recoverable = recoverable;
         this.networkBufferSize = networkBufferSize;
         this.networkThreadPoolSize = networkThreadPoolSize;
         this.numVmsWorkers = numVmsWorkers;
@@ -127,6 +139,9 @@ public final class VmsApplicationOptions {
 
     public int port() {
         return this.port;
+    }
+    public boolean recoveryEnabled() {
+        return this.recoverable;
     }
 
     public int vmsThreadPoolSize() {

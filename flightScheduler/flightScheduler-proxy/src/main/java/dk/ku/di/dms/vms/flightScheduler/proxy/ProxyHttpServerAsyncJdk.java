@@ -21,7 +21,6 @@ public final class ProxyHttpServerAsyncJdk extends AbstractHttpHandler implement
         switch (split[split.length-1])
         {
             case "orderFlight":
-                System.out.println("orderFlight: \n" + body);
                 eventPayload = new TransactionInput.Event(ORDER_FLIGHT, body);
                 txInput = new TransactionInput(ORDER_FLIGHT, eventPayload);
                 this.coordinator.queueTransactionInput(txInput);

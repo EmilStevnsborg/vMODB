@@ -36,6 +36,7 @@ public abstract class StoppableRunnable implements Runnable {
     public void pauseHandler(boolean pause) {}
 
     public void taskClearer(long failedTid) {}
+    public void recover(long lastCommitBatch, long lastCommitTid) {}
 
     public void giveUpCpu(int sleepTime){
         if(sleepTime > 0){

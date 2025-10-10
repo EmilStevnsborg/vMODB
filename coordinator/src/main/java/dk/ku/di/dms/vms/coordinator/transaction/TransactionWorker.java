@@ -138,7 +138,6 @@ public final class TransactionWorker extends StoppableRunnable {
                 while ((data = this.inputQueue.poll()) != null &&
                         // avoid calling currentTimeMillis for every item
                         this.tid <= lastTidBatch) {
-                    System.out.println("Polling from inputQueue");
                     // process precedence from previous worker in the ring
                     // we could do it in advance current batch, but can lead to higher wait in vms
                     this.processTransactionInput(data);
@@ -169,7 +168,6 @@ public final class TransactionWorker extends StoppableRunnable {
     }
 
     private void processTransactionInput(TransactionInput transactionInput) {
-        System.out.println("Processing transaction input " + transactionInput);
         TransactionDAG transactionDAG = this.transactionMap.get( transactionInput.name );
         if(transactionDAG == null){
             throw new RuntimeException("The DAG for transaction "+transactionInput.name+" cannot be found");
@@ -213,7 +211,6 @@ public final class TransactionWorker extends StoppableRunnable {
             TransactionEvent.PayloadRaw txEvent = TransactionEvent.of(this.tid, this.batchContext.batchOffset,
                     transactionInput.event.name, transactionInput.event.payload, precedenceMapStr);
             LOGGER.log(DEBUG,"Leader: Transaction worker "+id+" adding event "+event.name+" to "+inputVms.identifier+" worker:\n"+txEvent+"\n"+previousTidPerVms);
-            System.out.println("Coordinator.VmsWorkerContainer.queueTransactionEvent: "+txEvent);
             this.vmsWorkerContainerMap.get(inputVms.identifier).queueTransactionEvent(txEvent);
         }
         System.out.println("Increment tid " + this.tid + " with +1");

@@ -28,19 +28,22 @@ public class Test
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
         }
 
-        // channel dies
+        // vms dies
+        System.console().readLine();
 
-//        try
-//        {
-//            System.out.println("Stall ....");
-//            Thread.sleep(3000);
-//        } catch (InterruptedException e){}
-//
-//        // this will throw a channel exception
-//        for(int i = 10; i < 20; i++)
-//        {
-//            Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
-//        }
+        // this will throw a channel exception
+        for(int i = 10; i < 15; i++)
+        {
+            Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
+        }
+
+        // vms restarts
+        System.console().readLine();
+
+        for(int i = 15; i < 20; i++)
+        {
+            Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
+        }
     }
 
     public static void FailedPayment(HttpClient client)

@@ -16,20 +16,26 @@ public final class Main {
     private static VmsApplication VMS;
     private static final System.Logger LOGGER = System.getLogger(Main.class.getName());
 
-    public static void main(String[] ignoredArgs) throws Exception {
+    public static void main(String[] args) throws Exception {
         Properties properties = ConfigUtils.loadProperties();
-        VMS = buildVms(properties);
+
+        if (args != null && args.length > 0) {
+            var recoverable = Boolean.parseBoolean(args[0]);
+            VMS = buildVms(properties, recoverable);
+        } else {
+            VMS = buildVms(properties, false);
+        }
         VMS.start();
     }
 
-    private static VmsApplication buildVms(Properties properties) throws Exception {
+    private static VmsApplication buildVms(Properties properties, boolean recoverable) throws Exception {
         VmsApplicationOptions options = VmsApplicationOptions.build(
                 properties,
                 "0.0.0.0",
                 CUSTOMER_VMS_PORT, new String[]{
                         "dk.ku.di.dms.vms.flightScheduler.customer",
                         "dk.ku.di.dms.vms.flightScheduler.common"
-                });
+                }, recoverable);
         return VmsApplication.build(options, (x,y) ->
                 new CustomerHttpHandler(x, (ICustomerRepository) y.apply("customers"))); // apply on y.apply({VmsTable Name})
     }

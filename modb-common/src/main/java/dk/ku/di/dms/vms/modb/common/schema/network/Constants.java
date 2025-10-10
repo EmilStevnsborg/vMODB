@@ -90,6 +90,6 @@ public final class Constants {
     /**
      *  This message is sent when a VMS has restored a stable state during abort to before the failed TID
      */
-    public static final byte ABORT_STABLE_STATE = 18;
+    public static final byte RECOVERY = 18;
 
 }
