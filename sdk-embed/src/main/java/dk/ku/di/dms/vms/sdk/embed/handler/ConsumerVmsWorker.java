@@ -20,10 +20,7 @@ import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
-import java.nio.channels.AsynchronousCloseException;
-import java.nio.channels.ClosedChannelException;
-import java.nio.channels.CompletionHandler;
-import java.nio.channels.WritePendingException;
+import java.nio.channels.*;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
@@ -71,8 +68,9 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     private final VmsNode me;
 
     private final IdentifiableNode consumerVms;
-    
-    private final IChannel channel;
+
+    private final Supplier<IChannel> channelFactory;
+    private IChannel channel;
     private boolean consumerIsRecovering;
     private Consumer<Recovery.Payload> leaderQueueRecovery;
     private Supplier<long[]> getLatestCommittedInfo;
@@ -111,20 +109,21 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
 
         System.out.println(STR."ConsumerVmsWorker has been built for \{consumerVms.identifier}");
         return new ConsumerVmsWorker(me, consumerVms,
-                channelSupplier.get(), leaderQueueRecovery,
+                channelSupplier, leaderQueueRecovery,
                 getLatestCommittedInfo, options, serdesProxy);
     }
 
     private ConsumerVmsWorker(VmsNode me,
                              IdentifiableNode consumerVms,
-                             IChannel channel,
+                             Supplier<IChannel> channelFactory,
                              Consumer<Recovery.Payload> leaderQueueRecovery,
                              Supplier<long[]> getLatestCommittedInfo,
                              VmsEventHandler.VmsHandlerOptions options,
                              IVmsSerdesProxy serdesProxy) {
         this.me = me;
         this.consumerVms = consumerVms;
-        this.channel = channel;
+        this.channelFactory = channelFactory;
+        this.channel = this.channelFactory.get();
         this.consumerIsRecovering = false;
         this.leaderQueueRecovery = leaderQueueRecovery;
         this.getLatestCommittedInfo = getLatestCommittedInfo;
@@ -202,6 +201,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
             try {
                 if (consumerIsRecovering)
                 {
+                    System.out.println(STR."Consumer Vms Worker trying to connect to \{consumerVms.identifier}");
                     reconnect();
                 }
 
@@ -231,14 +231,22 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                 try { sleep(2000); } catch (InterruptedException ignored) { }
                 return;
             }
+            else {
+                this.state = CONNECTED;
+            }
         }
         System.out.println(STR."Connected to \{this.consumerVms.identifier}");
         // send the events
-        var latestCommittedInfo = this.getLatestCommittedInfo.get();
-        var latestCommittedBatch = latestCommittedInfo[0];
-//        sendUncommittedEvents(latestCommittedBatch);
+        try {
+            var latestCommittedInfo = this.getLatestCommittedInfo.get();
+            var latestCommittedBatch = latestCommittedInfo[0];
+            sendUncommittedEvents(latestCommittedBatch);
+        } catch (Exception e) {
+            System.out.println(STR."Sending uncommitted events to \{consumerVms.identifier} threw an Exception");
+        }
 
         consumerIsRecovering = false;
+
         System.out.println(STR."Reconnected to \{this.consumerVms.identifier}");
     }
 
@@ -249,6 +257,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     private boolean connect() {
         ByteBuffer buffer = MemoryManager.getTemporaryDirectBuffer(options.networkBufferSize());
         try{
+            this.channel = channelFactory.get();
             NetworkUtils.configure(this.channel, options.soBufferSize());
             this.channel.connect(this.consumerVms.asInetSocketAddress()).get();
             this.state = CONNECTED;
@@ -264,7 +273,8 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
             LOGGER.log(DEBUG,me.identifier+ ": The node "+ this.consumerVms.host+" "+ this.consumerVms.port+" status = "+this.state);
             this.returnByteBuffer(buffer);
             LOGGER.log(INFO,me.identifier+ ": Setting up worker to send transactions to consumer VMS: "+this.consumerVms.identifier);
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             // check if connection is still online. if so, try again
             // otherwise, retry connection in a few minutes
             System.out.println(STR."Could not connect to consumer \{consumerVms.identifier}");

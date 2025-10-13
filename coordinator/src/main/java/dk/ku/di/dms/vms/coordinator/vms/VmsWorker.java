@@ -361,6 +361,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             while (this.isRunning()) {
                 if (this.consumerIsRecovering)
                 {
+                    System.out.println(STR."Consumer is recovering... consumer=\{consumerVms.identifier}");
                     reconnect();
                 }
             }
@@ -389,8 +390,8 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         this.state = State.LEADER_PRESENTATION_SENT;
         this.channel.read( this.readBuffer, 0, new VmsReadCompletionHandler() );
 
-        // send consumer set, so it knows who to make producers for.
-        sendConsumerSet(this.consumerSetVmsStr);
+        // send consumer set in case the restarted VMS has consumer it needs to reconnect with
+        sendConsumerSet(consumerSetVmsStr);
 
         // resend events
         consumerIsRecovering = false;
@@ -421,15 +422,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private void eventLoop() {
         int pollTimeout = 1;
         while (this.isRunning()){
-            if (consumerVms.identifier.equals("customer")) {
-                System.out.println(STR."consumerVms.identifier=\{consumerVms.identifier}, consumerIsRecovering = \{consumerIsRecovering}");
-            }
             try {
-                if (this.consumerIsRecovering)
-                {
-                    reconnect();
-                }
-
                 this.transactionEventQueue.drain(this.drained, this.options.networkBufferSize());
                 if(this.drained.isEmpty()){
                     pollTimeout = Math.min(pollTimeout * 2, this.options.maxSleep());
@@ -663,6 +656,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     }
 
     private void sendConsumerSet(String vmsConsumerSet) {
+        System.out.println(STR."VmsWorker sendConsumerSet to consumer=\{consumerVms.identifier}");
         // the first or new information
         if(this.state == VMS_PRESENTATION_PROCESSED) {
             this.state = CONSUMER_SET_READY_FOR_SENDING;

@@ -243,7 +243,9 @@ public final class VmsEventHandler extends ModbHttpServer {
         // setup accept since we need to accept connections from the coordinator and other VMSs
         this.serverSocket.accept(null, new AcceptCompletionHandler());
 
-        if (recoveryEnabled) recoverVms();
+        var crashOccurred = true;
+        System.out.println(STR."crashOccurred=\{crashOccurred} && recoveryEnabled=\{recoveryEnabled}");
+        if (crashOccurred && recoveryEnabled) recoverVms();
     }
 
     public void AddSchedulerPauseHandler(Consumer<Boolean> pauseHandler){

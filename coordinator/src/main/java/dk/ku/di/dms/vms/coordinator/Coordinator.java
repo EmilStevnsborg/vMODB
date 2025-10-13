@@ -888,6 +888,12 @@ public final class Coordinator extends ModbHttpServer {
 
     private void processVmsIdentifier(VmsNode vmsIdentifier_) {
         LOGGER.log(INFO,"Leader: Received a VMS_IDENTIFIER from: "+ vmsIdentifier_.identifier);
+
+        // Recovery, no need to resend consumer sets to all VMSes
+        if (vmsMetadataMap.containsKey(vmsIdentifier_.identifier)) {
+            return;
+        }
+
         // update metadata of this node so coordinator can reason about data dependencies
         this.vmsMetadataMap.put( vmsIdentifier_.identifier, vmsIdentifier_);
 
@@ -895,6 +901,7 @@ public final class Coordinator extends ModbHttpServer {
             LOGGER.log(INFO,"Leader: "+(this.starterVMSs.size() - this.vmsMetadataMap.size())+" starter(s) VMSs remain to be processed.");
             return;
         }
+
         // if all metadata, from all starter vms have arrived, then send the signal to them
 
         LOGGER.log(INFO,"Leader: All VMS starters have sent their VMS_IDENTIFIER");
@@ -927,6 +934,7 @@ public final class Coordinator extends ModbHttpServer {
             } else {
                 consumerSetStr = this.serdesProxy.serializeConsumerSet(vmsConsumerSet);
                 LOGGER.log(INFO,"Leader: Consumer set built for "+vmsNode.identifier+": \n"+consumerSetStr);
+                System.out.println(STR."Leader: Consumer set built for \{vmsNode.identifier}");
             }
 
             if(!this.vmsWorkerContainerMap.containsKey(vmsNode.identifier)){
