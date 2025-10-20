@@ -35,6 +35,7 @@ public final class Customer implements IEntity<Integer> {
     public void deduct(int amount)
     {
         var newMoney = this.money - amount;
+        if (newMoney < 0) throw new RuntimeException("Negative new money");
         this.money = newMoney;
     }
 

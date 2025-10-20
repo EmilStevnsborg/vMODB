@@ -19,7 +19,8 @@ public final class Main
 //        Test.Scenario1(client);
 //        Test.FailedFlightOrder(client);
 //        Test.FailedPayment(client);
-        Test.RecoveryTest(client);
+//        Test.RecoveryTest(client);
+        AbortTests.CustomerCantAffordFlightSeat(client);
     }
 
     //

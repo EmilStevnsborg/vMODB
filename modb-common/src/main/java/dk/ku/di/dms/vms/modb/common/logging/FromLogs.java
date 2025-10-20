@@ -6,6 +6,8 @@ import dk.ku.di.dms.vms.modb.common.utils.BatchUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -124,5 +126,18 @@ public class FromLogs
         } catch (Exception e) {
             System.out.println("Couldn't read batch");
         }
+    }
+
+    public Map<Long, ArrayList<Long>> getUncommittedEvents(ByteBuffer byteBuffer,
+                                                           long latestCommittedBatch, long latestCommittedTid,
+                                                           long filePosition)
+    {
+        try {
+            var segmentMetadata = loggingHandler.loadSegment(byteBuffer, filePosition);
+
+        } catch (IOException e) {
+            //
+        }
+        return new HashMap<Long, ArrayList<Long>>();
     }
 }

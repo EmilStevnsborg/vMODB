@@ -1,68 +1,90 @@
-//package dk.ku.di.dms.vms.flightScheduler.test;
-//
-//import java.net.URI;
-//import java.net.http.HttpClient;
-//import java.net.http.HttpRequest;
-//import java.net.http.HttpResponse;
-//import java.util.ArrayList;
-//import java.util.Collections;
-//import java.util.List;
-//
-//public class Util
-//{
-//    private static final HttpClient client = HttpClient.newHttpClient();
-//
-//    public static void SendFlightSeat(Main.FlightSeat flightSeat)
-//    {
-//        HttpRequest request = HttpRequest.newBuilder()
-//                .uri(URI.create("http://localhost:8767/flight"))
-//                .header("Content-Type", "application/json")
-//                .POST(HttpRequest.BodyPublishers.ofString(flightSeat.toString()))
-//                .build();
-//
-//        try {
-//            client.send(request, HttpResponse.BodyHandlers.ofString());
-//        } catch (Exception e) {
-//            System.err.println("Failed to send: " + flightSeat);
-//        }
-//    }
-//
-//    public static void SendCustomer(Main.Customer customer)
-//    {
-//        HttpRequest request = HttpRequest.newBuilder()
-//                .uri(URI.create("http://localhost:8769/customer"))
-//                .header("Content-Type", "application/json")
-//                .POST(HttpRequest.BodyPublishers.ofString(customer.toString()))
-//                .build();
-//
-//        try {
-//            client.send(request, HttpResponse.BodyHandlers.ofString());
-//        } catch (Exception e) {
-//            System.err.println("Failed to send: " + customer);
-//        }
-//    }
-//
-//    public static List<Main.FlightSeat> CreateFlightSeats(int flightId, int numSeats) {
-//        var flightSeats = new ArrayList<Main.FlightSeat>();
-//        var letters = List.of("A", "B", "C", "D");
-//        for (int i = 0; i < numSeats; i++) {
-//            var letter = letters.get(i % letters.size());
-//            int number = i / letters.size();
-//            var seatNumber = letter + number;
-//            var seat = new Main.FlightSeat(flightId, seatNumber);
-//            flightSeats.add(seat);
-//        }
-//        return flightSeats;
-//    }
-//
-//    public static List<Main.Customer> CreateCustomers(int numCustomers)
-//    {
-//        var customers = Collections.synchronizedList(new ArrayList<Main.Customer>());
-//        for (int i = 0; i < numCustomers; i++) {
-//            var name = "user" + i;
-//            var customer = new Main.Customer(i, name);
-//            customers.add(customer);
-//        }
-//        return customers;
-//    }
-//}
+package dk.ku.di.dms.vms.flightScheduler.test;
+
+
+import dk.ku.di.dms.vms.flightScheduler.test.models.Booking;
+import dk.ku.di.dms.vms.flightScheduler.test.models.Customer;
+import dk.ku.di.dms.vms.flightScheduler.test.models.FlightSeat;
+import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
+import dk.ku.di.dms.vms.modb.common.serdes.VmsSerdesProxyBuilder;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+
+public class Util
+{
+    protected static final IVmsSerdesProxy SERDES = VmsSerdesProxyBuilder.build();
+    public static void Sleep(int milliseconds)
+    {
+        try
+        {
+            System.out.println(STR."Sleeping for \{milliseconds}ms....");
+            Thread.sleep(milliseconds);
+        } catch (InterruptedException e){}
+    }
+
+    public static List<Booking> GetBookings(HttpClient client)
+    {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:8768/booking"))
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+
+        try {
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            var payload = response.body();
+            Booking[] bookingsArray = SERDES.deserialize(payload, Booking[].class);
+            List<Booking> bookings = new ArrayList<>(Arrays.asList(bookingsArray));
+            return bookings;
+        } catch (Exception e) {
+            System.err.println("Failed to get unpaid bookings: ");
+            return new ArrayList<Booking>();
+        }
+    }
+
+    public static List<Customer> GetCustomers(HttpClient client)
+    {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:8769/customer"))
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+
+        try {
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            var payload = response.body();
+            Customer[] customersArray = SERDES.deserialize(payload, Customer[].class);
+            List<Customer> customers = List.of(customersArray);
+            return customers;
+        } catch (Exception e) {
+            System.err.println("Failed to get customers");
+            return new ArrayList<Customer>();
+        }
+    }
+
+    public static List<FlightSeat> GetFlightSeats(HttpClient client, int flightId)
+    {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(STR."http://localhost:8767/flight/\{flightId}"))
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+
+        try {
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            var payload = response.body();
+            FlightSeat[] flightSeatsArray = SERDES.deserialize(payload, FlightSeat[].class);
+            List<FlightSeat> flightSeats = List.of(flightSeatsArray);
+            return flightSeats;
+        } catch (Exception e) {
+            System.err.println("Failed to get flight seats");
+            return new ArrayList<FlightSeat>();
+        }
+    }
+}

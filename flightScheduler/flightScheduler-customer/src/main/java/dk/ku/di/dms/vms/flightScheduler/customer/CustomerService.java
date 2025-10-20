@@ -47,13 +47,6 @@ public class CustomerService
         customer.deduct(customerPaid.price);
         this.customerRepository.update(customer);
         System.out.println(STR."cId=\{customer.customer_id} has customerPaid");
-
-//        // failure test
-//        if (customerPaid.customer_id == 7)
-//        {
-//            System.out.println(STR."cId=\{customerPaid.customer_id} failed");
-//            throw new RuntimeException();
-//        }
     }
 
     // part of ReimburseBooking

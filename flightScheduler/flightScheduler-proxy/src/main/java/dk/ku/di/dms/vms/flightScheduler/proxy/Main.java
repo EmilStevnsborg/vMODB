@@ -15,13 +15,18 @@ import static dk.ku.di.dms.vms.flightScheduler.common.Constants.*;
 public final class Main
 {
 
-    public static void main(String[] ignoredArgs) {
+    public static void main(String[] args) {
         Properties properties = ConfigUtils.loadProperties();
-        System.out.println(properties);
-        loadCoordinator(properties);
+
+        if (args != null && args.length > 0) {
+            var recoverable = Boolean.parseBoolean(args[0]);
+            loadCoordinator(properties, recoverable);
+        } else {
+            loadCoordinator(properties, false);
+        }
     }
 
-    private static void loadCoordinator(Properties properties)
+    private static void loadCoordinator(Properties properties, boolean recoverable)
     {
         Map<String, TransactionDAG> transactionMap = new HashMap<>();
 
@@ -74,7 +79,7 @@ public final class Main
         starterVMSs.putIfAbsent(customerAddress.identifier, customerAddress);
         starterVMSs.putIfAbsent(paymentAddress.identifier, paymentAddress);
 
-        Coordinator coordinator = Coordinator.build(properties, starterVMSs, transactionMap, ProxyHttpServerAsyncJdk::new);
+        Coordinator coordinator = Coordinator.build(properties, starterVMSs, transactionMap, ProxyHttpServerAsyncJdk::new, recoverable);
 
         Thread coordinatorThread = new Thread(coordinator);
         coordinatorThread.start();

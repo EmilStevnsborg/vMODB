@@ -11,6 +11,7 @@ import dk.ku.di.dms.vms.coordinator.transaction.TransactionWorker;
 import dk.ku.di.dms.vms.coordinator.vms.IVmsWorker;
 import dk.ku.di.dms.vms.coordinator.vms.VmsWorker;
 import dk.ku.di.dms.vms.modb.common.data_structure.Tuple;
+import dk.ku.di.dms.vms.modb.common.logging.LongPairStore;
 import dk.ku.di.dms.vms.modb.common.memory.MemoryManager;
 import dk.ku.di.dms.vms.modb.common.memory.MemoryUtils;
 import dk.ku.di.dms.vms.modb.common.schema.VmsEventSchema;
@@ -121,13 +122,18 @@ public final class Coordinator extends ModbHttpServer {
 
     private final Consumer<TransactionInput> transactionInputConsumer;
 
+    private boolean coordinatorIsRecovering;
+
+    private LongPairStore committedInfo;
+
     private final IHttpHandler httpHandler;
 
     private static final int DEFAULT_STARTING_TID = 1;
     private static final int DEFAULT_STARTING_BATCH_ID = 1;
 
     public static Coordinator build(Properties properties, Map<String, IdentifiableNode> startersVMSs,
-                                    Map<String, TransactionDAG> transactionMap, Function<Coordinator, IHttpHandler> httpHandlerSupplier){
+                                    Map<String, TransactionDAG> transactionMap, Function<Coordinator, IHttpHandler> httpHandlerSupplier,
+                                    boolean recoveryEnabled){
 
         int tcpPort = Integer.parseInt( properties.getProperty("tcp_port") );
         ServerNode serverIdentifier = new ServerNode( "0.0.0.0", tcpPort );
@@ -174,6 +180,7 @@ public final class Coordinator extends ModbHttpServer {
                         .withNumQueuesVmsWorker(numQueuesVmsWorker)
                         .withMaxVmsWorkerSleep(maxSleep)
                         .withLogging(logging)
+                        .withRecoveryEnabled(recoveryEnabled)
                 ,
                 DEFAULT_STARTING_BATCH_ID,
                 DEFAULT_STARTING_TID,
@@ -216,6 +223,9 @@ public final class Coordinator extends ModbHttpServer {
 
         // coordinator options
         this.options = options;
+        coordinatorIsRecovering = options.getRecoveryEnabled();
+        var truncate = coordinatorIsRecovering ? false : true;
+        committedInfo = new LongPairStore("committed_info", truncate);
 
         try {
             if (options.getNetworkThreadPoolSize() > 0) {
@@ -269,15 +279,19 @@ public final class Coordinator extends ModbHttpServer {
         // to hold actions spawned by events received by different VMSs
         this.coordinatorQueue = new LinkedBlockingQueue<>();
 
-        // batch commit metadata
-        long dummyBatchOffset = startingBatchOffset - 1;
-        this.batchOffsetPendingCommit = startingBatchOffset;
-
-        // initialize batch offset map
+        // to store information about a batch
         this.batchContextMap = new ConcurrentHashMap<>();
-        BatchContext currentBatch = new BatchContext(dummyBatchOffset);
-        currentBatch.seal(startingTid - 1, startingTid - 1, Map.of(), Map.of());
-        this.batchContextMap.put(dummyBatchOffset, currentBatch);
+
+        if (!coordinatorIsRecovering) {
+            // batch commit metadata
+            long dummyBatchOffset = startingBatchOffset - 1;
+            this.batchOffsetPendingCommit = startingBatchOffset;
+
+            // initialize batch offset map
+            BatchContext currentBatch = new BatchContext(dummyBatchOffset);
+            currentBatch.seal(startingTid - 1, startingTid - 1, Map.of(), Map.of());
+            this.batchContextMap.put(dummyBatchOffset, currentBatch);
+        }
 
         this.vmsWorkerContainerMap = new HashMap<>();
         this.transactionWorkers = new ArrayList<>();
@@ -299,9 +313,29 @@ public final class Coordinator extends ModbHttpServer {
     public void run() {
         // setup asynchronous listener for new connections
         this.serverSocket.accept(null, new AcceptCompletionHandler());
+
         // connect to all virtual microservices
+        // don't truncate logging files if recovering
         this.setupStarterVMSs();
         this.preprocessDAGs();
+
+        // update batchContext and currentBatch
+        if (coordinatorIsRecovering)
+        {
+            // get the latest committed info
+            var latestCommittedBatch = committedInfo.getLatest();
+            var bid = latestCommittedBatch[0];
+            var maxTid = latestCommittedBatch[1];
+
+            // retrieve the events of uncommitted batches sent to the VMSes based on logs of VmsWorkers
+            for (var vmsWorker : this.vmsWorkerContainerMap.values()) {
+                // put into own separate thread?
+                var uncommittedEvents = vmsWorker.getUncommittedEvents(bid, maxTid);
+            }
+
+            // finish here
+        }
+
         this.setUpTransactionWorkers();
 
         // event loop
@@ -470,7 +504,6 @@ public final class Coordinator extends ModbHttpServer {
 
         @Override
         public void queueTransactionEvent(TransactionEvent.PayloadRaw payload){
-//            System.out.println("\nCoordinator.VmsWorkerContainer.queueTransactionEvent");
             this.queueFunc.accept(payload);
         }
     }
@@ -855,6 +888,10 @@ public final class Coordinator extends ModbHttpServer {
         if(batchContext.batchOffset == this.batchOffsetPendingCommit){
             this.numTIDsCommitted.updateAndGet(i -> i + batchContext.numTIDsOverall);
             this.sendCommitCommandToVMSs(batchContext);
+
+            // storing the commit persistently
+            committedInfo.put(batchContext.batchOffset, batchContext.lastTid);
+
             this.batchOffsetPendingCommit = batchContext.batchOffset + 1;
             // making this implementation order-independent, so not assuming batch commit are received in order
             BatchContext nextBatchContext = this.batchContextMap.get( this.batchOffsetPendingCommit );
@@ -878,7 +915,6 @@ public final class Coordinator extends ModbHttpServer {
         this.batchContextMap.put(batchContext.batchOffset, batchContext);
         // after storing batch context, send to vms workers
         for(var entry : batchContext.terminalVMSs) {
-//            System.out.println("Sending batchContext " + batchContext.batchOffset + " to " + entry);
             this.vmsWorkerContainerMap.get(entry).queueMessage(
                     BatchCommitInfo.of(batchContext.batchOffset,
                             batchContext.previousBatchPerVms.get(entry),

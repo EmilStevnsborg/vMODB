@@ -34,10 +34,7 @@ import java.nio.channels.AsynchronousCloseException;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.CompletionHandler;
 import java.nio.channels.WritePendingException;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.List;
-import java.util.Queue;
+import java.util.*;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
@@ -256,6 +253,38 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
         // out - shared by many vms workers
         this.coordinatorQueue = coordinatorQueue;
+    }
+
+    @Override
+    public Map<Long, ArrayList<Long>> getUncommittedEvents(long latestCommittedBatch, long latestCommittedTid)
+    {
+        // Maybe the precedence needs to be updated?
+
+        Map<Long, ArrayList<Long>> uncommittedEvents = new HashMap<>();
+        ByteBuffer writeBuffer;
+        int filePosition = 0;
+        while (filePosition != -1)
+        {
+            writeBuffer = retrieveByteBuffer();
+            var segmentMetadata = fromLogs.loadSegment(writeBuffer, filePosition);
+            var bid = segmentMetadata.bid;
+            if (bid > latestCommittedBatch) {
+
+                try {
+                    var transactionEvents = BatchUtils.disAssembleBatchPayload(writeBuffer);
+
+                    uncommittedEvents.putIfAbsent(bid, new ArrayList<>());
+                    List<Long> tids = transactionEvents.stream()
+                            .map(e -> e.tid())
+                            .toList();
+                    uncommittedEvents.get(bid).addAll(tids);
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        return uncommittedEvents;
     }
 
     @SuppressWarnings("StatementWithEmptyBody")

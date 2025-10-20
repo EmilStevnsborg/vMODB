@@ -1,4 +1,4 @@
-package dk.ku.di.dms.vms.modb.utils;
+package dk.ku.di.dms.vms.modb.common.logging;
 
 import java.io.*;
 import java.nio.*;
@@ -13,8 +13,8 @@ public final class LongPairStore implements Closeable {
 
     public LongPairStore(String filename, boolean truncate)
     {
-        StandardOpenOption[] options = StorageUtils.buildFileOpenOptions(truncate);
-        var file = StorageUtils.buildFile(filename);
+        StandardOpenOption[] options = buildFileOpenOptions(truncate);
+        var file = buildFile(filename);
         try {
             filechannel = FileChannel.open(Path.of(file.toURI()), options);
         } catch (IOException e) {
@@ -67,7 +67,35 @@ public final class LongPairStore implements Closeable {
             throw new RuntimeException(e);
         }
     }
+    public static StandardOpenOption[] buildFileOpenOptions(boolean truncate) {
+        StandardOpenOption[] options;
+//        System.out.println(STR."buildFileOpenOptions truncating=\{truncate}");
+        if(truncate){
+            options = new StandardOpenOption[]{
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.SPARSE,
+                    StandardOpenOption.READ,
+                    StandardOpenOption.WRITE
+            };
+        } else {
+            options = new StandardOpenOption[]{
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.SPARSE,
+                    StandardOpenOption.READ,
+                    StandardOpenOption.WRITE
+            };
+        }
+        return options;
+    }
 
+    public static File buildFile(String fileName) {
+        String currentDir = System.getProperty("user.dir");
+        String basePath = currentDir + "/checkpoint/";
+        String filePath = basePath + fileName + ".data";
+        File file = new File(filePath);
+        return file;
+    }
     @Override
     public void close() throws IOException {
         filechannel.force(true);

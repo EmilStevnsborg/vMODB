@@ -39,10 +39,15 @@ public class FlightService
         var flightSeatId = new FlightSeat.FlightSeatId(orderFlight.flight_id, orderFlight.seat_number);
         FlightSeat flightSeat = this.flightRepository.lookupByKey(flightSeatId);
 
+        // throw exception to trigger abort
+        if (flightSeat.occupied == 1)
+        {
+            throw new RuntimeException("flightSeat is occupied");
+        }
+
         // update occupied status
         flightSeat.occupied = 1;
         this.flightRepository.update(flightSeat);
-//        System.out.println(STR."fsId=\{flightSeatId} has been ordered \{flightSeat}");
 
         return new BookSeat(new Date(), orderFlight);
     }
