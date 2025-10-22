@@ -8,6 +8,7 @@ import java.util.Collections;
 
 public class AbortTests
 {
+
     // the booking needs to be reversed if a customer has
     public static void CustomerCantAffordFlightSeat(HttpClient client)
     {
@@ -17,7 +18,7 @@ public class AbortTests
         var dummyFlightSeats = DataGenerator.GenerateFlightSeats(client, flight_id, 50);
 
         // poor customer
-        var poorCustomer = new Customer(51, 0, "poor_customer");
+        var poorCustomer = new Customer(99, 0, "poor_customer");
         var poorCustomerFlightSeat = new FlightSeat(0, "poor_customer_seat");
         DataInjection.SendCustomer(client, poorCustomer);
         DataInjection.SendFlightSeat(client, poorCustomerFlightSeat);
@@ -47,10 +48,18 @@ public class AbortTests
         // bookings
         var unpaidBookings = Util.GetBookings(client).stream().filter(booking -> booking.paid != 1).toList();
 
-        System.out.println(STR."unpaidBookings len=\{unpaidBookings} and customer_id=\{unpaidBookings.get(0).customer_id}");
+
+        // ASSERT RESULT
+        if (unpaidBookings.size() != 1 && unpaidBookings.get(0).customer_id != poorCustomer.customer_id)
+        {
+            System.out.println("FAILED (CustomerCantAffordFlightSeat)");
+        }
+
+        System.out.println(STR."SUCCESS (CustomerCantAffordFlightSeat): only \{unpaidBookings.size()} unpaid booking for " +
+                           STR."customer_id=\{unpaidBookings.get(0).customer_id}");
     }
 
-    public void BookingIsNotPaidFor(HttpClient client)
+    public void CancelBookingFailed(HttpClient client)
     {
 
     }

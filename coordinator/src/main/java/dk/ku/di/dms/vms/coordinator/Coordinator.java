@@ -987,10 +987,8 @@ public final class Coordinator extends ModbHttpServer {
      */
     private void sendCommitCommandToVMSs(BatchContext batchContext){
         for(VmsNode vms : this.vmsMetadataMap.values()){
-            if(batchContext.terminalVMSs.contains(vms.identifier)) {
-                LOGGER.log(DEBUG,"Leader: Batch ("+batchContext.batchOffset+") commit command not sent to "+ vms.identifier + " (terminal)");
-                continue;
-            }
+
+
             // has this VMS participated in this batch?
             if(!batchContext.numberOfTIDsPerVms.containsKey(vms.identifier)){
                 LOGGER.log(DEBUG,"Leader: Batch ("+batchContext.batchOffset+") commit command will not be sent to "+ vms.identifier + " because this VMS has not participated in this batch.");

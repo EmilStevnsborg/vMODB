@@ -52,9 +52,20 @@ public final class Main {
         @Override
         public void post(String uri, String payload)
         {
-//        System.out.println(STR."\nPosting \{payload}\n");
+
+            String[] split = uri.split("/");
+            long lastTid = VMS.lastTidFinished();
+            this.transactionManager.beginTransaction(lastTid, 0, lastTid, false);
+
+            if (split[split.length-1].equals("clear"))
+            {
+                System.out.println("DELETING ALL DATA");
+                var customers = this.repository.getAll();
+                this.repository.deleteAll(customers);
+                return;
+            }
+
             Customer customer = SERDES.deserialize(payload, Customer.class);
-            this.transactionManager.beginTransaction(0, 0, 0, false);
             this.repository.upsert(customer);
         }
 
@@ -64,6 +75,7 @@ public final class Main {
             System.out.println("Get customers");
             String[] split = uri.split("/");
             long lastTid = VMS.lastTidFinished();
+
             this.transactionManager.beginTransaction(lastTid, 0, lastTid, true);
             if (split[split.length - 1].equals("customer")) {
                 var customers = this.repository.getAll();

@@ -435,11 +435,6 @@ public final class VmsEventHandler extends ModbHttpServer {
             // must be queued in case leader is off and comes back online
             this.leaderWorker.queueMessage(BatchComplete.of(thisBatch.batch, this.me.identifier));
         }
-        System.out.println(STR."Checkpointing in updateBatchStats: \{this.options.checkpointing()}");
-        if(this.options.checkpointing()){
-            LOGGER.log(INFO, this.me.identifier + ": Requesting checkpoint for batch " + thisBatch.batch);
-            submitBackgroundTask(()->checkpoint(thisBatch.batch, batchMetadata.maxTidExecuted));
-        }
     }
 
     private BatchMetadata updateBatchMetadataAtomically(OutboundEventResult outputEvent) {
@@ -521,6 +516,8 @@ public final class VmsEventHandler extends ModbHttpServer {
         TransactionEvent.PayloadRaw payload = TransactionEvent.of(outputEvent.tid(), outputEvent.batch(), outputEvent.outputQueue(), objStr, precedenceMap);
         for(IVmsContainer consumerVmsContainer : consumerVMSs) {
             LOGGER.log(DEBUG,this.me.identifier+": An output event (queue: " + outputEvent.outputQueue() + ") will be queued to VMS: " + consumerVmsContainer.identifier());
+
+
             consumerVmsContainer.queue(payload);
         }
     }
@@ -1256,7 +1253,6 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         /**
          * Context of execution of this method:
-         * This is not a terminal node in this batch
          */
         private void processNewBatchCommand(BatchCommitCommand.Payload batchCommitCommand){
             System.out.println("VmsEventHandler.processNewBatchCommand " + batchCommitCommand);

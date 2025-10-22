@@ -49,11 +49,27 @@ public final class Main {
             System.out.println(STR."\nRepo is \{repository}\n");
         }
 
+        @Override
+        public void post(String uri, String payload) {
+
+            String[] split = uri.split("/");
+            long lastTid = VMS.lastTidFinished();
+            this.transactionManager.beginTransaction(lastTid, 0, lastTid, false);
+
+            if (split[split.length-1].equals("clear"))
+            {
+                System.out.println("DELETING ALL DATA");
+                var bookings = repository.getAll();
+                this.repository.deleteAll(bookings);
+            }
+        }
+
         // http://host/booking
         @Override
         public String getAsJson(String uri) {
             System.out.println("Get bookings");
             String[] split = uri.split("/");
+
             long lastTid = VMS.lastTidFinished();
             this.transactionManager.beginTransaction(lastTid, 0, lastTid, true);
             var bookings = this.repository.getAll();

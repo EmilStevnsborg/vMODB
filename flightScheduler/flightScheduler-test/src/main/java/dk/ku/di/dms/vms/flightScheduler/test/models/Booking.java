@@ -32,7 +32,7 @@ public class Booking
     public String toString() {
         return "{\n"
                 + "  \"booking_id\":" + booking_id + ",\n"
-                + "  \"custome_id\":" + customer_id + "\n"
+                + "  \"customer_id\":" + customer_id + "\n"
                 + "  \"flight_id\":" + flight_id + ",\n"
                 + "  \"seat_number\":\"" + seat_number + "\",\n"
                 + "  \"timestamp\":\"" + timestamp + "\",\n"

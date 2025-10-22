@@ -13,6 +13,10 @@ import java.util.function.Function;
  */
 public interface ILoggingHandler {
 
+    default void log(TransactionEvent.PayloadRaw payloadRaw) {}
+    default void commit(long bid) {}
+
+    // OLD STYLE
     default void log(ByteBuffer byteBuffer) throws IOException { }
     default SegmentMetadata loadSegment(ByteBuffer byteBuffer, long filePosition) throws IOException { return null; };
     default TransactionEvent.Payload removeFailedEvent(ByteBuffer placeHolderBuffer, long failedTid, long batch) throws IOException { return null; }
