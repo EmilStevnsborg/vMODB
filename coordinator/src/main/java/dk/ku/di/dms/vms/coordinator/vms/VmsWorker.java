@@ -1,9 +1,6 @@
 package dk.ku.di.dms.vms.coordinator.vms;
 
 import dk.ku.di.dms.vms.coordinator.options.VmsWorkerOptions;
-import dk.ku.di.dms.vms.modb.common.logging.FromLogs;
-import dk.ku.di.dms.vms.modb.common.logging.ILoggingHandler;
-import dk.ku.di.dms.vms.modb.common.logging.LoggingHandlerBuilder;
 import dk.ku.di.dms.vms.modb.common.memory.MemoryManager;
 import dk.ku.di.dms.vms.modb.common.runnable.StoppableRunnable;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitAck;
@@ -90,9 +87,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
     private State state;
 
-    private final ILoggingHandler loggingHandler;
-    private final FromLogs fromLogs;
-
     private final IVmsSerdesProxy serdesProxy;
 
     private final ByteBuffer readBuffer;
@@ -113,8 +107,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private final IVmsDeque transactionEventQueue;
 
     private final Deque<Object> messageQueue;
-
-    private final Queue<ByteBuffer> loggingWriteBuffers = new ConcurrentLinkedQueue<>();
 
     private final Deque<ByteBuffer> pendingWriteBuffers = new ConcurrentLinkedDeque<>();
 
@@ -227,15 +219,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
         this.readBuffer = MemoryManager.getTemporaryDirectBuffer(options.networkBufferSize());
 
-        // logging
-        if(options.logging()) {
-            this.loggingHandler = LoggingHandlerBuilder.build("coordinator_"+consumerVms.identifier); }
-        else {
-            this.loggingHandler = new ILoggingHandler() { };
-        }
         this.serdesProxy = serdesProxy;
-
-        this.fromLogs = new FromLogs(loggingHandler, serdesProxy);
 
         // in
         this.messageQueue = new ConcurrentLinkedDeque<>();
@@ -253,38 +237,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
         // out - shared by many vms workers
         this.coordinatorQueue = coordinatorQueue;
-    }
-
-    @Override
-    public Map<Long, ArrayList<Long>> getUncommittedEvents(long latestCommittedBatch, long latestCommittedTid)
-    {
-        // Maybe the precedence needs to be updated?
-
-        Map<Long, ArrayList<Long>> uncommittedEvents = new HashMap<>();
-        ByteBuffer writeBuffer;
-        int filePosition = 0;
-        while (filePosition != -1)
-        {
-            writeBuffer = retrieveByteBuffer();
-            var segmentMetadata = fromLogs.loadSegment(writeBuffer, filePosition);
-            var bid = segmentMetadata.bid;
-            if (bid > latestCommittedBatch) {
-
-                try {
-                    var transactionEvents = BatchUtils.disAssembleBatchPayload(writeBuffer);
-
-                    uncommittedEvents.putIfAbsent(bid, new ArrayList<>());
-                    List<Long> tids = transactionEvents.stream()
-                            .map(e -> e.tid())
-                            .toList();
-                    uncommittedEvents.get(bid).addAll(tids);
-
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-        return uncommittedEvents;
     }
 
     @SuppressWarnings("StatementWithEmptyBody")
@@ -382,17 +334,18 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             if (this.initSimpleConnection()) return;
         }
         System.out.println(STR."consumer=\{consumerVms.identifier} this.options.active()=\{this.options.active()}");
-        if(this.options.active()) {
-            this.eventLoop();
-            System.out.println(STR."BROKE OUT OF EVENTLOOP consumerIsRecovering=\{consumerIsRecovering}");
-        } else
+        if(this.options.active())
         {
-            while (this.isRunning()) {
+            while (this.isRunning())
+            {
                 if (this.consumerIsRecovering)
                 {
                     System.out.println(STR."Consumer is recovering... consumer=\{consumerVms.identifier}");
                     reconnect();
                 }
+                if (this.consumerIsRecovering) continue;
+                this.eventLoop();
+                System.out.println(STR."BROKE OUT OF EVENTLOOP consumerIsRecovering=\{consumerIsRecovering}");
             }
         }
         System.out.println(STR."RUN is over");
@@ -456,7 +409,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 if(this.drained.isEmpty()){
                     pollTimeout = Math.min(pollTimeout * 2, this.options.maxSleep());
                     this.processPendingNetworkTasks();
-                    this.processPendingLogging();
                     this.giveUpCpu(pollTimeout);
                     continue;
                 }
@@ -467,26 +419,8 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 //                    this.sendEvent(payloadRaw);
 //                }
                 this.processPendingNetworkTasks();
-                this.processPendingLogging();
             } catch (Exception e) {
                 LOGGER.log(ERROR, "Leader: VMS worker for "+this.consumerVms.identifier+" has caught an exception: \n"+e);
-            }
-        }
-    }
-
-    private void processPendingLogging(){
-        ByteBuffer writeBuffer;
-        if((writeBuffer = this.loggingWriteBuffers.poll()) != null){
-            System.out.println("Logging writeBuffer");
-            try {
-                writeBuffer.position(0);
-                this.loggingHandler.log(writeBuffer);
-                // return buffer
-                this.returnByteBuffer(writeBuffer);
-            } catch (IOException e) {
-//                System.out.println("coordinator.VmsWorker.processPendingLogging.error: on writing byte buffer to logging file");
-                LOGGER.log(ERROR, "error on writing byte buffer to logging file: "+e.getMessage());
-                this.loggingWriteBuffers.add(writeBuffer);
             }
         }
     }
@@ -518,9 +452,10 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     }
 
     @Override
-    public void queueTransactionEvent(TransactionEvent.PayloadRaw payloadRaw) {
-//        System.out.println(STR."Coordinator queueTransactionEvent");
+    public void queueTransactionEvent(TransactionEvent.PayloadRaw payloadRaw)
+    {
         this.transactionEventQueue.insert(payloadRaw);
+        System.out.println("Queue singular transaction event " + payloadRaw);
     }
 
     @SuppressWarnings("unused")
@@ -542,17 +477,14 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             case BatchCommitCommand.Payload o -> {
                 System.out.println("\nVmsWorker.sendMessage.BatchCommitCommand\n");
                 this.sendBatchCommitCommand(o);
-                this.loggingHandler.force();
             }
             case BatchCommitInfo.Payload o -> {
                 System.out.println("\nVmsWorker.sendMessage.BatchCommitInfo payload" + o);
                 this.sendBatchCommitInfo(o);
-                this.loggingHandler.force();
             }
             case TransactionAbort.Payload o -> {
                 System.out.println(STR."VmsWorker.sendMessage.TransactionAbort: \{message}");
-                this.abortInCoordinator(o);
-                this.loggingHandler.force();
+                this.sendTransactionAbort(o);
             }
             case Recovery.Payload o -> {
                 // just send the recovery message to the Vms
@@ -562,14 +494,13 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 }
                 // if the vms is the crashed one, process the connection
                 this.processRecovery(o);
-                this.loggingHandler.force();
             }
             case String o -> {
                 this.consumerSetVmsStr = o;
                 this.sendConsumerSet(o);
             }
             default ->
-                    LOGGER.log(WARNING, "Leader: VMS worker for " + this.consumerVms.identifier + " has unknown message type: " + message.getClass().getName());
+                LOGGER.log(WARNING, "Leader: VMS worker for " + this.consumerVms.identifier + " has unknown message type: " + message.getClass().getName());
         }
     }
 
@@ -578,7 +509,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     // Coordinator VmsWorker observes that connection to VMS crashed,
     //      1. it starts recovering, and sends message to coordinator,
     //         which can forward the message to relevant VMSes through other workers
-    private void initializeRecoveryInCoordinator(IdentifiableNode crashedVms)
+    private void  initializeRecoveryInCoordinator(IdentifiableNode crashedVms)
     {
         // safeguard in the case, it is triggered after receiving recovery message
         // from coordinator caused by other connection crash
@@ -615,46 +546,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         writeBuffer.flip();
         this.acquireLock();
         this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
-    }
-
-    private void abortInCoordinator(TransactionAbort.Payload payload)
-    {
-        System.out.println("VmsWorker calls abortInCoordinator");
-        // send the message
-        sendTransactionAbort(payload);
-
-        // buffers may not have been written to logs?
-
-        // fix precedence
-        ByteBuffer writeBuffer;
-        writeBuffer = retrieveByteBuffer();
-        var failedEvent = fromLogs.removeFailedEvent(writeBuffer, payload.tid(), payload.batch());
-        System.out.println(STR."FAILED EVENT: \{failedEvent}");
-
-        if (failedEvent != null) fromLogs.fixPrecedence(writeBuffer, failedEvent);
-        returnByteBuffer(writeBuffer);
-
-        // RESEND events later than failedTid
-        long filePosition;
-        filePosition = 0;
-        while (filePosition != -1)
-        {
-            writeBuffer = retrieveByteBuffer();
-            var segmentMetadata = fromLogs.loadSegment(writeBuffer, filePosition, failedEvent.tid(), failedEvent.batch());
-            filePosition = segmentMetadata.nextFilePosition;
-
-            if (segmentMetadata.eventCount == 0) {
-                returnByteBuffer(writeBuffer);
-                continue;
-            }
-
-            if (segmentMetadata.bid < failedEvent.batch()) {
-                returnByteBuffer(writeBuffer);
-                continue;
-            }
-            writeBuffer.flip();
-            this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
-        }
     }
 
     private void sendTransactionAbort(TransactionAbort.Payload payload) {
@@ -874,7 +765,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
      * While a write operation is in progress, it must wait for completion and then submit the next write.
      */
     private void sendBatchOfEvents(){
-        System.out.println(STR."VmsWorker.sendBatchOfEvents for \{consumerVms.identifier}");
         int remaining = this.drained.size();
 //        System.out.println(STR."Sending \{remaining} transaction events");
         int count = remaining;
@@ -889,16 +779,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 count = remaining;
                 writeBuffer.flip();
 
-                // blocking way
-//                do {
-//                    this.channel.write(writeBuffer).get();
-//                } while(writeBuffer.hasRemaining());
-//                this.returnByteBuffer(writeBuffer);
-
-                // maximize useful work
-                while(!this.tryAcquireLock()){
-                    this.processPendingLogging();
-                }
                 this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.batchWriteCompletionHandler);
 
             } catch (Exception e) {
@@ -969,11 +849,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 channel.write(byteBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, byteBuffer, this);
             } else {
                 releaseLock();
-                if(options.logging()){
-                    loggingWriteBuffers.add(byteBuffer);
-                } else {
-                    returnByteBuffer(byteBuffer);
-                }
+                returnByteBuffer(byteBuffer);
             }
         }
 

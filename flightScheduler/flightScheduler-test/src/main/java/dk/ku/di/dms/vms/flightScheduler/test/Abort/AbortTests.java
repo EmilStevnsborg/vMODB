@@ -1,5 +1,10 @@
-package dk.ku.di.dms.vms.flightScheduler.test;
+package dk.ku.di.dms.vms.flightScheduler.test.Abort;
 
+import dk.ku.di.dms.vms.flightScheduler.test.DataGenerator;
+import dk.ku.di.dms.vms.flightScheduler.test.DataInjection;
+import dk.ku.di.dms.vms.flightScheduler.test.Transactions;
+import dk.ku.di.dms.vms.flightScheduler.test.Util.Util;
+import dk.ku.di.dms.vms.flightScheduler.test.Util.VmsEndpoints;
 import dk.ku.di.dms.vms.flightScheduler.test.models.Customer;
 import dk.ku.di.dms.vms.flightScheduler.test.models.FlightSeat;
 
@@ -14,8 +19,7 @@ public class AbortTests
     {
         // injecting data
         var dummyCustomers = DataGenerator.GenerateCustomers(client, 50);
-        var flight_id = 0;
-        var dummyFlightSeats = DataGenerator.GenerateFlightSeats(client, flight_id, 50);
+        var dummyFlightSeats = DataGenerator.GenerateFlightSeats(client, 0, 50);
 
         // poor customer
         var poorCustomer = new Customer(99, 0, "poor_customer");
@@ -34,7 +38,7 @@ public class AbortTests
         Util.Sleep(1000);
 
         // bookings
-        var bookings = Util.GetBookings(client);
+        var bookings = VmsEndpoints.GetBookings(client);
         Collections.shuffle(bookings);
 
         // Pay bookings (will throw exception for poor customer)
@@ -46,15 +50,26 @@ public class AbortTests
         Util.Sleep(1000);
 
         // bookings
-        var unpaidBookings = Util.GetBookings(client).stream().filter(booking -> booking.paid != 1).toList();
+        var unpaidBookings = VmsEndpoints.GetBookings(client).stream().filter(booking -> booking.paid != 1).toList();
+
+        // customers
+        var customers = VmsEndpoints.GetCustomers(client);
+        var poorCustomerGet = customers.stream().filter(c -> c.customer_id == poorCustomer.customer_id).toList().get(0);
+
 
 
         // ASSERT RESULT
-        if (unpaidBookings.size() != 1 && unpaidBookings.get(0).customer_id != poorCustomer.customer_id)
+        if (poorCustomerGet.money != poorCustomer.money)
         {
-            System.out.println("FAILED (CustomerCantAffordFlightSeat)");
+            System.out.println(STR."FAILED (CustomerCantAffordFlightSeat): " +
+                               STR."poorCustomerGet.money=\{poorCustomerGet.money} != \{poorCustomer.money}=poorCustomer.money");
+            return;
         }
-
+        if (unpaidBookings.size() != 1 || unpaidBookings.get(0).customer_id != poorCustomer.customer_id)
+        {
+            System.out.println(STR."FAILED (CustomerCantAffordFlightSeat): \{unpaidBookings.size()} unpaid booking");
+            return;
+        }
         System.out.println(STR."SUCCESS (CustomerCantAffordFlightSeat): only \{unpaidBookings.size()} unpaid booking for " +
                            STR."customer_id=\{unpaidBookings.get(0).customer_id}");
     }

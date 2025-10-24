@@ -59,6 +59,13 @@ public final class TransactionEvent {
         return new Payload(tid, batch, event, payload, precedenceMap);
     }
 
+    public static Payload read(PayloadRaw payloadRaw) {
+        String event = new String(payloadRaw.event(), StandardCharsets.UTF_8);
+        String payload = new String(payloadRaw.payload(), StandardCharsets.UTF_8);
+        String precedenceMap = new String(payloadRaw.precedenceMap(), StandardCharsets.UTF_8);
+        return new Payload(payloadRaw.tid(), payloadRaw.batch(), event, payload, precedenceMap);
+    }
+
     /**
      * This is the base class for representing the data transferred across the framework and the sidecar
      * It serves both for input and output

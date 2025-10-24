@@ -1,13 +1,10 @@
 package dk.ku.di.dms.vms.flightScheduler.test;
 
-import dk.ku.di.dms.vms.flightScheduler.test.models.Customer;
-import dk.ku.di.dms.vms.flightScheduler.test.models.FlightSeat;
+import dk.ku.di.dms.vms.flightScheduler.test.Abort.AbortTests;
+import dk.ku.di.dms.vms.flightScheduler.test.Recovery.RecoveryTests;
 
-import java.net.URI;
+import java.io.IOException;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.util.*;
 
 public final class Main
 {
@@ -20,7 +17,13 @@ public final class Main
 //        Test.FailedFlightOrder(client);
 //        Test.FailedPayment(client);
 //        Test.RecoveryTest(client);
-        AbortTests.CustomerCantAffordFlightSeat(client);
+//        AbortTests.CustomerCantAffordFlightSeat(client);
+        try
+        {
+            RecoveryTests.CustomerCrash(client);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     //

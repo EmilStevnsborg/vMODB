@@ -4,6 +4,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -14,11 +15,21 @@ import java.util.function.Function;
 public interface ILoggingHandler {
 
     default void log(TransactionEvent.PayloadRaw payloadRaw) {}
-    default void commit(long bid) {}
+    default boolean commit(long bid) { return false; }
+    default long[] latestCommit() throws IOException { return new long[] {0,0}; }
+    default void abort(long failedTid, long failedTidBatch) {}
+    default void cutLog(long failedTid, long failedTidBatch) {}
+    default int countEventsInBatch(long batch) { return 0; }
+    default List<TransactionEvent.PayloadRaw> getAffectedEvents(long failedTid) { return List.of(); }
+
+    default List<TransactionEvent.PayloadRaw> getUncommittedEvents(List<String> eventTypes) { return List.of(); }
+
+
+
 
     // OLD STYLE
     default void log(ByteBuffer byteBuffer) throws IOException { }
-    default SegmentMetadata loadSegment(ByteBuffer byteBuffer, long filePosition) throws IOException { return null; };
+    default SegmentMetadata loadSegment(ByteBuffer byteBuffer, long filePosition) throws IOException { return null; }
     default TransactionEvent.Payload removeFailedEvent(ByteBuffer placeHolderBuffer, long failedTid, long batch) throws IOException { return null; }
     default void fixPrecedence(ByteBuffer placeHolderBuffer,
                                long failedTid, long batch,

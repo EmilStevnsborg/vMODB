@@ -1,4 +1,4 @@
-package dk.ku.di.dms.vms.flightScheduler.test;
+package dk.ku.di.dms.vms.flightScheduler.test.Util;
 
 
 import dk.ku.di.dms.vms.flightScheduler.test.models.Booking;
@@ -16,17 +16,9 @@ import java.util.Arrays;
 import java.util.List;
 
 
-public class Util
+public class VmsEndpoints
 {
     protected static final IVmsSerdesProxy SERDES = VmsSerdesProxyBuilder.build();
-    public static void Sleep(int milliseconds)
-    {
-        try
-        {
-            System.out.println(STR."Sleeping for \{milliseconds}ms....");
-            Thread.sleep(milliseconds);
-        } catch (InterruptedException e){}
-    }
 
     public static List<Booking> GetBookings(HttpClient client)
     {

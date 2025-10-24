@@ -9,6 +9,7 @@ import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 import static java.lang.System.Logger.Level.*;
 
@@ -61,7 +62,6 @@ public final class TransactionWorker extends StoppableRunnable {
     /**
      * Build private VmsTracking objects
      */
-    @SuppressWarnings("ToArrayCallWithZeroLengthArrayArgument")
     public static TransactionWorker build(int id, Deque<TransactionInput> inputQueue,
                                           long startingTid, int maxNumberOfTIDsBatch,
                                           int batchWindow, int numWorkers,
@@ -71,7 +71,8 @@ public final class TransactionWorker extends StoppableRunnable {
                                           Map<String, VmsNode[]> vmsIdentifiersPerDAG,
                                           Map<String, IVmsWorker> vmsWorkerContainerMap,
                                           Queue<Object> coordinatorQueue,
-                                          IVmsSerdesProxy serdesProxy){
+                                          IVmsSerdesProxy serdesProxy)
+    {
         Map<String, VmsTracking> vmsTrackingMap = new HashMap<>();
         Map<String, VmsTracking[]> vmsPerTransactionMap = new HashMap<>(vmsIdentifiersPerDAG.size());
         for(var txEntry : vmsIdentifiersPerDAG.entrySet()){
@@ -95,7 +96,7 @@ public final class TransactionWorker extends StoppableRunnable {
                               Queue<Map<String, PrecedenceInfo>> precedenceMapOutputQueue,
                               Map<String, TransactionDAG> transactionMap, Map<String, VmsTracking[]> vmsPerTransactionMap,
                               Map<String, VmsTracking> vmsTrackingMap, Map<String, IVmsWorker> vmsWorkerContainerMap,
-                              Queue<Object> coordinatorQueue, IVmsSerdesProxy serdesProxy){
+                              Queue<Object> coordinatorQueue, IVmsSerdesProxy serdesProxy) {
         this.id = id;
         this.inputQueue = inputQueue;
         this.startingTidBatch = startingTidBatch;
@@ -211,6 +212,7 @@ public final class TransactionWorker extends StoppableRunnable {
             TransactionEvent.PayloadRaw txEvent = TransactionEvent.of(this.tid, this.batchContext.batchOffset,
                     transactionInput.event.name, transactionInput.event.payload, precedenceMapStr);
             LOGGER.log(DEBUG,"Leader: Transaction worker "+id+" adding event "+event.name+" to "+inputVms.identifier+" worker:\n"+txEvent+"\n"+previousTidPerVms);
+
             this.vmsWorkerContainerMap.get(inputVms.identifier).queueTransactionEvent(txEvent);
         }
         System.out.println("Increment tid " + this.tid + " with +1");
@@ -287,6 +289,7 @@ public final class TransactionWorker extends StoppableRunnable {
             TransactionEvent.PayloadRaw txEvent = TransactionEvent.of(pendingInput.tid, pendingInput.batch,
                     pendingInput.input.event.name, pendingInput.input.event.payload, precedenceMapStr);
             LOGGER.log(DEBUG,"Leader: Transaction worker "+id+" adding event "+event.name+" to "+inputVms.identifier+" worker:\n"+txEvent+"\n"+pendingInput.previousTidPerVms);
+
             this.vmsWorkerContainerMap.get(inputVms.identifier).queueTransactionEvent(txEvent);
         }
 
@@ -298,7 +301,6 @@ public final class TransactionWorker extends StoppableRunnable {
     }
 
     private boolean advanceCurrentBatch() {
-        System.out.println(STR."TransactionWorker.advanceCurrentBatch");
         if(!this.precedenceMapCache.containsKey(this.batchContext.batchOffset - this.numWorkers)) {
             return false;
         }

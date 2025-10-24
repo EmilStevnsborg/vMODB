@@ -8,7 +8,6 @@ import java.util.ArrayList;
 public interface ITransactionManager {
 
     default void checkpoint(long batch, long maxTid) { }
-    default long[] latestCommitInfo() { return new long[] {0,0}; }
 
     // for abort in memory
     default void restoreStableState(long failedTid) { }

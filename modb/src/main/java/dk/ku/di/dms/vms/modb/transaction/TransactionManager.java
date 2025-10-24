@@ -25,7 +25,6 @@ import dk.ku.di.dms.vms.modb.query.planner.SimplePlanner;
 import dk.ku.di.dms.vms.modb.transaction.multiversion.index.IMultiVersionIndex;
 import dk.ku.di.dms.vms.modb.transaction.multiversion.index.NonUniqueSecondaryIndex;
 import dk.ku.di.dms.vms.modb.transaction.multiversion.index.PrimaryIndex;
-import dk.ku.di.dms.vms.modb.common.logging.LongPairStore;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -64,8 +63,6 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
     private final boolean checkpointing;
     private final boolean recovering;
 
-    private LongPairStore committedInfo;
-
     public TransactionManager(Map<String, Table> catalog, boolean checkpointing, boolean recovering){
         this.planner = new SimplePlanner();
         this.analyzer = new Analyzer(catalog);
@@ -77,7 +74,6 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
 
         String filename = "committed_batches";
         var truncate = recovering ? false : true;
-        committedInfo = new LongPairStore(filename, truncate);
     }
 
     private boolean fkConstraintViolation(TransactionContext txCtx, Table table, Object[] values){
@@ -449,8 +445,6 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
                 table.primaryKeyIndex().checkpoint(maxTid); // checkpointing here
             }
 
-            this.committedInfo.put(batch, maxTid);
-
         } else {
             LOGGER.log(INFO, "Checkpoint disabled. Starting only garbage collection for max TID "+maxTid);
             for (Table table : this.catalog.values()) {
@@ -458,12 +452,6 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
             }
         }
         LOGGER.log(INFO, "Checkpoint for max TID "+maxTid+" finished at "+System.currentTimeMillis());
-    }
-
-    @Override
-    public long[] latestCommitInfo()
-    {
-        return committedInfo.getLatest();
     }
 
     @Override

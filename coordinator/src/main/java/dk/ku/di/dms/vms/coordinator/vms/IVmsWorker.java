@@ -8,9 +8,8 @@ import java.util.List;
 import java.util.Map;
 
 public interface IVmsWorker {
-    default Map<Long, ArrayList<Long>> getUncommittedEvents(long latestCommittedBatch, long latestCommittedTid)
-    { return new HashMap<Long, ArrayList<Long>>(); }
     default void queueTransactionEvent(TransactionEvent.PayloadRaw payloadRaw) { }
+    default void requeueTransactionEvent(TransactionEvent.PayloadRaw payload) {}
 
     default void queueMessage(Object message) { }
 
