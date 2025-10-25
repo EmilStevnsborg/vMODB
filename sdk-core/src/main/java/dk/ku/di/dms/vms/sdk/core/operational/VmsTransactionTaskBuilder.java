@@ -121,7 +121,7 @@ public final class VmsTransactionTaskBuilder {
             try {
                 Object output = this.signature.method().invoke(this.signature.vmsInstance(), this.inputEvent);
                 OutboundEventResult eventOutput = new OutboundEventResult(this.tid, this.batch, this.signature.outputQueue(), output);
-                transactionManager.commit();
+                transactionManager.installWrites();
                 schedulerCallback.success(this.signature.executionMode(), eventOutput);
             } catch (IllegalAccessException | InvocationTargetException e) {
                 this.handleErrorOnTask(e, this.inputEvent);

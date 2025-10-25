@@ -22,6 +22,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitCommand;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitInfo;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchComplete;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.Presentation;
+import dk.ku.di.dms.vms.modb.common.schema.network.control.RecoverEvents;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.Recovery;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
@@ -537,6 +538,7 @@ public final class Coordinator extends ModbHttpServer {
         }
         @Override
         public void requeueTransactionEvent(TransactionEvent.PayloadRaw payload){
+            System.out.println();
             log.accept(payload);
             this.queueFunc.accept(payload);
         }
@@ -806,6 +808,18 @@ public final class Coordinator extends ModbHttpServer {
             case TransactionAbortInfo.Payload txAbortInfo -> this.abortTransactionInCoordinator(txAbortInfo);
             case BatchComplete.Payload batchComplete -> this.processBatchComplete(batchComplete);
             case Recovery.Payload recovery -> this.processRecoveryInCoordinator(recovery);
+            case RecoverEvents.Payload recoverEvents ->
+            {
+                // resend the events of the uncommitted batch
+                var crashedVmsEvents = this.consumerToEventsMap.get(recoverEvents.vms());
+                var uncommittedEventsForCrashedVms = loggingHandler.getUncommittedEvents(crashedVmsEvents);
+                if (uncommittedEventsForCrashedVms.isEmpty()) return;
+                System.out.println(STR."Resending events to \{recoverEvents.vms()}");
+                for (var event: uncommittedEventsForCrashedVms)
+                {
+                    vmsWorkerContainerMap.get(recoverEvents.vms()).requeueTransactionEvent(event);
+                }
+            }
             case BatchCommitAck.Payload msg ->
                 // let's just ignore the ACKs. since the terminals have responded, that means the VMSs before them have processed the transactions in the batch
                 // not sure if this is correct since we have to wait for all VMSs to respond...
@@ -931,15 +945,6 @@ public final class Coordinator extends ModbHttpServer {
     {
         System.out.println("Coordinator processRecoveryInCoordinator");
         multiCast(recovery);
-
-        // resend the events of the uncommitted batch
-        var crashedVmsEvents = this.consumerToEventsMap.get(recovery.vms());
-        var uncommittedEventsForCrashedVms = loggingHandler.getUncommittedEvents(crashedVmsEvents);
-
-        for (var event: uncommittedEventsForCrashedVms)
-        {
-            vmsWorkerContainerMap.get(recovery.vms()).requeueTransactionEvent(event);
-        }
     }
 
     private void processBatchComplete(BatchComplete.Payload batchComplete) {
@@ -960,10 +965,15 @@ public final class Coordinator extends ModbHttpServer {
 
     private void updateBatchOffsetPendingCommit(BatchContext batchContext) {
         if(batchContext.batchOffset == this.batchOffsetPendingCommit){
+
+            System.out.println(STR."Coordinator will initiate commit of batch=\{batchOffsetPendingCommit}");
+
+            // STORE committed batch events persistently
+            loggingHandler.commit(batchOffsetPendingCommit);
+
             this.numTIDsCommitted.updateAndGet(i -> i + batchContext.numTIDsOverall);
             this.sendCommitCommandToVMSs(batchContext);
 
-            // STORE the commit persistently
 
             this.batchOffsetPendingCommit = batchContext.batchOffset + 1;
             // making this implementation order-independent, so not assuming batch commit are received in order

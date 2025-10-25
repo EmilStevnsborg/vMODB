@@ -464,12 +464,12 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
     }
 
     /**
-     * The idea of commit is to make the effects of the transaction (i.e., operations)
+     * The idea of installWrites is to make the effects of the transaction (i.e., operations)
      * materialized in the underlying indexes. The primary index does not need such because
      * it already tracks individual operations on keys through its own cache.
      */
     @Override
-    public void commit(){
+    public void installWrites(){
         TransactionContext txCtx = this.txCtxMap.get(Thread.currentThread().threadId());
         for(var index : txCtx.indexes){
             index.installWrites(txCtx);

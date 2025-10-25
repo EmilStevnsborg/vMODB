@@ -6,6 +6,7 @@ import dk.ku.di.dms.vms.modb.common.memory.MemoryManager;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.*;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.ConsumerSet;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.Presentation;
+import dk.ku.di.dms.vms.modb.common.schema.network.control.RecoverEvents;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.Recovery;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
@@ -36,9 +37,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.*;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -140,6 +139,8 @@ public final class VmsEventHandler extends ModbHttpServer {
     private BiConsumer<Long, Long> recoveryHandler;
 
     private ILoggingHandler loggingHandler;
+
+    private final BlockingQueue<Object> vmsQueue;
 
     public static VmsEventHandler build(// to identify which vms this is
                                         VmsNode me,
@@ -251,6 +252,8 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         var logIdentifier = STR."\{me.identifier}_out";
         this.loggingHandler = LoggingHandlerBuilder.build(logIdentifier, serdesProxy, options.networkBufferSize);
+
+        this.vmsQueue = new LinkedBlockingQueue<>();
     }
 
     @Override
@@ -261,6 +264,29 @@ public final class VmsEventHandler extends ModbHttpServer {
         var crashOccurred = true;
         System.out.println(STR."crashOccurred=\{crashOccurred} && recoveryEnabled=\{recoveryEnabled}");
         if (crashOccurred && recoveryEnabled) recoverVms();
+
+         new Thread(() -> {
+            try {
+                while (isRunning()) {
+                    Object message = vmsQueue.poll(250, TimeUnit.MILLISECONDS);
+                    if (message == null) continue;
+
+                    switch (message) {
+                        case RecoverEvents.Payload recoverEvents -> {
+                            System.out.println("Resending events to " + recoverEvents.vms());
+                            var crashedVmsEvents = consumerToEventsMap.get(recoverEvents.vms());
+                            var uncommitted = loggingHandler.getUncommittedEvents(crashedVmsEvents);
+                            for (var event : uncommitted) {
+                                consumerVmsContainerMap.get(recoverEvents.vms()).queue(event);
+                            }
+                        }
+                        default -> System.out.println(STR."Unrecognized message \{message}");
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }, "VmsQueueProcessor").start();
     }
 
     public void AddSchedulerPauseHandler(Consumer<Boolean> pauseHandler){
@@ -328,22 +354,18 @@ public final class VmsEventHandler extends ModbHttpServer {
 
     // The consumerWorker of the crashed vms must reconnect
     //      1. it needs to help recover it
-    private void processRecovery(IdentifiableNode crashedVms)
+    private void processRecovery(Recovery.Payload recovery)
     {
+        IdentifiableNode crashedVms = Recovery.crashedVms(recovery);
         // safeguard
-        if (!consumerVmsContainerMap.containsKey(crashedVms)) return;
-
-        // recover consumer worker
-        consumerVmsContainerMap.get(crashedVms).processRecoveryInVms();
-
-        // resend the events
-        var crashedVmsEvents = this.consumerToEventsMap.get(crashedVms.identifier);
-        var uncommittedEventsForCrashedVms = loggingHandler.getUncommittedEvents(crashedVmsEvents);
-        for (var event: uncommittedEventsForCrashedVms)
+        if (!consumerVmsContainerMap.containsKey(crashedVms))
         {
-            consumerVmsContainerMap.get(crashedVms.identifier).queue(event);
+            System.out.println(STR."Crashed Vms \{crashedVms.identifier} is not a consumer");
+            return;
         }
 
+        // recover consumer worker (queueMessage)
+        consumerVmsContainerMap.get(crashedVms).queueMessage(recovery);
     }
 
     // for affected vms
@@ -510,7 +532,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         // I need to make access to the data versions data race free
         // so new transactions get data versions from the version map or the store
         //long initTs = System.currentTimeMillis();
-        System.out.println("VmsEventHandler.checkpoint");
+        System.out.println(STR."Checkpointing batch \{batch}");
         this.transactionManager.checkpoint(batch, maxTid);
 
         //LOGGER.log(WARNING, me.identifier+": Checkpointing latency is "+(System.currentTimeMillis()-initTs));
@@ -519,6 +541,9 @@ public final class VmsEventHandler extends ModbHttpServer {
         if(INFORM_BATCH_ACK) {
             this.leaderWorker.queueMessage(BatchCommitAck.of(batch, this.me.identifier));
         }
+
+        // if one VMS does not reach this point, there is a consistency error
+        System.out.println(STR."Batch \{batch} checkpointed");
     }
 
     private void restoreStableState(long batch, long failedTid)
@@ -567,7 +592,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             return;
         }
         LOGGER.log(DEBUG,this.me.identifier+" is producing to "+ node.identifier);
-        ConsumerVmsWorker consumerVmsWorker = ConsumerVmsWorker.build(this.me, node,
+        ConsumerVmsWorker consumerVmsWorker = ConsumerVmsWorker.build(this.me, node, this.vmsQueue,
                         () -> JdkAsyncChannel.create(this.group),
                         this.leaderWorker::queueMessage,
                         this.options,
@@ -1142,9 +1167,9 @@ public final class VmsEventHandler extends ModbHttpServer {
                             this.fetchMoreBytes(startPos);
                             return;
                         }
-                        var crashedVms = Recovery.read(this.readBuffer);
+                        Recovery.Payload recovery = Recovery.read(this.readBuffer);
                         System.out.println(STR."Received recovery message from leader");
-                        processRecovery(crashedVms);
+                        processRecovery(recovery);
                     }
                     case (BATCH_ABORT_REQUEST) -> {
                         if(this.readBuffer.remaining() < (BatchAbortRequest.SIZE - 1)){
@@ -1280,11 +1305,6 @@ public final class VmsEventHandler extends ModbHttpServer {
 
                 LOGGER.log(INFO,me.identifier+": Requesting leader worker to send batch ("+batchCommitInfo.batch()+") complete (LATE)");
                 leaderWorker.queueMessage(BatchComplete.of(batchCommitInfo.batch(), me.identifier));
-
-                // TODO maybe checkpoint here
-                BatchContext thisBatch = batchContextMap.get(batchCommitInfo.batch());
-                BatchMetadata batchMetadata = trackingBatchMap.get(batchCommitInfo.batch());
-                submitBackgroundTask(()->checkpoint(thisBatch.batch, batchMetadata.maxTidExecuted));
             }
         }
 
@@ -1292,7 +1312,8 @@ public final class VmsEventHandler extends ModbHttpServer {
          * Context of execution of this method:
          */
         private void processNewBatchCommand(BatchCommitCommand.Payload batchCommitCommand){
-            System.out.println("VmsEventHandler.processNewBatchCommand " + batchCommitCommand);
+            System.out.println(STR."Vms will commit batch=\{batchCommitCommand.batch()}");
+
             BatchContext batchContext = BatchContext.build(batchCommitCommand);
             batchContextMap.put(batchCommitCommand.batch(), batchContext);
             BatchMetadata batchMetadata = trackingBatchMap.get(batchCommitCommand.batch());

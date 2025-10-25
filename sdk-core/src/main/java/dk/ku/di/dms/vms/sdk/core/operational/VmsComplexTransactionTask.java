@@ -82,7 +82,7 @@ public final class VmsComplexTransactionTask implements Callable<VmsTransactionT
             // then send to the leader...
             OutboundEventResult eventOutput = new OutboundEventResult(this.tid, this.batch, this.signature.outputQueue(), output);
             if(this.signature.transactionType() != TransactionTypeEnum.R){
-                this.transactionalHandler.commit();
+                this.transactionalHandler.installWrites();
             }
             return new VmsTransactionTaskResult(
                     this.tid,

@@ -9,6 +9,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitInfo;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchComplete;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.ConsumerSet;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.Presentation;
+import dk.ku.di.dms.vms.modb.common.schema.network.control.RecoverEvents;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.Recovery;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
@@ -119,6 +120,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private interface IVmsDeque {
         void drain(List<TransactionEvent.PayloadRaw> list, int maxSize);
         void insert(TransactionEvent.PayloadRaw payloadRaw);
+        void clear();
     }
 
     private static final class MultiDeque implements IVmsDeque {
@@ -139,6 +141,14 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             int pos = this.nextPos-1; if(pos < 0) pos = 0;
             this.queues.get(pos).add(payloadRaw);
         }
+
+        @Override
+        public void clear() {
+            for (int i = 0; i < numQueues; i++) {
+                this.queues.get(i).clear();
+            }
+        }
+
         @Override
         public void drain(List<TransactionEvent.PayloadRaw> list, int maxSize){
             int totalSize = 0;
@@ -159,6 +169,12 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         public void insert(TransactionEvent.PayloadRaw payloadRaw) {
             this.queue.offerLast(payloadRaw);
         }
+
+        @Override
+        public void clear() {
+            queue.clear();
+        }
+
         @Override
         public void drain(List<TransactionEvent.PayloadRaw> list, int maxSize){
             int totalSize = 0;
@@ -333,21 +349,8 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         } else {
             if (this.initSimpleConnection()) return;
         }
-        System.out.println(STR."consumer=\{consumerVms.identifier} this.options.active()=\{this.options.active()}");
-        if(this.options.active())
-        {
-            while (this.isRunning())
-            {
-                if (this.consumerIsRecovering)
-                {
-                    System.out.println(STR."Consumer is recovering... consumer=\{consumerVms.identifier}");
-                    reconnect();
-                }
-                if (this.consumerIsRecovering) continue;
-                this.eventLoop();
-                System.out.println(STR."BROKE OUT OF EVENTLOOP consumerIsRecovering=\{consumerIsRecovering}");
-            }
-        }
+        System.out.println(STR."consumer=\{consumerVms.identifier} connected");
+        this.eventLoop();
         System.out.println(STR."RUN is over");
         LOGGER.log(INFO, "VmsWorker finished for consumer VMS: "+this.consumerVms);
     }
@@ -360,8 +363,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 this.state = CONNECTION_ESTABLISHED;
             } catch (Exception e) {
                 System.out.println(STR."Connecting to \{consumerVms.identifier} failed");
-                e.printStackTrace();
-                try { sleep(2000); } catch (InterruptedException ignored) { }
+                try { sleep(500); } catch (InterruptedException ignored) { }
                 return;
             }
         }
@@ -375,8 +377,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         // send consumer set in case the restarted VMS has consumer it needs to reconnect with
         sendConsumerSet(consumerSetVmsStr);
 
-        // resend events
-        consumerIsRecovering = false;
+        System.out.println(STR."VmsWorker for consumer=\{consumerVms.identifier}, setting to \{consumerIsRecovering}");
     }
 
     private boolean initSimpleConnection() {
@@ -403,7 +404,19 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
      */
     private void eventLoop() {
         int pollTimeout = 1;
-        while (this.isRunning()){
+        // exit this loop
+        while (this.isRunning())
+        {
+            if (this.state == DISCONNECTED)
+            {
+                System.out.println(STR."Consumer=\{consumerVms.identifier} is disconnected");
+                reconnect();
+                continue; // safeguard: if reconnect failed
+            }
+
+            // events to resend will be in the queue
+            if (this.consumerIsRecovering) consumerIsRecovering = false;
+
             try {
                 this.transactionEventQueue.drain(this.drained, this.options.networkBufferSize());
                 if(this.drained.isEmpty()){
@@ -413,11 +426,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                     continue;
                 }
                 pollTimeout = pollTimeout > 0 ? pollTimeout / 2 : 0;
-//                if(!this.transactionEventQueue.isEmpty()){
-                    this.sendBatchOfEvents();
-//                } else {
-//                    this.sendEvent(payloadRaw);
-//                }
+                this.sendBatchOfEvents();
                 this.processPendingNetworkTasks();
             } catch (Exception e) {
                 LOGGER.log(ERROR, "Leader: VMS worker for "+this.consumerVms.identifier+" has caught an exception: \n"+e);
@@ -455,7 +464,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     public void queueTransactionEvent(TransactionEvent.PayloadRaw payloadRaw)
     {
         this.transactionEventQueue.insert(payloadRaw);
-        System.out.println("Queue singular transaction event " + payloadRaw);
+//        System.out.println("Queue singular transaction event " + payloadRaw);
     }
 
     @SuppressWarnings("unused")
@@ -511,15 +520,15 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     //         which can forward the message to relevant VMSes through other workers
     private void  initializeRecoveryInCoordinator(IdentifiableNode crashedVms)
     {
+        System.out.println(STR."initializeRecoveryInCoordinator: VmsWorker consumer=\{consumerVms.identifier} is \{consumerIsRecovering}");
         // safeguard in the case, it is triggered after receiving recovery message
         // from coordinator caused by other connection crash
         if (consumerIsRecovering) return;
 
-        System.out.println(STR."VmsWorker init recovery for consumer=\{consumerVms.identifier}");
         consumerIsRecovering = true; // will start reestablishing connection
         this.state = DISCONNECTED;
 
-        Recovery.Payload recoveryMessage = Recovery.of(crashedVms);
+        Recovery.Payload recoveryMessage = Recovery.of(crashedVms.identifier, crashedVms.host, crashedVms.port);
         coordinatorQueue.add(recoveryMessage);
     }
 
@@ -529,11 +538,18 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     {
         System.out.println(STR."VmsWorker process recovery for consumer=\{consumerVms.identifier} consumerIsRecovering=\{consumerIsRecovering}");
 
-        // already processing the recovery
+        // already processing the recovery, because it was initialized here
         if (consumerIsRecovering) return;
 
-        // start processing the recover
-        System.out.println(STR."Setting consumerIsRecovering=\{consumerIsRecovering}");
+        // clear the queue
+        System.out.println("Clearing transaction event queue");
+        transactionEventQueue.clear();
+
+        var recoverEventsMessage = new RecoverEvents();
+        coordinatorQueue.add(recoverEventsMessage);
+
+        // connection is
+        System.out.println(STR."processRecovery: VmsWorker for consumer=\{consumerVms.identifier}, setting to \{consumerIsRecovering}");
         consumerIsRecovering = true;
     }
 
@@ -784,6 +800,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             } catch (Exception e) {
                 LOGGER.log(ERROR, "Leader: Error on submitting ["+count+"] events to "+this.consumerVms.identifier+":"+e);
                 // return events to the deque
+                System.out.println(STR."ConsumerVmsWorker for \{consumerVms.identifier} readded drained events to queue");
                 while(!this.drained.isEmpty()) {
                     this.transactionEventQueue.insert(this.drained.remove(0));
                 }

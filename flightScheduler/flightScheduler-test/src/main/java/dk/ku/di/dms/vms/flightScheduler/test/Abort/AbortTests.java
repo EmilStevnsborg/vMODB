@@ -63,15 +63,16 @@ public class AbortTests
         {
             System.out.println(STR."FAILED (CustomerCantAffordFlightSeat): " +
                                STR."poorCustomerGet.money=\{poorCustomerGet.money} != \{poorCustomer.money}=poorCustomer.money");
-            return;
         }
-        if (unpaidBookings.size() != 1 || unpaidBookings.get(0).customer_id != poorCustomer.customer_id)
+        else if (unpaidBookings.size() != 1 || unpaidBookings.get(0).customer_id != poorCustomer.customer_id)
         {
             System.out.println(STR."FAILED (CustomerCantAffordFlightSeat): \{unpaidBookings.size()} unpaid booking");
-            return;
         }
-        System.out.println(STR."SUCCESS (CustomerCantAffordFlightSeat): only \{unpaidBookings.size()} unpaid booking for " +
-                           STR."customer_id=\{unpaidBookings.get(0).customer_id}");
+        else
+        {
+            System.out.println(STR."SUCCESS (CustomerCantAffordFlightSeat): only \{unpaidBookings.size()} unpaid booking for " +
+                    STR."customer_id=\{unpaidBookings.get(0).customer_id}");
+        }
     }
 
     public void CancelBookingFailed(HttpClient client)

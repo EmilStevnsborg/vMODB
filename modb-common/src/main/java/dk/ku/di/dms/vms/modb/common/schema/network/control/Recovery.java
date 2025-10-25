@@ -31,17 +31,21 @@ public final class Recovery
         buffer.put( nameBytes );
     }
 
-    public static IdentifiableNode read(ByteBuffer buffer){
+    public static Recovery.Payload read(ByteBuffer buffer){
         int port = buffer.getInt();
         int sizeHost = buffer.getInt();
         String host = ByteUtils.extractStringFromByteBuffer(buffer, sizeHost);
         int size = buffer.getInt();
         String vms = ByteUtils.extractStringFromByteBuffer(buffer, size);
-        return new IdentifiableNode(vms, host, port);
+        return Recovery.of(vms, host, port);
     }
 
-    public static Recovery.Payload of(IdentifiableNode identifiableNode) {
-        return new Recovery.Payload(identifiableNode.identifier, identifiableNode.host, identifiableNode.port);
+    public static Recovery.Payload of(String vms, String host, int port) {
+        return new Recovery.Payload(vms, host, port);
+    }
+
+    public static IdentifiableNode crashedVms(Recovery.Payload payload) {
+        return new IdentifiableNode(payload.vms, payload.host, payload.port);
     }
 
     public record Payload(

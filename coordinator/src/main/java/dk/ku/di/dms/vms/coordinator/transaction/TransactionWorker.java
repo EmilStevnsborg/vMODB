@@ -215,7 +215,7 @@ public final class TransactionWorker extends StoppableRunnable {
 
             this.vmsWorkerContainerMap.get(inputVms.identifier).queueTransactionEvent(txEvent);
         }
-        System.out.println("Increment tid " + this.tid + " with +1");
+//        System.out.println("Increment tid " + this.tid + " with +1");
         this.tid++;
     }
 

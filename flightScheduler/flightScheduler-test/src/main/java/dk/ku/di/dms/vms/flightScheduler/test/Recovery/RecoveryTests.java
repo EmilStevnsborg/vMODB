@@ -3,6 +3,7 @@ package dk.ku.di.dms.vms.flightScheduler.test.Recovery;
 import dk.ku.di.dms.vms.flightScheduler.test.DataGenerator;
 import dk.ku.di.dms.vms.flightScheduler.test.Transactions;
 import dk.ku.di.dms.vms.flightScheduler.test.Util.Util;
+import dk.ku.di.dms.vms.flightScheduler.test.Util.VmsEndpoints;
 import dk.ku.di.dms.vms.flightScheduler.test.Util.VmsProcess;
 
 import java.io.IOException;
@@ -20,9 +21,11 @@ public class RecoveryTests
     public static void CustomerCrash(HttpClient client) throws IOException
     {
         VmsProcess.KillCurrentVmsProcess("customer");
-        VmsProcess.VmsProcessBuilder("customer").start();
+        VmsProcess.VmsProcessBuilder("customer", false).start();
         Util.Sleep(1000);
         System.out.println("\nCustomer process has started");
+
+        System.console().readLine();
 
         // inject workload
         var customers = DataGenerator.GenerateCustomers(client, 50);
@@ -39,27 +42,52 @@ public class RecoveryTests
         Util.Sleep(500);
 
         // stop customer
+        System.console().readLine();
         System.out.println("\nStopping customer process...");
         VmsProcess.KillCurrentVmsProcess("customer");
 
+
         // submit workload
+        System.console().readLine();
+        System.out.println("\nSubmitting second workload while customer is down");
         for (var i = half; i < customers.size(); i++)
         {
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
         }
 
+
         // Restart customer
-        VmsProcess.VmsProcessBuilder("customer").start();
-        Util.Sleep(1000);
-        System.out.println("\nCustomer process restarted");
+        System.console().readLine();
+        System.out.println("\nRestarting customer process...");
+        VmsProcess.VmsProcessBuilder("customer", true).start();
+
 
         // wait for restart and recovery
-        Util.Sleep(1000);
+        System.console().readLine();
+        System.out.println("\nGetting validation data...");
+        var flightSeatsGet = VmsEndpoints.GetFlightSeats(client, 0);
+        var customersGet = VmsEndpoints.GetCustomers(client);
 
-        // validate data (all flight seats should be allocated)
+        var occupiedFlightSeats = flightSeatsGet.stream().filter(fs -> fs.occupied == 1).count();
+        var customersSeatsReservedSorted = customersGet.stream().map(c -> c.seat_number).sorted().toList();
+        var flightSeatsInjectedSorted = flightSeats.stream().map(fs -> fs.seat_number).sorted().toList();
 
+        if (occupiedFlightSeats != 0)
+        {
+            System.out.println(STR."FAILURE (CustomerCrash): occupiedFlightSeats=\{occupiedFlightSeats}!=0");
+        }
+        else if (!customersSeatsReservedSorted.equals(flightSeatsInjectedSorted))
+        {
+            System.out.println(STR."FAILURE (CustomerCrash): reserved seats not equal to all available seats");
+        }
+        else
+        {
+            System.out.println(STR."SUCCESS (CCustomerCrash)");
+        }
 
-
+        // stop process final
+        System.console().readLine();
+        System.out.println("\nStopping customer process final...");
 
         // Final kill
         VmsProcess.KillCurrentVmsProcess("customer");

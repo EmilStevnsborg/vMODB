@@ -3,6 +3,7 @@ package dk.ku.di.dms.vms.sdk.embed.handler;
 import dk.ku.di.dms.vms.modb.common.memory.MemoryManager;
 import dk.ku.di.dms.vms.modb.common.runnable.StoppableRunnable;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.Presentation;
+import dk.ku.di.dms.vms.modb.common.schema.network.control.RecoverEvents;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.Recovery;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
@@ -90,21 +91,28 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
 
     private final List<TransactionEvent.PayloadRaw> drained = new ArrayList<>(1024*10);
 
+    private final Queue<Object> vmsQueue;
+    private final Deque<Object> messageQueue;
+    private final Consumer<Object> queueMessage_;
+
     public static ConsumerVmsWorker build(
                                   VmsNode me,
                                   IdentifiableNode consumerVms,
+                                  Queue<Object> vmsQueue,
                                   Supplier<IChannel> channelSupplier,
                                   Consumer<Recovery.Payload> leaderQueueRecovery,
                                   VmsEventHandler.VmsHandlerOptions options,
                                   IVmsSerdesProxy serdesProxy) {
 
         System.out.println(STR."ConsumerVmsWorker has been built for \{consumerVms.identifier}");
-        return new ConsumerVmsWorker(me, consumerVms,
+        return new ConsumerVmsWorker(me, consumerVms, vmsQueue,
                 channelSupplier, leaderQueueRecovery, options, serdesProxy);
     }
 
     private ConsumerVmsWorker(VmsNode me,
                              IdentifiableNode consumerVms,
+                             // messages to send the parent vms
+                             Queue<Object> vmsQueue,
                              Supplier<IChannel> channelFactory,
                              Consumer<Recovery.Payload> leaderQueueRecovery,
                              VmsEventHandler.VmsHandlerOptions options,
@@ -120,6 +128,11 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         this.options = options;
         this.transactionEventQueue = new MpscBlockingConsumerArrayQueue<>(1024*1500);
         this.state = NEW;
+
+        // inspired by the  coordinator-vmsWorker relationship
+        this.vmsQueue = vmsQueue;
+        this.messageQueue = new ConcurrentLinkedDeque<>();
+        this.queueMessage_ = messageQueue::offerLast;
     }
 
     @SuppressWarnings("StatementWithEmptyBody")
@@ -143,7 +156,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
             LOGGER.log(WARNING, this.me.identifier+ ": Finishing prematurely worker for consumer VMS "+this.consumerVms.identifier+" because connection failed");
             return;
         }
-        System.out.println(STR."consumerVmsWorker for consumer=\{consumerVms.identifier}, this.options.logging()=\{this.options.logging()}");
         this.eventLoopNoLogging();
         LOGGER.log(INFO, this.me.identifier+ ": Finishing worker for consumer VMS: "+this.consumerVms.identifier);
     }
@@ -156,44 +168,52 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                 {
                     System.out.println(STR."Consumer Vms Worker trying to connect to \{consumerVms.identifier}");
                     reconnect();
+                    continue; // safeguard: if reconnect failed
                 }
 
-                if (consumerIsRecovering)
-                {
-                    // this will flip when connection has been reestablished
-                    continue;
-                }
+                // events to resend will be in the queue
+                if (this.consumerIsRecovering) consumerIsRecovering = false;
+
 
                 // the resent uncommitted events will be in this queue
                 transactionEventQueue.drain(this.drained::add, this.options.networkBufferSize());
                 if(this.drained.isEmpty()){
                     pollTimeout = Math.min(pollTimeout * 2, this.options.maxSleep());
+                    processPendingMessages();
                     this.giveUpCpu(pollTimeout);
                     continue;
                 }
                 pollTimeout = pollTimeout > 0 ? pollTimeout / 2 : 0;
                 this.sendBatchOfEventsNonBlocking();
+                processPendingMessages();
             } catch (Exception e) {}
         }
     }
 
+    private void processPendingMessages() {
+        Object pendingMessage;
+        while((pendingMessage = this.messageQueue.pollFirst()) != null){
+            switch (pendingMessage)
+            {
+                case Recovery.Payload recovery ->
+                {
+                    processRecoveryInVms();
+                }
+                default -> System.out.println(STR."Unrecognized message \{pendingMessage}");
+            }
+        }
+    }
 
     private void reconnect() {
         System.out.println(STR."Reconnect to consumer VMS \{this.consumerVms.identifier} with state=\{this.state}");
         var connected = connect();
         if (!connected) {
-            try { sleep(2000); } catch (InterruptedException ignored) { }
+            try { sleep(500); } catch (InterruptedException ignored) { }
             return;
         }
         else {
             this.state = CONNECTED;
         }
-
-        System.out.println(STR."Connected to \{this.consumerVms.identifier}");
-
-        // only when events have been sent
-        // consumerIsRecovering = false;
-
         System.out.println(STR."Reconnected to \{this.consumerVms.identifier}");
     }
 
@@ -225,7 +245,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
             // check if connection is still online. if so, try again
             // otherwise, retry connection in a few minutes
             System.out.println(STR."Could not connect to consumer \{consumerVms.identifier}");
-            e.printStackTrace();
             LOGGER.log(ERROR, me.identifier + ": Caught an error while trying to connect to consumer VMS: " + this.consumerVms.identifier);
             return false;
         } finally {
@@ -247,7 +266,9 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         this.state = DISCONNECTED;
 
         // inform coordinator
-        var recoveryMessage = Recovery.of(consumerVms);
+        var recoveryMessage = Recovery.of(consumerVms.identifier, consumerVms.host, consumerVms.port);
+
+        // queue message for coordinator (replace with queuing for the Vms first later)
         this.leaderQueueRecovery.accept(recoveryMessage);
     }
 
@@ -255,8 +276,15 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     @Override
     public void processRecoveryInVms()
     {
-        // message from coordinator comes while already recovering
+        // message from vms comes while already recovering
         if (consumerIsRecovering) return;
+
+        System.out.println(STR."Processing recovery of consumer=\{consumerVms.identifier} in ConsumerVmsWorker");
+
+        // clear the queue
+        transactionEventQueue.clear();
+
+        vmsQueue.add(RecoverEvents.of(consumerVms.identifier, consumerVms.host, consumerVms.port));
 
         consumerIsRecovering = true;
         this.state = DISCONNECTED;
@@ -301,6 +329,8 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                 count = remaining;
                 this.channel.write(writeBuffer, this.options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
             } catch (Exception e) {
+                System.out.println("Error sending events");
+                e.printStackTrace();
                 this.failSafe(e, writeBuffer);
                 remaining = 0;
                 this.releaseLock();
@@ -430,6 +460,12 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         if(!this.transactionEventQueue.offer(eventPayload)){
             System.out.println(me.identifier +": cannot add event in the input queue");
         }
+    }
+
+    @Override
+    public void queueMessage(Object message) {
+        System.out.println(STR."Queued message in ConsumerVmsWorker for \{consumerVms.identifier}");
+        this.queueMessage_.accept(message);
     }
 
     @Override

@@ -63,7 +63,7 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
     {
         rwLock.writeLock().lock();
         try {
-            System.out.println(STR."Logging event for tid=\{event.tid()}");
+//            System.out.println(STR."Logging event for tid=\{event.tid()}");
             eventsSent.put(event.tid(), event);
         } finally {
             rwLock.writeLock().unlock();

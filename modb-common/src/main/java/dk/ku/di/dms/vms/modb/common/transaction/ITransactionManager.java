@@ -12,7 +12,7 @@ public interface ITransactionManager {
     // for abort in memory
     default void restoreStableState(long failedTid) { }
 
-    default void commit() { }
+    default void installWrites() { }
 
     default ITransactionContext beginTransaction(long tid, int identifier, long lastTid, boolean readOnly) { return null; }
 

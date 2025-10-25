@@ -481,7 +481,6 @@ public final class PrimaryIndex implements IMultiVersionIndex {
     }
 
     public void installWrites(TransactionContext txCtx){
-        System.out.println(STR."We commit the transaction \{txCtx.tid}");
         Set<IKey> writeSet = this.removeWriteSet(txCtx);
         if(writeSet == null) {
             LOGGER.log(WARNING, "Primary Index: Transaction ID "+txCtx.tid+" could not be found in write set. Perhaps concurrent threads are set to the same TID?");

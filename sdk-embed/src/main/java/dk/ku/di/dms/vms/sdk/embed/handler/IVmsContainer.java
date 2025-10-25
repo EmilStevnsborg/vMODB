@@ -6,6 +6,7 @@ import java.nio.ByteBuffer;
 
 public interface IVmsContainer {
     void queue(TransactionEvent.PayloadRaw payload);
+    void queueMessage(Object message);
 
     // consumer worker initiates reconnect to recovered consumer
     void processRecoveryInVms();
