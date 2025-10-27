@@ -63,7 +63,7 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
     {
         rwLock.writeLock().lock();
         try {
-//            System.out.println(STR."Logging event for tid=\{event.tid()}");
+            System.out.println(STR."Logging event for tid=\{event.tid()} and bid=\{event.batch()}");
             eventsSent.put(event.tid(), event);
         } finally {
             rwLock.writeLock().unlock();
@@ -90,7 +90,7 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
                 while (buffer.hasRemaining()) {
                     fileChannel.write(buffer);
                 }
-                fileChannel.force(true);
+                fileChannel.force(false);
 
                 // remove committed events atomically
                 committedEvents.forEach(e -> eventsSent.remove(e.tid()));
@@ -106,6 +106,26 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
             rwLock.readLock().unlock();
         }
     }
+
+
+    @Override
+    public List<TransactionEvent.PayloadRaw> getUncommittedEvents(List<String> eventTypes)
+    {
+        rwLock.readLock().lock();
+        try
+        {
+            return eventsSent.values().stream().filter(e-> {
+                var eventString = new String(e.event(), StandardCharsets.UTF_8);
+                return eventTypes.contains(eventString);
+            }).toList();
+        }
+        finally {
+            rwLock.readLock().unlock();
+        }
+    }
+
+
+
 
     @Override
     public long[] latestCommit() throws IOException

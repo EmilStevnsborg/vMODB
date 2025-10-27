@@ -357,7 +357,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
     private void reconnect() {
         if (this.state == State.DISCONNECTED || this.state == State.CONNECTION_FAILED) {
-            System.out.println("Connecting coordinator vms worker to VMS");
             try {
                 this.connect();
                 this.state = CONNECTION_ESTABLISHED;
@@ -367,7 +366,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 return;
             }
         }
-        System.out.println(STR."Not disconnected state=\{state}");
         // establish leader relations ship
         ByteBuffer writeBuffer = this.retrieveByteBuffer();
         this.sendLeaderPresentationToVms(writeBuffer);
@@ -376,8 +374,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
         // send consumer set in case the restarted VMS has consumer it needs to reconnect with
         sendConsumerSet(consumerSetVmsStr);
-
-        System.out.println(STR."VmsWorker for consumer=\{consumerVms.identifier}, setting to \{consumerIsRecovering}");
     }
 
     private boolean initSimpleConnection() {
@@ -409,13 +405,9 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         {
             if (this.state == DISCONNECTED)
             {
-                System.out.println(STR."Consumer=\{consumerVms.identifier} is disconnected");
                 reconnect();
                 continue; // safeguard: if reconnect failed
             }
-
-            // events to resend will be in the queue
-            if (this.consumerIsRecovering) consumerIsRecovering = false;
 
             try {
                 this.transactionEventQueue.drain(this.drained, this.options.networkBufferSize());
@@ -541,15 +533,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         // already processing the recovery, because it was initialized here
         if (consumerIsRecovering) return;
 
-        // clear the queue
-        System.out.println("Clearing transaction event queue");
-        transactionEventQueue.clear();
-
-        var recoverEventsMessage = new RecoverEvents();
-        coordinatorQueue.add(recoverEventsMessage);
-
-        // connection is
-        System.out.println(STR."processRecovery: VmsWorker for consumer=\{consumerVms.identifier}, setting to \{consumerIsRecovering}");
         consumerIsRecovering = true;
     }
 
@@ -656,6 +639,16 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                             state = VMS_PRESENTATION_RECEIVED;// for the first time
                             this.processVmsIdentifier();
                             state = VMS_PRESENTATION_PROCESSED;
+
+                            // events to resend will be in the queue
+                            if (consumerIsRecovering) {
+                                System.out.println("Clearing transactionEventQueue");
+                                transactionEventQueue.clear();
+                                System.out.println(STR."Coordinator recover events for \{consumerVms.identifier}");
+                                coordinatorQueue.add(RecoverEvents.of(consumerVms.identifier, consumerVms.host, consumerVms.port));
+                                consumerIsRecovering = false;
+                            }
+
                         } else {
                             // in the future it can be an update of the vms schema or crash recovery
                             LOGGER.log(ERROR, "Leader: Presentation already received from VMS: " + consumerVms.identifier);
@@ -747,7 +740,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         LOGGER.log(DEBUG, "Leader: Batch ("+batchCommitInfo.batch()+") commit info will be sent to " + this.consumerVms.identifier);
         try {
 //            System.out.println("Stall sending batch commit info to terminal VMS ....");
-//            Thread.sleep(3000);
             ByteBuffer writeBuffer = this.retrieveByteBuffer();
             BatchCommitInfo.write(writeBuffer, batchCommitInfo);
             writeBuffer.flip();
@@ -800,7 +792,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             } catch (Exception e) {
                 LOGGER.log(ERROR, "Leader: Error on submitting ["+count+"] events to "+this.consumerVms.identifier+":"+e);
                 // return events to the deque
-                System.out.println(STR."ConsumerVmsWorker for \{consumerVms.identifier} readded drained events to queue");
+                System.out.println(STR."VmsWorker for \{consumerVms.identifier} readded drained events to queue");
                 while(!this.drained.isEmpty()) {
                     this.transactionEventQueue.insert(this.drained.remove(0));
                 }

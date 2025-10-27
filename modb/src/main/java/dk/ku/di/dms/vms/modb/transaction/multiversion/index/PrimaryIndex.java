@@ -216,6 +216,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
     public Object[] lookupByKey(TransactionContext txCtx, IKey key){
         OperationSetOfKey operationSet = this.updatesPerKeyMap.get( key );
         if (operationSet == null) {
+            System.out.println("LookUpByKey: OperationSet is null, look in rawIndex");
             return this.rawIndex.lookupByKey(key);
         }
         if(txCtx.readOnly) {
@@ -266,7 +267,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         TransactionWrite entry = TransactionWrite.upsert(WriteType.INSERT, values);
         if(operationSet == null){
             operationSet = new OperationSetOfKey(WriteType.INSERT);
-//            System.out.println(STR."Putting operationSet after doInsert under key=\{key} and tid=\{txCtx.tid}");
+            System.out.println(STR."Putting operationSet after doInsert under key=\{key} and tid=\{txCtx.tid}");
             this.updatesPerKeyMap.put(key, operationSet);
         } else {
             operationSet.lastWriteType = WriteType.INSERT;
@@ -289,7 +290,9 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         }
         if(exists) {
             this.doUpdate(txCtx, key, values, operationSet);
+            System.out.println("DoUpdate");
         } else {
+            System.out.println("DoInsert");
             this.doInsert(txCtx, key, values, operationSet);
         }
         return true;

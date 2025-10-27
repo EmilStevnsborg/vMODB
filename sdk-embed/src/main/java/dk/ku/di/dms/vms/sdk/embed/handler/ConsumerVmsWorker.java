@@ -172,7 +172,13 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                 }
 
                 // events to resend will be in the queue
-                if (this.consumerIsRecovering) consumerIsRecovering = false;
+                if (this.consumerIsRecovering) {
+                    System.out.println("Clearing transactionEventQueue");
+                    transactionEventQueue.clear();
+                    System.out.println(STR."Vms recover events for \{consumerVms.identifier}");
+                    vmsQueue.add(RecoverEvents.of(consumerVms.identifier, consumerVms.host, consumerVms.port));
+                    consumerIsRecovering = false;
+                }
 
 
                 // the resent uncommitted events will be in this queue
@@ -183,10 +189,15 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                     this.giveUpCpu(pollTimeout);
                     continue;
                 }
+                else {
+                    System.out.println(STR."Queue was drained from \{this.drained.size()} events");
+                }
                 pollTimeout = pollTimeout > 0 ? pollTimeout / 2 : 0;
-                this.sendBatchOfEventsNonBlocking();
+                this.sendBatchOfEventsNonBlocking(); // maybe it will send but not receive
                 processPendingMessages();
-            } catch (Exception e) {}
+            } catch (Exception e) {
+                System.out.println("Error in while loop");
+            }
         }
     }
 
@@ -244,7 +255,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         catch (Exception e) {
             // check if connection is still online. if so, try again
             // otherwise, retry connection in a few minutes
-            System.out.println(STR."Could not connect to consumer \{consumerVms.identifier}");
+            // System.out.println(STR."Could not connect to consumer \{consumerVms.identifier}");
             LOGGER.log(ERROR, me.identifier + ": Caught an error while trying to connect to consumer VMS: " + this.consumerVms.identifier);
             return false;
         } finally {
@@ -280,11 +291,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         if (consumerIsRecovering) return;
 
         System.out.println(STR."Processing recovery of consumer=\{consumerVms.identifier} in ConsumerVmsWorker");
-
-        // clear the queue
-        transactionEventQueue.clear();
-
-        vmsQueue.add(RecoverEvents.of(consumerVms.identifier, consumerVms.host, consumerVms.port));
 
         consumerIsRecovering = true;
         this.state = DISCONNECTED;
@@ -323,14 +329,16 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         while(remaining > 0){
             try {
                 writeBuffer = this.retrieveByteBuffer();
-                remaining = BatchUtils.assembleBatchPayload(remaining, this.drained, writeBuffer); // TODO putting payloads from drained into buffer
+                remaining = BatchUtils.assembleBatchPayload(remaining, this.drained, writeBuffer);
                 writeBuffer.flip();
-                LOGGER.log(DEBUG, this.me.identifier+ ": Submitting ["+(count - remaining)+"] event(s) to "+this.consumerVms.identifier);
+                System.out.println(STR."Buffer has pos and limit of \{writeBuffer.position()} and \{writeBuffer.limit()}");
                 count = remaining;
+                // maximize useful work
+                while(!this.tryAcquireLock()){
+                }
                 this.channel.write(writeBuffer, this.options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
             } catch (Exception e) {
-                System.out.println("Error sending events");
-                e.printStackTrace();
+                System.out.println("Error writing batch");
                 this.failSafe(e, writeBuffer);
                 remaining = 0;
                 this.releaseLock();
@@ -412,12 +420,12 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     private final class WriteCompletionHandler implements CompletionHandler<Integer, ByteBuffer> {
         @Override
         public void completed(Integer result, ByteBuffer byteBuffer) {
-            LOGGER.log(DEBUG, me.identifier + ": Batch with size " + result + " has been sent to: " + consumerVms.identifier);
             if(byteBuffer.hasRemaining()){
-                LOGGER.log(WARNING, me.identifier + ": Remaining bytes will be sent to: " + consumerVms.identifier);
+                System.out.println("Writing byteBuffer");
                 // keep the lock and send the remaining
                 channel.write(byteBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, byteBuffer, this);
             } else {
+                System.out.println("ByteBuffer empty");
                 returnByteBuffer(byteBuffer);
                 releaseLock();
             }
@@ -425,28 +433,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
 
         @Override
         public void failed(Throwable exc, ByteBuffer byteBuffer) {
-            System.out.println(STR."(ConsumerVmsWorker) Writing to Consumer \{consumerVms.identifier} failed");
-
-            if (exc instanceof AsynchronousCloseException) {
-                System.out.println("Channel failed due to AsynchronousCloseException");
-                initializeRecoveryInVms();
-            }
-            else if (exc instanceof ClosedChannelException) {
-                System.out.println("Channel failed due to ClosedChannelException");
-                initializeRecoveryInVms();
-            }
-            else if (exc instanceof WritePendingException) {
-                System.out.println("Channel failed due to WritePendingException");
-                initializeRecoveryInVms();
-            }
-            else if (exc instanceof IOException) {
-                System.out.println("Channel failed due to IOException");
-                initializeRecoveryInVms();
-            }
-            else {
-                System.out.println(STR."Channel failed due to something else \{exc.getMessage()}");
-            }
-
             releaseLock();
             LOGGER.log(ERROR, me.identifier+": ERROR on writing batch of events to "+consumerVms.identifier+": \n"+exc);
             byteBuffer.position(0);

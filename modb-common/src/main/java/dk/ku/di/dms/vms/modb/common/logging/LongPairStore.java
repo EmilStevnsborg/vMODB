@@ -25,6 +25,7 @@ public final class LongPairStore implements Closeable {
 
     public void put(long batch, long maxTid) {
         try {
+            buffer.clear();
             buffer.putLong(batch);
             buffer.putLong(maxTid);
             buffer.flip();
@@ -32,6 +33,7 @@ public final class LongPairStore implements Closeable {
                 filechannel.write(buffer);
             }
             offset = filechannel.position();
+            filechannel.force(false);
         } catch (IOException e) {
             e.printStackTrace();
         }

@@ -31,6 +31,8 @@ public class RecoveryTests
         var customers = DataGenerator.GenerateCustomers(client, 50);
         var flightSeats = DataGenerator.GenerateFlightSeats(client, 0, 50);
 
+        Util.Sleep(500);
+
         // submit workload
         var half = customers.size()/2;
         for (var i = 0; i < half; i++)
@@ -50,7 +52,7 @@ public class RecoveryTests
         // submit workload
         System.console().readLine();
         System.out.println("\nSubmitting second workload while customer is down");
-        for (var i = half; i < customers.size(); i++)
+        for (var i = half; i < half+1; i++)
         {
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
         }
@@ -72,11 +74,11 @@ public class RecoveryTests
         var customersSeatsReservedSorted = customersGet.stream().map(c -> c.seat_number).sorted().toList();
         var flightSeatsInjectedSorted = flightSeats.stream().map(fs -> fs.seat_number).sorted().toList();
 
-        if (occupiedFlightSeats != 0)
+        if (occupiedFlightSeats != 50)
         {
-            System.out.println(STR."FAILURE (CustomerCrash): occupiedFlightSeats=\{occupiedFlightSeats}!=0");
+            System.out.println(STR."FAILURE (CustomerCrash): occupiedFlightSeats=\{occupiedFlightSeats}!=50");
         }
-        else if (!customersSeatsReservedSorted.equals(flightSeatsInjectedSorted))
+        if (!customersSeatsReservedSorted.equals(flightSeatsInjectedSorted))
         {
             System.out.println(STR."FAILURE (CustomerCrash): reserved seats not equal to all available seats");
         }

@@ -15,7 +15,7 @@ public class VmsProcess
                 "--add-opens", "java.base/jdk.internal.util=ALL-UNNAMED",
                 "-jar",
                 jarPath,
-                STR."--recoveryEnabled=\{recoverEnabled}"
+                STR."\{recoverEnabled}"
         );
 
         processBuilder.directory(new File("../flightScheduler-customer"));

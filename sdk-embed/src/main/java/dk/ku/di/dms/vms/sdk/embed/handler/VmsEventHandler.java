@@ -2,6 +2,7 @@ package dk.ku.di.dms.vms.sdk.embed.handler;
 
 import dk.ku.di.dms.vms.modb.common.logging.ILoggingHandler;
 import dk.ku.di.dms.vms.modb.common.logging.LoggingHandlerBuilder;
+import dk.ku.di.dms.vms.modb.common.logging.LongPairStore;
 import dk.ku.di.dms.vms.modb.common.memory.MemoryManager;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.*;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.ConsumerSet;
@@ -142,6 +143,8 @@ public final class VmsEventHandler extends ModbHttpServer {
 
     private final BlockingQueue<Object> vmsQueue;
 
+    private LongPairStore commitInfo;
+
     public static VmsEventHandler build(// to identify which vms this is
                                         VmsNode me,
                                         // to checkpoint private state
@@ -254,6 +257,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         this.loggingHandler = LoggingHandlerBuilder.build(logIdentifier, serdesProxy, options.networkBufferSize);
 
         this.vmsQueue = new LinkedBlockingQueue<>();
+        this.commitInfo = new LongPairStore("commit_info", !recoveryEnabled);
     }
 
     @Override
@@ -271,13 +275,21 @@ public final class VmsEventHandler extends ModbHttpServer {
                     Object message = vmsQueue.poll(250, TimeUnit.MILLISECONDS);
                     if (message == null) continue;
 
+                    System.out.println(STR."VMS read message from worker \{message}");
+
                     switch (message) {
                         case RecoverEvents.Payload recoverEvents -> {
-                            System.out.println("Resending events to " + recoverEvents.vms());
                             var crashedVmsEvents = consumerToEventsMap.get(recoverEvents.vms());
-                            var uncommitted = loggingHandler.getUncommittedEvents(crashedVmsEvents);
-                            for (var event : uncommitted) {
-                                consumerVmsContainerMap.get(recoverEvents.vms()).queue(event);
+                            if (crashedVmsEvents != null)
+                            {
+                                var uncommittedEventsForCrashedVms = loggingHandler.getUncommittedEvents(crashedVmsEvents);
+                                System.out.println(STR."Resending \{uncommittedEventsForCrashedVms.size()} events to \{recoverEvents.vms()}");
+
+                                var node = RecoverEvents.crashedVms(recoverEvents);
+                                for (var event : uncommittedEventsForCrashedVms)
+                                {
+                                    consumerVmsContainerMap.get(node).queue(event);
+                                }
                             }
                         }
                         default -> System.out.println(STR."Unrecognized message \{message}");
@@ -341,7 +353,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         // fix scheduler metadata
         try {
-            var latestCommitInfo = loggingHandler.latestCommit();
+            var latestCommitInfo = commitInfo.getLatest();
             var batch = latestCommitInfo[0];
             var maxTid = latestCommitInfo[1];
             recoveryHandler.accept(batch, maxTid);
@@ -663,8 +675,10 @@ public final class VmsEventHandler extends ModbHttpServer {
                 this.readBuffer.flip();
             }
             byte messageType = this.readBuffer.get();
+            System.out.println(STR."\nVms read message type \{messageType}\n");
             switch (messageType) {
                 case (BATCH_OF_EVENTS) -> {
+                    System.out.println(STR."Vms read BATCH_OF_EVENTS");
                     int bufferSize = this.getBufferSize();
                     if(this.readBuffer.remaining() < bufferSize){
                         this.fetchMoreBytes(startPos);
@@ -673,6 +687,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                     this.processBatchOfEvents(this.readBuffer);
                 }
                 case (EVENT) -> {
+                    System.out.println(STR."Vms read EVENT");
                     int bufferSize = this.getBufferSize();
                     if(this.readBuffer.remaining() < bufferSize){
                         this.fetchMoreBytes(startPos);
@@ -794,10 +809,8 @@ public final class VmsEventHandler extends ModbHttpServer {
         @Override
         public void completed(Integer result, Void void_) {
             String remoteAddress = "";
-            System.out.println("Unknown connection");
             try {
                 remoteAddress = channel.getRemoteAddress().toString();
-                System.out.println(STR."remoteAddress=\{remoteAddress}");
             } catch (IOException ignored) {
                 System.out.println("IOException in channel.getRemoteAddress(");
             }
@@ -880,7 +893,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             // that should be delivered to this vms
             VmsNode producerVms = Presentation.readVms(this.buffer, serdesProxy);
 
-            System.out.println(STR."Producer VMS connected \{producerVms.identifier}");
+            System.out.println(STR."Producer=\{producerVms.identifier} connected");
             LOGGER.log(INFO, me.identifier+": Producer VMS received:\n"+producerVms);
             this.buffer.clear();
 
@@ -931,12 +944,10 @@ public final class VmsEventHandler extends ModbHttpServer {
         @Override
         public void completed(AsynchronousSocketChannel channel, Void void_) {
             LOGGER.log(DEBUG,me.identifier+": An unknown host has started a connection attempt.");
-            System.out.println("An unknown host has started a connection attempt.");
             final ByteBuffer buffer = MemoryManager.getTemporaryDirectBuffer(options.networkBufferSize);
             try {
                 NetworkUtils.configure(channel, options.soBufferSize);
                 // read presentation message. if vms, receive metadata, if follower, nothing necessary
-                System.out.println("channel.read buffer unknown");
                 channel.read(buffer, null, new UnknownNodeReadCompletionHandler(channel, buffer));
             } catch(Exception e){
                 System.out.println(STR."Accept handler caught an exception \{e}");
@@ -1139,7 +1150,6 @@ public final class VmsEventHandler extends ModbHttpServer {
                         // events of this batch from VMSs may arrive before the batch commit info
                         // it means this VMS is a terminal node for the batch
                         BatchCommitInfo.Payload bPayload = BatchCommitInfo.read(this.readBuffer);
-                        System.out.println(me.identifier + " read BATCH_COMMIT_INFO " + bPayload);
                         LOGGER.log(DEBUG, me.identifier + ": Batch (" + bPayload.batch() + ") commit info received from the leader");
                         this.processNewBatchInfo(bPayload);
                     }
@@ -1312,7 +1322,12 @@ public final class VmsEventHandler extends ModbHttpServer {
          * Context of execution of this method:
          */
         private void processNewBatchCommand(BatchCommitCommand.Payload batchCommitCommand){
-            System.out.println(STR."Vms will commit batch=\{batchCommitCommand.batch()}");
+            System.out.println(STR."Vms will commit batch=\{batchCommitCommand.batch()} " +
+                               STR."and tid=\{trackingBatchMap.get(batchCommitCommand.batch()).maxTidExecuted}");
+
+            commitInfo.put(batchCommitCommand.batch(), trackingBatchMap.get(batchCommitCommand.batch()).maxTidExecuted);
+            loggingHandler.commit(batchCommitCommand.batch());
+
 
             BatchContext batchContext = BatchContext.build(batchCommitCommand);
             batchContextMap.put(batchCommitCommand.batch(), batchContext);

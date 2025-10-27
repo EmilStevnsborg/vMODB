@@ -17,6 +17,8 @@ public final class BatchUtils {
     public static int assembleBatchPayload(int remaining, List<TransactionEvent.PayloadRaw> events, ByteBuffer writeBuffer){
         int remainingBytes = writeBuffer.remaining();
 
+        System.out.println(STR."Assembling batch segment of \{events.size()} event");
+
         writeBuffer.put(BATCH_OF_EVENTS);
         // jump 2 integers
         writeBuffer.position(1 + JUMP);

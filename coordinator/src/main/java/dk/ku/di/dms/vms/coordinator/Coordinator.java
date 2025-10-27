@@ -795,7 +795,6 @@ public final class Coordinator extends ModbHttpServer {
     private void processMessagesSentByVmsWorkers() {
         Object message;
         while((message = this.coordinatorQueue.poll()) != null) {
-            System.out.println("Coordinator queue polled (processMessagesSentByVmsWorkers)");
             this.processVmsMessage(message);
         }
     }
@@ -810,14 +809,33 @@ public final class Coordinator extends ModbHttpServer {
             case Recovery.Payload recovery -> this.processRecoveryInCoordinator(recovery);
             case RecoverEvents.Payload recoverEvents ->
             {
-                // resend the events of the uncommitted batch
-                var crashedVmsEvents = this.consumerToEventsMap.get(recoverEvents.vms());
-                var uncommittedEventsForCrashedVms = loggingHandler.getUncommittedEvents(crashedVmsEvents);
-                if (uncommittedEventsForCrashedVms.isEmpty()) return;
-                System.out.println(STR."Resending events to \{recoverEvents.vms()}");
-                for (var event: uncommittedEventsForCrashedVms)
+                var currentBatchContext = batchContextMap.get(batchOffsetPendingCommit);
+                var terminalVMSs = currentBatchContext.terminalVMSs;
+
+                if (terminalVMSs.contains(recoverEvents.vms()))
                 {
-                    vmsWorkerContainerMap.get(recoverEvents.vms()).requeueTransactionEvent(event);
+                    System.out.println(STR."Sending batch commit info to \{recoverEvents.vms()} after reconnecting");
+                    var batchCommitInfo =
+                            BatchCommitInfo.of(
+                                    currentBatchContext.batchOffset,
+                                    currentBatchContext.previousBatchPerVms.get(recoverEvents.vms()),
+                                    currentBatchContext.numberOfTIDsPerVms.get(recoverEvents.vms()));
+                    vmsWorkerContainerMap.get(recoverEvents.vms()).queueMessage(batchCommitInfo);
+                }
+
+                System.out.println(STR."Coordinator queue polled, Resending events to \{recoverEvents.vms()}");
+
+                // resend the uncommitted events
+                var crashedVmsEvents = this.consumerToEventsMap.get(recoverEvents.vms());
+                if (crashedVmsEvents != null) {
+                    var uncommittedEventsForCrashedVms = loggingHandler.getUncommittedEvents(crashedVmsEvents);
+                    System.out.println(STR."There are \{uncommittedEventsForCrashedVms.size()} uncommitted events " +
+                            STR."for \{recoverEvents.vms()} from coordinator");
+                    if (uncommittedEventsForCrashedVms.isEmpty()) return;
+                    for (var event: uncommittedEventsForCrashedVms)
+                    {
+                        vmsWorkerContainerMap.get(recoverEvents.vms()).requeueTransactionEvent(event);
+                    }
                 }
             }
             case BatchCommitAck.Payload msg ->
