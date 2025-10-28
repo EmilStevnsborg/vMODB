@@ -92,4 +92,6 @@ public final class Constants {
      */
     public static final byte RECOVERY = 18;
 
+    public static final byte ABORT_UNCOMMITTED_TRANSACTIONS = 19;
+
 }

@@ -7,6 +7,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.control.RecoverEvents;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.Recovery;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.AbortUncommittedTransactions;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
 import dk.ku.di.dms.vms.modb.common.utils.BatchUtils;
@@ -178,6 +179,8 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                     System.out.println(STR."Vms recover events for \{consumerVms.identifier}");
                     vmsQueue.add(RecoverEvents.of(consumerVms.identifier, consumerVms.host, consumerVms.port));
                     consumerIsRecovering = false;
+                    System.out.println("Sleeping in ConsumerVmsWorker");
+                    Thread.sleep(1000); // if I don't sleep, the event will not send
                 }
 
 
@@ -188,9 +191,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                     processPendingMessages();
                     this.giveUpCpu(pollTimeout);
                     continue;
-                }
-                else {
-                    System.out.println(STR."Queue was drained from \{this.drained.size()} events");
                 }
                 pollTimeout = pollTimeout > 0 ? pollTimeout / 2 : 0;
                 this.sendBatchOfEventsNonBlocking(); // maybe it will send but not receive
@@ -210,6 +210,11 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                 {
                     processRecoveryInVms();
                 }
+                case AbortUncommittedTransactions.Payload abort ->
+                {
+                    System.out.println(STR."Clearing queue for consumer=\{consumerVms.identifier}");
+                    transactionEventQueue.clear();
+                }
                 default -> System.out.println(STR."Unrecognized message \{pendingMessage}");
             }
         }
@@ -225,6 +230,9 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         else {
             this.state = CONNECTED;
         }
+
+        // send pr
+
         System.out.println(STR."Reconnected to \{this.consumerVms.identifier}");
     }
 
@@ -331,7 +339,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                 writeBuffer = this.retrieveByteBuffer();
                 remaining = BatchUtils.assembleBatchPayload(remaining, this.drained, writeBuffer);
                 writeBuffer.flip();
-                System.out.println(STR."Buffer has pos and limit of \{writeBuffer.position()} and \{writeBuffer.limit()}");
+//                System.out.println(STR."Buffer has pos and limit of \{writeBuffer.position()} and \{writeBuffer.limit()}");
                 count = remaining;
                 // maximize useful work
                 while(!this.tryAcquireLock()){
@@ -421,11 +429,11 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         @Override
         public void completed(Integer result, ByteBuffer byteBuffer) {
             if(byteBuffer.hasRemaining()){
-                System.out.println("Writing byteBuffer");
+//                System.out.println("Writing byteBuffer");
                 // keep the lock and send the remaining
                 channel.write(byteBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, byteBuffer, this);
             } else {
-                System.out.println("ByteBuffer empty");
+//                System.out.println("ByteBuffer empty");
                 returnByteBuffer(byteBuffer);
                 releaseLock();
             }

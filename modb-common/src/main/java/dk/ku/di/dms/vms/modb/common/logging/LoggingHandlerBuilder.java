@@ -16,55 +16,62 @@ import java.util.Properties;
 public final class LoggingHandlerBuilder {
 
     public static ILoggingHandler build(String identifier) {
-        return build(identifier, new VmsSerdesProxyBuilder().build(), 1000);
+        return build(identifier, new VmsSerdesProxyBuilder().build(), 1000, false);
     }
 
-    public static ILoggingHandler build(String identifier, IVmsSerdesProxy serdesProxy, int bufferSize) {
+    public static ILoggingHandler build(String identifier, IVmsSerdesProxy serdesProxy, int bufferSize, boolean truncate) {
 //        String fileName = identifier + "_" + new Date().getTime() +".llog";
         Properties props = ConfigUtils.loadProperties();
 
         String fileName = identifier + ".llog";
-//        String userHome = ConfigUtils.getUserHome();
-        String currentDir = System.getProperty("user.dir");
-        String basePath = currentDir + "/logs";
-        File theDir = new File(basePath);
 
-        System.out.println("\n############# LoggingHandlerBuilder ###############\n");
-        System.out.println(STR."modb.common.logging.LoggingHandlerBuilder.build path: \{theDir.getAbsolutePath()}");
+        StandardOpenOption[] options = buildFileOpenOptions(truncate);
+        var file = buildFile(fileName);
 
-        assert theDir.exists() || theDir.mkdirs();
-        String filePath = basePath + "/" + fileName;
-        Path path = Paths.get(filePath);
-        FileChannel fileChannel;
-        try {
-            fileChannel = FileChannel.open(path,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.TRUNCATE_EXISTING,
-                    StandardOpenOption.READ,
-                    StandardOpenOption.WRITE);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
         String loggingType = props.getProperty("logging_type");
         ILoggingHandler handler;
         try {
-            if (loggingType.contentEquals("thesisV0")) {
-                System.out.println("thesis v0 logging type");
-                handler = new ThesisLoggingHandlerV0(fileChannel, fileName);
-            }
-            else if(loggingType.contentEquals("thesisV1")) {
-                System.out.println("thesis v1 logging type");
-                handler = new ThesisLoggingHandlerV1(fileChannel, fileName, serdesProxy, bufferSize);
-            }
-            else {
-                System.out.println("default logging type");
-                handler = new DefaultLoggingHandler(fileChannel, fileName);
-            }
-        } catch (NoClassDefFoundError | Exception e) {
-            System.out.println("Failed to load compressed logging handler, setting the default. Error:\n"+e);
-            handler = new DefaultLoggingHandler(fileChannel, fileName);
+            FileChannel fileChannel = FileChannel.open(Path.of(file.toURI()), options);
+
+            System.out.println("thesis v1 logging type");
+            handler = new ThesisLoggingHandlerV1(fileChannel, serdesProxy, bufferSize);
+
+        }
+        catch (NoClassDefFoundError | Exception e) {
+            return null;
         }
         return handler;
+    }
+
+
+    private static StandardOpenOption[] buildFileOpenOptions(boolean truncate) {
+        StandardOpenOption[] options;
+//        System.out.println(STR."buildFileOpenOptions truncating=\{truncate}");
+        if(truncate){
+            options = new StandardOpenOption[]{
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.SPARSE,
+                    StandardOpenOption.READ,
+                    StandardOpenOption.WRITE
+            };
+        } else {
+            options = new StandardOpenOption[]{
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.SPARSE,
+                    StandardOpenOption.READ,
+                    StandardOpenOption.WRITE
+            };
+        }
+        return options;
+    }
+
+    private static File buildFile(String fileName) {
+        String currentDir = System.getProperty("user.dir");
+        String basePath = currentDir + "/logs";
+        String filePath = basePath + "/" + fileName;
+        File file = new File(filePath);
+        return file;
     }
 
 }

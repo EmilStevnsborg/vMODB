@@ -67,6 +67,7 @@ public final class Main {
 
             Customer customer = SERDES.deserialize(payload, Customer.class);
             this.repository.upsert(customer);
+            // save the data injected by adding them to keysToFlush (only happening when modifying via transaction task)
         }
 
         // http://host/customer/{id}
@@ -76,7 +77,7 @@ public final class Main {
             String[] split = uri.split("/");
             long lastTid = VMS.lastTidFinished();
 
-            this.transactionManager.beginTransaction(lastTid, 0, lastTid, true);
+            this.transactionManager.beginTransaction(0, 0, lastTid, true);
             if (split[split.length - 1].equals("customer")) {
                 var customers = this.repository.getAll();
                 return customers.toString();

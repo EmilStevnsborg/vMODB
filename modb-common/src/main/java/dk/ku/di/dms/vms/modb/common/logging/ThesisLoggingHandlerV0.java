@@ -14,11 +14,9 @@ import static dk.ku.di.dms.vms.modb.common.schema.network.Constants.*;
 public class ThesisLoggingHandlerV0 implements ILoggingHandler {
 
     protected final FileChannel fileChannel;
-    protected final String fileName;
 
-    public ThesisLoggingHandlerV0(FileChannel channel, String fileName) {
+    public ThesisLoggingHandlerV0(FileChannel channel) {
         this.fileChannel = channel;
-        this.fileName = fileName;
     }
 
     @Override
@@ -504,6 +502,6 @@ public class ThesisLoggingHandlerV0 implements ILoggingHandler {
     }
 
     public final String getFileName() {
-        return this.fileName;
+        return "";
     }
 }

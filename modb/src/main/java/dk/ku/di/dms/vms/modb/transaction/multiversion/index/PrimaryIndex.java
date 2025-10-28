@@ -216,7 +216,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
     public Object[] lookupByKey(TransactionContext txCtx, IKey key){
         OperationSetOfKey operationSet = this.updatesPerKeyMap.get( key );
         if (operationSet == null) {
-            System.out.println("LookUpByKey: OperationSet is null, look in rawIndex");
+//            System.out.println(STR."LookUpByKey: OperationSet is null, look in rawIndex \{key}");
             return this.rawIndex.lookupByKey(key);
         }
         if(txCtx.readOnly) {
@@ -267,7 +267,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         TransactionWrite entry = TransactionWrite.upsert(WriteType.INSERT, values);
         if(operationSet == null){
             operationSet = new OperationSetOfKey(WriteType.INSERT);
-            System.out.println(STR."Putting operationSet after doInsert under key=\{key} and tid=\{txCtx.tid}");
+//            System.out.println(STR."Putting operationSet after doInsert under key=\{key} and tid=\{txCtx.tid}");
             this.updatesPerKeyMap.put(key, operationSet);
         } else {
             operationSet.lastWriteType = WriteType.INSERT;
@@ -290,9 +290,9 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         }
         if(exists) {
             this.doUpdate(txCtx, key, values, operationSet);
-            System.out.println("DoUpdate");
+//            System.out.println("DoUpdate");
         } else {
-            System.out.println("DoInsert");
+//            System.out.println("DoInsert");
             this.doInsert(txCtx, key, values, operationSet);
         }
         return true;
@@ -484,12 +484,13 @@ public final class PrimaryIndex implements IMultiVersionIndex {
     }
 
     public void installWrites(TransactionContext txCtx){
-        Set<IKey> writeSet = this.removeWriteSet(txCtx);
+        Set<IKey> writeSet = this.removeAllWriteSetsUpTo(txCtx);
         if(writeSet == null) {
             LOGGER.log(WARNING, "Primary Index: Transaction ID "+txCtx.tid+" could not be found in write set. Perhaps concurrent threads are set to the same TID?");
             return;
         }
         this.keysToFlush.addAll(writeSet);
+//        System.out.println(STR."Number of keys to flush \{keysToFlush.size()}");
         writeSet.clear();
         WRITE_SET_BUFFER.addLast(writeSet);
     }
@@ -500,8 +501,20 @@ public final class PrimaryIndex implements IMultiVersionIndex {
                 Objects.requireNonNullElseGet(WRITE_SET_BUFFER.poll(), HashSet::new)).add(key);
     }
 
-    public Set<IKey> removeWriteSet(TransactionContext txCtx){
+    public Set<IKey> removeWriteSet(TransactionContext txCtx)
+    {
         return this.writeSetMap.remove(txCtx.tid);
+    }
+
+    // remove all writeSets
+    public Set<IKey> removeAllWriteSetsUpTo(TransactionContext txCtx)
+    {
+        Set<IKey> completeWriteSet = new HashSet<>();
+        var TIDs = this.writeSetMap.keySet().stream().filter(t -> t <= txCtx.tid).toList();
+        for (var tid : TIDs) {
+            completeWriteSet.addAll(writeSetMap.remove(tid));
+        }
+        return completeWriteSet;
     }
 
     public ReadWriteIndex<IKey> underlyingIndex(){

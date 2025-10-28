@@ -193,7 +193,6 @@ public class StorageUtils {
 
     public static StandardOpenOption[] buildFileOpenOptions(boolean truncate) {
         StandardOpenOption[] options;
-//        System.out.println(STR."buildFileOpenOptions truncating=\{truncate}");
         if(truncate){
             options = new StandardOpenOption[]{
                     StandardOpenOption.CREATE,

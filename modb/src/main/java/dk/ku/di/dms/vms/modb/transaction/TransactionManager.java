@@ -439,7 +439,6 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
         System.out.println(STR."TransactionManager checkpointing batch=\{batch} and maxTid=\{maxTid}");
         LOGGER.log(INFO, "Checkpoint for max TID "+maxTid+" started at "+System.currentTimeMillis());
         if(this.checkpointing) {
-            System.out.println(STR."TransactionManager checkpointing is \{this.checkpointing} ");
             for (Table table : this.catalog.values()) {
                 LOGGER.log(INFO, "Checkpointing table "+table.getName());
                 table.primaryKeyIndex().checkpoint(maxTid); // checkpointing here
@@ -469,7 +468,8 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
      * it already tracks individual operations on keys through its own cache.
      */
     @Override
-    public void installWrites(){
+    public void installWrites()
+    {
         TransactionContext txCtx = this.txCtxMap.get(Thread.currentThread().threadId());
         for(var index : txCtx.indexes){
             index.installWrites(txCtx);

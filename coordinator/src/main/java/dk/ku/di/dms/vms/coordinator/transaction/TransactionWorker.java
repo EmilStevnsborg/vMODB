@@ -62,6 +62,7 @@ public final class TransactionWorker extends StoppableRunnable {
     /**
      * Build private VmsTracking objects
      */
+
     public static TransactionWorker build(int id, Deque<TransactionInput> inputQueue,
                                           long startingTid, int maxNumberOfTIDsBatch,
                                           int batchWindow, int numWorkers,
@@ -72,6 +73,23 @@ public final class TransactionWorker extends StoppableRunnable {
                                           Map<String, IVmsWorker> vmsWorkerContainerMap,
                                           Queue<Object> coordinatorQueue,
                                           IVmsSerdesProxy serdesProxy)
+    {
+        return TransactionWorker.build(id, inputQueue, startingTid,
+                                       maxNumberOfTIDsBatch, batchWindow, numWorkers,
+                                       precedenceMapInputQueue, precedenceMapOutputQueue, transactionMap,
+                                       vmsIdentifiersPerDAG, vmsWorkerContainerMap, coordinatorQueue,
+                                       serdesProxy, -1);
+    }
+    public static TransactionWorker build(int id, Deque<TransactionInput> inputQueue,
+                                          long startingTid, int maxNumberOfTIDsBatch,
+                                          int batchWindow, int numWorkers,
+                                          Queue<Map<String, PrecedenceInfo>> precedenceMapInputQueue,
+                                          Queue<Map<String, PrecedenceInfo>> precedenceMapOutputQueue,
+                                          Map<String, TransactionDAG> transactionMap,
+                                          Map<String, VmsNode[]> vmsIdentifiersPerDAG,
+                                          Map<String, IVmsWorker> vmsWorkerContainerMap,
+                                          Queue<Object> coordinatorQueue,
+                                          IVmsSerdesProxy serdesProxy, long startingBatchOffset)
     {
         Map<String, VmsTracking> vmsTrackingMap = new HashMap<>();
         Map<String, VmsTracking[]> vmsPerTransactionMap = new HashMap<>(vmsIdentifiersPerDAG.size());
@@ -87,7 +105,7 @@ public final class TransactionWorker extends StoppableRunnable {
         }
         return new TransactionWorker(id, inputQueue, startingTid, maxNumberOfTIDsBatch, batchWindow, numWorkers,
                 precedenceMapInputQueue, precedenceMapOutputQueue, transactionMap,
-                vmsPerTransactionMap, vmsTrackingMap, vmsWorkerContainerMap, coordinatorQueue, serdesProxy);
+                vmsPerTransactionMap, vmsTrackingMap, vmsWorkerContainerMap, coordinatorQueue, serdesProxy, startingBatchOffset);
     }
 
     private TransactionWorker(int id, Deque<TransactionInput> inputQueue,
@@ -96,7 +114,7 @@ public final class TransactionWorker extends StoppableRunnable {
                               Queue<Map<String, PrecedenceInfo>> precedenceMapOutputQueue,
                               Map<String, TransactionDAG> transactionMap, Map<String, VmsTracking[]> vmsPerTransactionMap,
                               Map<String, VmsTracking> vmsTrackingMap, Map<String, IVmsWorker> vmsWorkerContainerMap,
-                              Queue<Object> coordinatorQueue, IVmsSerdesProxy serdesProxy) {
+                              Queue<Object> coordinatorQueue, IVmsSerdesProxy serdesProxy, long startingBatchOffset) {
         this.id = id;
         this.inputQueue = inputQueue;
         this.startingTidBatch = startingTidBatch;
@@ -117,8 +135,11 @@ public final class TransactionWorker extends StoppableRunnable {
         this.precedenceMapCache = new HashMap<>();
 
         // define first batch context based on data from constructor
-        long startingBatchOffset = (this.startingTidBatch + this.maxNumberOfTIDsBatch - 1) / maxNumberOfTIDsBatch;
-        this.batchContext = new BatchContext(startingBatchOffset);
+        long startingBatchOffsetActual = startingBatchOffset == -1 ?
+                                        (this.startingTidBatch + this.maxNumberOfTIDsBatch - 1) / maxNumberOfTIDsBatch
+                                        : startingBatchOffset;
+
+        this.batchContext = new BatchContext(startingBatchOffsetActual);
 
         this.coordinatorQueue = coordinatorQueue;
     }
@@ -299,6 +320,7 @@ public final class TransactionWorker extends StoppableRunnable {
         // store for batch completion time
         this.precedenceMapCache.put(entry.getKey(), precedenceMap);
     }
+
 
     private boolean advanceCurrentBatch() {
         if(!this.precedenceMapCache.containsKey(this.batchContext.batchOffset - this.numWorkers)) {

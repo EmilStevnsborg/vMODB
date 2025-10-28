@@ -12,6 +12,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.control.Recovery;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.AbortUncommittedTransactions;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbort;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbortInfo;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
@@ -29,6 +30,8 @@ import dk.ku.di.dms.vms.web_common.ModbHttpServer;
 import dk.ku.di.dms.vms.web_common.NetworkUtils;
 import dk.ku.di.dms.vms.web_common.channel.JdkAsyncChannel;
 import dk.ku.di.dms.vms.web_common.meta.ConnectionMetadata;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
@@ -57,7 +60,8 @@ import static java.lang.System.Logger.Level.*;
 public final class VmsEventHandler extends ModbHttpServer {
 
     private static final System.Logger LOGGER = System.getLogger(VmsEventHandler.class.getName());
-    
+    private static final Logger log = LoggerFactory.getLogger(VmsEventHandler.class);
+
     /** SERVER SOCKET **/
     // other VMSs may want to connect in order to send events
     private final AsynchronousServerSocketChannel serverSocket;
@@ -254,7 +258,8 @@ public final class VmsEventHandler extends ModbHttpServer {
         this.abortingTransaction = true;
 
         var logIdentifier = STR."\{me.identifier}_out";
-        this.loggingHandler = LoggingHandlerBuilder.build(logIdentifier, serdesProxy, options.networkBufferSize);
+        var truncate = recoveryEnabled ? false : true;
+        this.loggingHandler = LoggingHandlerBuilder.build(logIdentifier, serdesProxy, options.networkBufferSize, truncate);
 
         this.vmsQueue = new LinkedBlockingQueue<>();
         this.commitInfo = new LongPairStore("commit_info", !recoveryEnabled);
@@ -269,6 +274,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         System.out.println(STR."crashOccurred=\{crashOccurred} && recoveryEnabled=\{recoveryEnabled}");
         if (crashOccurred && recoveryEnabled) recoverVms();
 
+        // this thread is for reading messages from workers
          new Thread(() -> {
             try {
                 while (isRunning()) {
@@ -364,6 +370,37 @@ public final class VmsEventHandler extends ModbHttpServer {
         pauseHandler.accept(false);
     }
 
+    // this function only updates in memory structures
+    private void abortUncommittedTransactions()
+    {
+        System.out.println("Aborting all uncommitted transactions");
+        pauseHandler.accept(true);
+        try {
+
+            var latestCommitInfo = commitInfo.getLatest();
+            var batch = latestCommitInfo[0];
+            var maxTid = latestCommitInfo[1];
+
+            var message = new AbortUncommittedTransactions.Payload();
+            consumerVmsContainerMap.values().forEach(worker -> {
+                worker.queueMessage(message);
+            });
+
+            // clear all tasks later than the latest committed
+            taskClearer.accept(maxTid+1);
+
+            loggingHandler.cutLog(maxTid+1);
+            restoreStableState(maxTid+1);
+
+            trackingBatchMap.clear();
+            batchContextMap.entrySet().removeIf(entry -> entry.getKey() > batch);
+
+        } catch (Exception e) {
+            //
+        }
+        pauseHandler.accept(false);
+    }
+
     // The consumerWorker of the crashed vms must reconnect
     //      1. it needs to help recover it
     private void processRecovery(Recovery.Payload recovery)
@@ -391,13 +428,13 @@ public final class VmsEventHandler extends ModbHttpServer {
 
 
         // cut the log
-        loggingHandler.cutLog(transactionAbort.tid(), transactionAbort.batch());
+        loggingHandler.cutLog(transactionAbort.tid());
 
         var eventsInBatchAfterCut = loggingHandler.countEventsInBatch(transactionAbort.batch());
         System.out.println("After cut: " + eventsInBatchAfterCut);
 
         // restore stable state
-        restoreStableState(transactionAbort.batch(), transactionAbort.tid());
+        restoreStableState(transactionAbort.tid());
 
         // update batch metadata
         fixTrackingBatch(transactionAbort.tid(), eventsInBatchAfterCut);
@@ -425,7 +462,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         var eventOutput = txResult.getOutboundEventResult();
 
         // cut the log
-        loggingHandler.cutLog(eventOutput.tid(), eventOutput.batch());
+        loggingHandler.cutLog(eventOutput.tid());
 
         var eventsInBatchAfterCut = loggingHandler.countEventsInBatch(eventOutput.batch());
         System.out.println("After cut: " + eventsInBatchAfterCut);
@@ -436,7 +473,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         this.leaderWorker.queueMessage(abortMessage);
 
         // restore stable state
-        restoreStableState(abortMessage.batch(), abortMessage.tid());
+        restoreStableState(abortMessage.tid());
 
         // update batch metadata
         fixTrackingBatch(abortMessage.batch(), eventsInBatchAfterCut);
@@ -558,7 +595,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         System.out.println(STR."Batch \{batch} checkpointed");
     }
 
-    private void restoreStableState(long batch, long failedTid)
+    private void restoreStableState(long failedTid)
     {
         transactionManager.restoreStableState(failedTid);
     }
@@ -675,7 +712,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                 this.readBuffer.flip();
             }
             byte messageType = this.readBuffer.get();
-            System.out.println(STR."\nVms read message type \{messageType}\n");
+            System.out.println(STR."Vms read message type \{messageType}");
             switch (messageType) {
                 case (BATCH_OF_EVENTS) -> {
                     System.out.println(STR."Vms read BATCH_OF_EVENTS");
@@ -1181,15 +1218,8 @@ public final class VmsEventHandler extends ModbHttpServer {
                         System.out.println(STR."Received recovery message from leader");
                         processRecovery(recovery);
                     }
-                    case (BATCH_ABORT_REQUEST) -> {
-                        if(this.readBuffer.remaining() < (BatchAbortRequest.SIZE - 1)){
-                            this.fetchMoreBytes(startPos);
-                            return;
-                        }
-                        // some new leader request to roll back to last batch commit
-                        BatchAbortRequest.Payload batchAbortReq = BatchAbortRequest.read(this.readBuffer);
-                        LOGGER.log(WARNING, "Batch (" + batchAbortReq.batch() + ") abort received from the leader");
-                        // vmsInternalChannels.batchAbortQueue().add(batchAbortReq);
+                    case (ABORT_UNCOMMITTED_TRANSACTIONS) -> {
+                        abortUncommittedTransactions();
                     }
                     case (CONSUMER_SET) -> {
                         try {
@@ -1325,7 +1355,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             System.out.println(STR."Vms will commit batch=\{batchCommitCommand.batch()} " +
                                STR."and tid=\{trackingBatchMap.get(batchCommitCommand.batch()).maxTidExecuted}");
 
-            commitInfo.put(batchCommitCommand.batch(), trackingBatchMap.get(batchCommitCommand.batch()).maxTidExecuted);
+            // committing output events sent from the VMS
             loggingHandler.commit(batchCommitCommand.batch());
 
 
@@ -1345,7 +1375,13 @@ public final class VmsEventHandler extends ModbHttpServer {
 
             if(options.checkpointing()){
                 LOGGER.log(INFO, me.identifier + ": Requesting checkpoint for batch " + batchCommitCommand.batch());
-                submitBackgroundTask(()->checkpoint(batchCommitCommand.batch(), batchMetadata.maxTidExecuted));
+
+                // committing the actual data snapshot and the commitInfo (metadata) about the snapshot
+                // argue that both of these should be atomic
+                submitBackgroundTask(()->{
+                    checkpoint(batchCommitCommand.batch(), batchMetadata.maxTidExecuted);
+                    commitInfo.put(batchCommitCommand.batch(), trackingBatchMap.get(batchCommitCommand.batch()).maxTidExecuted);
+                });
             }
         }
 

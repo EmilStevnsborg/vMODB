@@ -32,17 +32,15 @@ import static dk.ku.di.dms.vms.modb.common.schema.network.Constants.BATCH_OF_EVE
 public class ThesisLoggingHandlerV1 implements ILoggingHandler
 {
     protected final FileChannel fileChannel;
-    protected final String fileName;
     private IVmsSerdesProxy serdesProxy;
     private final ConcurrentHashMap<Long, TransactionEvent.PayloadRaw> eventsSent = new ConcurrentHashMap<>();
     private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final Deque<ByteBuffer> writeBufferPool;
     private int writeBufferSize;
 
-    public ThesisLoggingHandlerV1(FileChannel channel, String fileName, IVmsSerdesProxy serdesProxy, int bufferSize)
+    public ThesisLoggingHandlerV1(FileChannel channel, IVmsSerdesProxy serdesProxy, int bufferSize)
     {
         this.fileChannel = channel;
-        this.fileName = fileName;
         this.serdesProxy = serdesProxy;
         this.writeBufferPool = new ConcurrentLinkedDeque<>();
         writeBufferSize = bufferSize;
@@ -73,6 +71,7 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
     @Override
     public boolean commit(long bid)
     {
+        System.out.println(STR."LoggingHandler Committing batch=\{bid}");
         rwLock.readLock().lock();
         try {
             var buffer = retrieveByteBuffer();
@@ -90,7 +89,8 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
                 while (buffer.hasRemaining()) {
                     fileChannel.write(buffer);
                 }
-                fileChannel.force(false);
+                fileChannel.force(true);
+                System.out.println(STR."LoggingHandler Committing batch=\{bid} has been forced");
 
                 // remove committed events atomically
                 committedEvents.forEach(e -> eventsSent.remove(e.tid()));
@@ -133,6 +133,7 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
         var buffer = retrieveByteBuffer();
         long latestCommittedBid = 0;
         long latestCommittedTid = 0;
+        long numTIDs = 0;
 
         var segmentMetadataSize = 1 + 2 * Integer.BYTES + 2 * Long.BYTES;
         var metadataBuffer = ByteBuffer.allocate(segmentMetadataSize);
@@ -140,8 +141,13 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
         long batchPosition = 0;
         fileChannel.position(batchPosition);
 
+        System.out.println(STR."Loading latest commit from logs file size=\{fileChannel.size()}");
+
         while (fileChannel.position() < fileChannel.size())
         {
+            metadataBuffer.clear();
+            readMetadata(metadataBuffer);
+
             byte type = metadataBuffer.get();
             if (type != BATCH_OF_EVENTS) throw new IOException("expected BATCH_OF_EVENTS, got " + type);
 
@@ -151,10 +157,14 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
             long bid = metadataBuffer.getLong();
 
             if (bid < latestCommittedBid) {
+                System.out.println(STR."bid=\{bid} in file is less than \{latestCommittedBid}");
                 batchPosition += segmentSize;
                 fileChannel.position(batchPosition);
                 continue;
             }
+
+            numTIDs = count;
+            latestCommittedBid = bid;
 
             fileChannel.position(batchPosition);
             buffer.limit(segmentSize);
@@ -168,13 +178,15 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
                     .max()
                     .orElse(-1);
 
-            if (batchMaxTid > latestCommittedTid) latestCommittedBid = batchMaxTid;
+            if (batchMaxTid > latestCommittedTid) latestCommittedTid = batchMaxTid;
+
+            System.out.println(STR."Updated: latestCommittedBid=\{latestCommittedBid}, latestCommittedTid=\{latestCommittedTid}");
 
             batchPosition += segmentSize;
             fileChannel.position(batchPosition);
         }
 
-        return new long[]{latestCommittedBid, latestCommittedTid};
+        return new long[]{latestCommittedBid, latestCommittedTid, numTIDs};
     }
 
     private void readMetadata(ByteBuffer metadataBuffer) throws IOException
@@ -269,11 +281,11 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
     }
 
     @Override
-    public void cutLog(long failedTid, long failedTidBatch) {
+    public void cutLog(long failedTid) {
         rwLock.writeLock().lock();
         try {
             System.out.println("Cutting log");
-            eventsSent.values().stream().filter(e -> e.tid() < failedTid).forEach(e -> eventsSent.remove(e.tid()));
+            eventsSent.values().stream().filter(e -> e.tid() >= failedTid).forEach(e -> eventsSent.remove(e.tid()));
         } finally {
             rwLock.writeLock().unlock();
         }
@@ -321,6 +333,6 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
     }
 
     public final String getFileName() {
-        return this.fileName;
+        return "";
     }
 }

@@ -14,6 +14,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.control.Recovery;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.AbortUncommittedTransactions;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbort;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbortInfo;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
@@ -496,6 +497,9 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 // if the vms is the crashed one, process the connection
                 this.processRecovery(o);
             }
+            case AbortUncommittedTransactions.Payload o -> {
+                sendAbortUncommittedTransactions();
+            }
             case String o -> {
                 this.consumerSetVmsStr = o;
                 this.sendConsumerSet(o);
@@ -512,7 +516,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     //         which can forward the message to relevant VMSes through other workers
     private void  initializeRecoveryInCoordinator(IdentifiableNode crashedVms)
     {
-        System.out.println(STR."initializeRecoveryInCoordinator: VmsWorker consumer=\{consumerVms.identifier} is \{consumerIsRecovering}");
         // safeguard in the case, it is triggered after receiving recovery message
         // from coordinator caused by other connection crash
         if (consumerIsRecovering) return;
@@ -524,6 +527,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         coordinatorQueue.add(recoveryMessage);
     }
 
+
     // Coordinator VmsWorker has been told that the connection to VMS crashed
     //      1. starts process of attempting reconnection to crashed consumer VMS
     private void processRecovery(Recovery.Payload recovery)
@@ -534,6 +538,16 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         if (consumerIsRecovering) return;
 
         consumerIsRecovering = true;
+    }
+
+    private void sendAbortUncommittedTransactions()
+    {
+        System.out.println(STR."VmsWorker sendAbortUncommittedTransactions message to \{consumerVms.identifier}");
+        ByteBuffer writeBuffer = retrieveByteBuffer();
+        AbortUncommittedTransactions.write(writeBuffer);
+        writeBuffer.flip();
+        this.acquireLock();
+        this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
     }
 
     // the workers of all affected VMSes will send this to their VMS

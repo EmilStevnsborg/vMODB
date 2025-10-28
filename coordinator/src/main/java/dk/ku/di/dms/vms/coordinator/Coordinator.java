@@ -14,6 +14,7 @@ import dk.ku.di.dms.vms.coordinator.vms.VmsWorker;
 import dk.ku.di.dms.vms.modb.common.data_structure.Tuple;
 import dk.ku.di.dms.vms.modb.common.logging.ILoggingHandler;
 import dk.ku.di.dms.vms.modb.common.logging.LoggingHandlerBuilder;
+import dk.ku.di.dms.vms.modb.common.logging.LongPairStore;
 import dk.ku.di.dms.vms.modb.common.memory.MemoryManager;
 import dk.ku.di.dms.vms.modb.common.memory.MemoryUtils;
 import dk.ku.di.dms.vms.modb.common.schema.VmsEventSchema;
@@ -27,6 +28,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.control.Recovery;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.AbortUncommittedTransactions;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbort;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbortInfo;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
@@ -130,16 +132,11 @@ public final class Coordinator extends ModbHttpServer {
     private final List<Tuple<TransactionWorker, Thread>> transactionWorkers;
 
     private final Consumer<TransactionInput> transactionInputConsumer;
-
-    private boolean abortingTransaction;
     private boolean coordinatorIsRecovering;
 
     private final IHttpHandler httpHandler;
 
     private ILoggingHandler loggingHandler;
-
-    private static final int DEFAULT_STARTING_TID = 1;
-    private static final int DEFAULT_STARTING_BATCH_ID = 1;
 
     public static Coordinator build(Properties properties, Map<String, IdentifiableNode> startersVMSs,
                                     Map<String, TransactionDAG> transactionMap, Function<Coordinator, IHttpHandler> httpHandlerSupplier,
@@ -192,8 +189,6 @@ public final class Coordinator extends ModbHttpServer {
                         .withLogging(logging)
                         .withRecoveryEnabled(recoveryEnabled)
                 ,
-                DEFAULT_STARTING_BATCH_ID,
-                DEFAULT_STARTING_TID,
                 httpHandlerSupplier,
                 serdes
         );
@@ -207,16 +202,11 @@ public final class Coordinator extends ModbHttpServer {
                                     ServerNode me,
                                     // coordinator configuration
                                     CoordinatorOptions options,
-                                    // starting batch offset (may come from storage after a crash)
-                                    long startingBatchOffset,
-                                    // starting tid (may come from storage after a crash)
-                                    long startingTid,
                                     Function<Coordinator, IHttpHandler> httpHandlerSupplier,
                                     IVmsSerdesProxy serdesProxy) {
         return new Coordinator(servers == null ? new ConcurrentHashMap<>() : servers,
                 new HashMap<>(), startersVMSs, transactionMap,
-                me, options, startingBatchOffset, startingTid,
-                httpHandlerSupplier, serdesProxy);
+                me, options, httpHandlerSupplier, serdesProxy);
     }
 
     private Coordinator(Map<Integer, ServerNode> servers,
@@ -225,21 +215,22 @@ public final class Coordinator extends ModbHttpServer {
                         Map<String, TransactionDAG> transactionMap,
                         ServerNode me,
                         CoordinatorOptions options,
-                        long startingBatchOffset,
-                        long startingTid,
                         Function<Coordinator, IHttpHandler> httpHandlerSupplier,
                         IVmsSerdesProxy serdesProxy) {
         super();
 
-        abortingTransaction = false;
-
         // coordinator options
         this.options = options;
-        coordinatorIsRecovering = options.getRecoveryEnabled();
+
+        var crashOccurred = true;
+        var recoveryEnabled = options.getRecoveryEnabled();
+        System.out.println(STR."crashOccurred=\{crashOccurred} && recoveryEnabled=\{recoveryEnabled}");
+
+        coordinatorIsRecovering = crashOccurred && recoveryEnabled;
         var truncate = coordinatorIsRecovering ? false : true;
 
         var logIdentifier = "coordinator_out";
-        this.loggingHandler = LoggingHandlerBuilder.build(logIdentifier, serdesProxy, this.options.getNetworkBufferSize());
+        this.loggingHandler = LoggingHandlerBuilder.build(logIdentifier, serdesProxy, this.options.getNetworkBufferSize(), truncate);
 
         try {
             if (options.getNetworkThreadPoolSize() > 0) {
@@ -314,23 +305,24 @@ public final class Coordinator extends ModbHttpServer {
         // to store information about a batch
         this.batchContextMap = new ConcurrentHashMap<>();
 
-        if (!coordinatorIsRecovering) {
-            // batch commit metadata
-            long dummyBatchOffset = startingBatchOffset - 1;
-            this.batchOffsetPendingCommit = startingBatchOffset;
-
-            // initialize batch offset map
-            BatchContext currentBatch = new BatchContext(dummyBatchOffset);
-            currentBatch.seal(startingTid - 1, startingTid - 1, Map.of(), Map.of());
-            this.batchContextMap.put(dummyBatchOffset, currentBatch);
-        }
-
         this.vmsWorkerContainerMap = new HashMap<>();
         this.transactionWorkers = new ArrayList<>();
         this.httpHandler = httpHandlerSupplier.apply(this);
     }
 
     private final Map<String, VmsNode[]> vmsIdentifiersPerDAG = new HashMap<>();
+
+    // either initialize dummy or previously committed batch
+    private void initializeBatchContext(long startingBatchOffset, long startingTid, long numTIDs)
+    {
+        // assume that
+        this.batchOffsetPendingCommit = startingBatchOffset+1;
+
+        // initialize batch offset map
+        BatchContext currentBatch = new BatchContext(startingBatchOffset);
+        currentBatch.seal(numTIDs, startingTid, Map.of(), Map.of());
+        this.batchContextMap.put(startingBatchOffset, currentBatch);
+    }
 
     /**
      * This method contains the event loop that contains the main functions of a leader/coordinator
@@ -343,25 +335,56 @@ public final class Coordinator extends ModbHttpServer {
      */
     @Override
     public void run() {
+
         // setup asynchronous listener for new connections
         this.serverSocket.accept(null, new AcceptCompletionHandler());
 
         // connect to all virtual microservices
-        // don't truncate logging files if recovering
         this.setupStarterVMSs();
         this.preprocessDAGs();
 
-        // update batchContext and currentBatch
-        if (coordinatorIsRecovering)
-        {
-            // get the latest committed info
+        // sleep
+        System.out.println("Sleeping for 1 second...");
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {}
 
-            // retrieve the events of uncommitted batches sent to the VMSes based on logs of VmsWorkers
+        /////////////////////////////////////////////
+        /////////////////////////////////////////////
+        if (coordinatorIsRecovering) {
 
-            // finish here
+            for (var vms: vmsMetadataMap.values())
+            {
+                var message = new AbortUncommittedTransactions.Payload();
+                System.out.println("AbortUncommittedTransactions for workers");
+                this.vmsWorkerContainerMap.get(vms.identifier).queueMessage(message);
+            }
+
+            try {
+                // get the latest committed info
+                var latestCommitInfo = loggingHandler.latestCommit();
+                var batchOffset = latestCommitInfo[0];
+                var tid = latestCommitInfo[1];
+                var numTIDs = latestCommitInfo[2];
+
+                System.out.println(STR."Initializing batchOffset=\{batchOffset}, tid=\{tid}, numTids=\{numTIDs}");
+
+                initializeBatchContext(batchOffset, tid, numTIDs);
+                this.setUpTransactionWorkers(tid+1, batchOffset+1);
+            }
+            catch (Exception e) {
+                e.printStackTrace();
+                System.out.println(STR."Initializing batchOffset=\{0}, tid=\{0}, numTids=\{0}");
+                initializeBatchContext(0, 0, 0);
+                this.setUpTransactionWorkers();
+            }
+        } else {
+            System.out.println(STR."Initializing batchOffset=\{0}, tid=\{0}, numTids=\{0}");
+            initializeBatchContext(0, 0, 0);
+            this.setUpTransactionWorkers();
         }
-
-        this.setUpTransactionWorkers();
+        /////////////////////////////////////////////
+        /////////////////////////////////////////////
 
         // event loop
         try {
@@ -388,9 +411,13 @@ public final class Coordinator extends ModbHttpServer {
         return precedenceMap;
     }
 
+    // non recovering
     private void setUpTransactionWorkers() {
+        setUpTransactionWorkers(1, -1);
+    }
+    private void setUpTransactionWorkers(long startingTid, long startingBatchOffset) {
         int numWorkers = this.options.getNumTransactionWorkers();
-        long initTid = 1;
+        long initTid = startingTid;
 
         var firstPrecedenceInputQueue = new ConcurrentLinkedDeque<Map<String, TransactionWorker.PrecedenceInfo>>();
         var precedenceMapInputQueue = firstPrecedenceInputQueue;
@@ -411,7 +438,8 @@ public final class Coordinator extends ModbHttpServer {
             TransactionWorker txWorker = TransactionWorker.build(idx, txInputQueue, initTid,
                     this.options.getMaxTransactionsPerBatch(), this.options.getBatchWindow(),
                     numWorkers, precedenceMapInputQueue, precedenceMapOutputQueue, this.transactionMap,
-                    this.vmsIdentifiersPerDAG, this.vmsWorkerContainerMap, this.coordinatorQueue, this.serdesProxy);
+                    this.vmsIdentifiersPerDAG, this.vmsWorkerContainerMap, this.coordinatorQueue, this.serdesProxy,
+                    startingBatchOffset);
             Thread txWorkerThread = Thread.ofPlatform()
                     .name("tx-worker-"+idx)
                     .inheritInheritableThreadLocals(false)
@@ -872,18 +900,13 @@ public final class Coordinator extends ModbHttpServer {
         // batch/BatchContext
         var relevantBatches  = batchContextMap.keySet()
                 .stream()
-                .filter(b -> b > failedTidBatch)
+                .filter(b -> b >= failedTidBatch)
                 .sorted()
                 .toList();
 
         for(var batchContextKey : relevantBatches)
         {
             var batchContext = batchContextMap.get(batchContextKey);
-
-            // if previous batch was removed, update the batchContext previousBatchPerVms
-            if (batchContextKey > failedTidBatch)
-            {
-            }
 
             if (batchContextKey == failedTidBatch)
             {
@@ -893,6 +916,22 @@ public final class Coordinator extends ModbHttpServer {
                 {
                     // advance to next batch
                     batchOffsetPendingCommit += 1;
+
+                    // update the previousBatch of the next batch to that of the failed batch
+                    var failedBatchPreviousBatchPerVms = batchContext.previousBatchPerVms;
+
+                    var newBatchContext = batchContextMap.get(batchOffsetPendingCommit);
+                    var newBatchPreviousBatchPerVms = newBatchContext.previousBatchPerVms;
+
+                    for (var entry : newBatchPreviousBatchPerVms.entrySet())
+                    {
+                        if (entry.getValue() == failedTidBatch)
+                        {
+                            // vms -> previousBatch
+                            newBatchPreviousBatchPerVms.put(entry.getKey(), failedBatchPreviousBatchPerVms.get(entry.getKey()));
+                        }
+                    }
+
                     return;
                 }
                 // assume new lastTid is the one prior to failedTid
@@ -925,8 +964,6 @@ public final class Coordinator extends ModbHttpServer {
     private void abortTransactionInCoordinator(TransactionAbortInfo.Payload txAbortInfo)
     {
         System.out.println("Coordinator abort transaction");
-        // stop pending logging
-        abortingTransaction = true;
 
         // sending aborts
         multiCast(txAbortInfo);
@@ -939,8 +976,6 @@ public final class Coordinator extends ModbHttpServer {
 
         // resend events
         resendTransactions(txAbortInfo.tid());
-
-        abortingTransaction = false;
     }
 
 
@@ -981,7 +1016,8 @@ public final class Coordinator extends ModbHttpServer {
 
     private final AtomicLong numTIDsCommitted = new AtomicLong(0);
 
-    private void updateBatchOffsetPendingCommit(BatchContext batchContext) {
+    private void updateBatchOffsetPendingCommit(BatchContext batchContext)
+    {
         if(batchContext.batchOffset == this.batchOffsetPendingCommit){
 
             System.out.println(STR."Coordinator will initiate commit of batch=\{batchOffsetPendingCommit}");
@@ -1083,9 +1119,6 @@ public final class Coordinator extends ModbHttpServer {
         }
     }
 
-    /**
-     * Only send to non-terminals
-     */
     private void sendCommitCommandToVMSs(BatchContext batchContext){
         for(VmsNode vms : this.vmsMetadataMap.values()){
 
