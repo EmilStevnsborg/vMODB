@@ -1,5 +1,6 @@
 package dk.ku.di.dms.vms.coordinator.transaction;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -24,6 +25,13 @@ public final class TransactionDAG {
         this.inputEvents = inputEvents.stream().collect( Collectors.toMap( EventIdentifier::getName, Function.identity() ) );
         this.internalNodes = Set.copyOf(internalNodes);
         this.terminalNodes = List.copyOf(terminalNodes);
+    }
+
+    public Set<String> getNodes() {
+        Set<String> allNodes = new HashSet<>(internalNodes);
+        allNodes.addAll(inputEvents.values().stream().map(ei -> ei.targetVms).toList());
+        allNodes.addAll(terminalNodes);
+        return allNodes;
     }
 
 }

@@ -78,7 +78,7 @@ public final class TransactionWorker extends StoppableRunnable {
                                        maxNumberOfTIDsBatch, batchWindow, numWorkers,
                                        precedenceMapInputQueue, precedenceMapOutputQueue, transactionMap,
                                        vmsIdentifiersPerDAG, vmsWorkerContainerMap, coordinatorQueue,
-                                       serdesProxy, -1);
+                                       serdesProxy, 0);
     }
     public static TransactionWorker build(int id, Deque<TransactionInput> inputQueue,
                                           long startingTid, int maxNumberOfTIDsBatch,
@@ -135,7 +135,7 @@ public final class TransactionWorker extends StoppableRunnable {
         this.precedenceMapCache = new HashMap<>();
 
         // define first batch context based on data from constructor
-        long startingBatchOffsetActual = startingBatchOffset == -1 ?
+        long startingBatchOffsetActual = startingBatchOffset == 0 ?
                                         (this.startingTidBatch + this.maxNumberOfTIDsBatch - 1) / maxNumberOfTIDsBatch
                                         : startingBatchOffset;
 
@@ -189,7 +189,10 @@ public final class TransactionWorker extends StoppableRunnable {
         return this.startingTidBatch + ((long) this.numWorkers * this.maxNumberOfTIDsBatch);
     }
 
-    private void processTransactionInput(TransactionInput transactionInput) {
+    private void processTransactionInput(TransactionInput transactionInput)
+    {
+//        System.out.println(STR."Processing input for transaction: \{transactionInput.name}");
+
         TransactionDAG transactionDAG = this.transactionMap.get( transactionInput.name );
         if(transactionDAG == null){
             throw new RuntimeException("The DAG for transaction "+transactionInput.name+" cannot be found");
@@ -224,6 +227,12 @@ public final class TransactionWorker extends StoppableRunnable {
             vms_.lastTid = this.tid;
             vms_.numberOfTIDsCurrentBatch++;
         }
+
+//        System.out.println(STR."Adding terminal nodes in \{transactionDAG.name} to batchContext terminal nodes");
+//        for (var node : transactionDAG.terminalNodes) {
+//            System.out.println(STR."node: \{node}");
+//        }
+
         this.batchContext.terminalVMSs.addAll( transactionDAG.terminalNodes );
 
         if(!pendingVMSs.isEmpty()) {
@@ -236,7 +245,6 @@ public final class TransactionWorker extends StoppableRunnable {
 
             this.vmsWorkerContainerMap.get(inputVms.identifier).queueTransactionEvent(txEvent);
         }
-//        System.out.println("Increment tid " + this.tid + " with +1");
         this.tid++;
     }
 
@@ -289,8 +297,8 @@ public final class TransactionWorker extends StoppableRunnable {
         this.precedenceMapInputQueue.poll();
 
         List<PendingTransactionInput> pendingInputs = entry.getValue();
-        for(PendingTransactionInput pendingInput : pendingInputs){
-            System.out.println("TransactionWorker pendingInput from pendingInputMap entry");
+        for(PendingTransactionInput pendingInput : pendingInputs)
+        {
             // building map only those VMSs that participate in the transaction
             TransactionDAG transactionDAG = this.transactionMap.get(pendingInput.input.name);
             VmsTracking[] vmsList = this.vmsPerTransactionMap.get(transactionDAG.name);
@@ -311,6 +319,7 @@ public final class TransactionWorker extends StoppableRunnable {
                     pendingInput.input.event.name, pendingInput.input.event.payload, precedenceMapStr);
             LOGGER.log(DEBUG,"Leader: Transaction worker "+id+" adding event "+event.name+" to "+inputVms.identifier+" worker:\n"+txEvent+"\n"+pendingInput.previousTidPerVms);
 
+//            System.out.println(STR."precedenceMapStr for tid=\{pendingInput.tid} is \{precedenceMapStr}");
             this.vmsWorkerContainerMap.get(inputVms.identifier).queueTransactionEvent(txEvent);
         }
 

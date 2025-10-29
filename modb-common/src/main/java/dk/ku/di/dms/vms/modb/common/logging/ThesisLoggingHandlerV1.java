@@ -107,7 +107,6 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
         }
     }
 
-
     @Override
     public List<TransactionEvent.PayloadRaw> getUncommittedEvents(List<String> eventTypes)
     {
@@ -124,8 +123,69 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
         }
     }
 
+    @Override
+    public SegmentMetadata loadSegment(ByteBuffer byteBuffer, long filePosition) throws IOException
+    {
+        ByteBuffer metadataBuffer = ByteBuffer.allocate(1 + 2 * Integer.BYTES + 2 * Long.BYTES); // 25 bytes
+        fileChannel.position(filePosition);
 
+        // read metadata
+        readMetadata(metadataBuffer);
+        var segmentSize = metadataBuffer.getInt(1);
+        var eventCount = metadataBuffer.getInt(5);
+        var bid = metadataBuffer.getLong(17);
 
+        byteBuffer.clear();
+        byteBuffer.limit(segmentSize);
+        fileChannel.position(filePosition);
+        while (byteBuffer.hasRemaining()) {
+            fileChannel.read(byteBuffer);
+        }
+
+        var segmentMetadata = new SegmentMetadata(
+                fileChannel.position() == fileChannel.size() ? -1 : fileChannel.position(),
+                bid, eventCount
+        );
+
+        return segmentMetadata;
+    }
+
+    @Override
+    public Map<String, long[]> getLatestAppearanceOfEventTypes(List<String> eventTypes) throws IOException
+    {
+        Map<String, long[]> latestAppearances = new HashMap<>();
+
+        var buffer = retrieveByteBuffer();
+        long batchPosition = 0;
+        fileChannel.position(batchPosition);
+
+//        System.out.println(STR."batchPosition=\{batchPosition}, fileChannel.position()=\{fileChannel.position()}, fileChannel.size()=\{fileChannel.size()}");
+        while (batchPosition != -1 && fileChannel.position() < fileChannel.size())
+        {
+            fileChannel.position(batchPosition);
+            var segmentMetadata = loadSegment(buffer, batchPosition);
+//            System.out.println(STR."Read segment bid=\{segmentMetadata.bid} of event count \{segmentMetadata.eventCount}");
+            buffer.flip();
+            var events = BatchUtils.disAssembleBatchPayload(buffer);
+            for (var event : events)
+            {
+                var type = event.event();
+                long tid = event.tid();
+                long batch = event.batch();
+
+                if (!latestAppearances.containsKey(type) || latestAppearances.get(type)[0] < tid)
+                {
+//                    System.out.println(STR."New tid and bid for \{type} is \{tid} \{batch}");
+                    latestAppearances.put(type, new long[]{tid, batch});
+                }
+            }
+            buffer.clear();
+            batchPosition = segmentMetadata.nextFilePosition;
+        }
+        returnByteBuffer(buffer);
+
+        return latestAppearances;
+    }
 
     @Override
     public long[] latestCommit() throws IOException

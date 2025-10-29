@@ -172,10 +172,10 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                     continue; // safeguard: if reconnect failed
                 }
 
-                // events to resend will be in the queue
                 if (this.consumerIsRecovering) {
                     System.out.println("Clearing transactionEventQueue");
                     transactionEventQueue.clear();
+                    drained.clear();
                     System.out.println(STR."Vms recover events for \{consumerVms.identifier}");
                     vmsQueue.add(RecoverEvents.of(consumerVms.identifier, consumerVms.host, consumerVms.port));
                     consumerIsRecovering = false;
@@ -183,8 +183,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                     Thread.sleep(1000); // if I don't sleep, the event will not send
                 }
 
-
-                // the resent uncommitted events will be in this queue
                 transactionEventQueue.drain(this.drained::add, this.options.networkBufferSize());
                 if(this.drained.isEmpty()){
                     pollTimeout = Math.min(pollTimeout * 2, this.options.maxSleep());
@@ -193,8 +191,9 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                     continue;
                 }
                 pollTimeout = pollTimeout > 0 ? pollTimeout / 2 : 0;
-                this.sendBatchOfEventsNonBlocking(); // maybe it will send but not receive
+                this.sendBatchOfEventsNonBlocking();
                 processPendingMessages();
+
             } catch (Exception e) {
                 System.out.println("Error in while loop");
             }
@@ -208,12 +207,14 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
             {
                 case Recovery.Payload recovery ->
                 {
+                    System.out.println(STR."Process Recovery for consumer=\{consumerVms.identifier}");
                     processRecoveryInVms();
                 }
                 case AbortUncommittedTransactions.Payload abort ->
                 {
                     System.out.println(STR."Clearing queue for consumer=\{consumerVms.identifier}");
                     transactionEventQueue.clear();
+                    drained.clear();
                 }
                 default -> System.out.println(STR."Unrecognized message \{pendingMessage}");
             }
@@ -331,6 +332,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
 
     // TODO sending batch of events (look for format)
     private void sendBatchOfEventsNonBlocking() {
+        System.out.println("Sending batch of events to consumer VMS");
         int remaining = this.drained.size();
         int count = remaining;
         ByteBuffer writeBuffer = null;
@@ -451,9 +453,11 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
 
     @Override
     public void queue(TransactionEvent.PayloadRaw eventPayload){
+//        System.out.println(STR."Payload queued, state=\{this.state}, consumerIsRecovering=\{consumerIsRecovering}");
         if(!this.transactionEventQueue.offer(eventPayload)){
             System.out.println(me.identifier +": cannot add event in the input queue");
         }
+//        System.out.println(STR."transactionEventQueue size = \{transactionEventQueue.size()}");
     }
 
     @Override

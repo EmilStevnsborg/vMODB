@@ -56,6 +56,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static dk.ku.di.dms.vms.coordinator.election.Constants.*;
 import static dk.ku.di.dms.vms.modb.common.schema.network.Constants.PRESENTATION;
@@ -290,11 +291,11 @@ public final class Coordinator extends ModbHttpServer {
                 // extra func
                 eventToConsumersMap.putIfAbsent(eventIdentifier.name, new ArrayList<>());
                 eventToConsumersMap.get(eventIdentifier.name).add(eventIdentifier.targetVms);
-                System.out.println(STR."Added consumer \{eventIdentifier.targetVms} to consumers in map from event \{eventIdentifier.name}");
+//                System.out.println(STR."Added consumer \{eventIdentifier.targetVms} to consumers in map from event \{eventIdentifier.name}");
 
                 consumerToEventsMap.putIfAbsent(eventIdentifier.targetVms, new ArrayList<>());
                 consumerToEventsMap.get(eventIdentifier.targetVms).add(eventIdentifier.name);
-                System.out.println(STR."Added event \{eventIdentifier.name} to events in map from consumer \{eventIdentifier.targetVms}");
+//                System.out.println(STR."Added event \{eventIdentifier.name} to events in map from consumer \{eventIdentifier.targetVms}");
             }
         }
 
@@ -311,18 +312,6 @@ public final class Coordinator extends ModbHttpServer {
     }
 
     private final Map<String, VmsNode[]> vmsIdentifiersPerDAG = new HashMap<>();
-
-    // either initialize dummy or previously committed batch
-    private void initializeBatchContext(long startingBatchOffset, long startingTid, long numTIDs)
-    {
-        // assume that
-        this.batchOffsetPendingCommit = startingBatchOffset+1;
-
-        // initialize batch offset map
-        BatchContext currentBatch = new BatchContext(startingBatchOffset);
-        currentBatch.seal(numTIDs, startingTid, Map.of(), Map.of());
-        this.batchContextMap.put(startingBatchOffset, currentBatch);
-    }
 
     /**
      * This method contains the event loop that contains the main functions of a leader/coordinator
@@ -351,8 +340,8 @@ public final class Coordinator extends ModbHttpServer {
 
         /////////////////////////////////////////////
         /////////////////////////////////////////////
-        if (coordinatorIsRecovering) {
-
+        if (coordinatorIsRecovering)
+        {
             for (var vms: vmsMetadataMap.values())
             {
                 var message = new AbortUncommittedTransactions.Payload();
@@ -365,22 +354,20 @@ public final class Coordinator extends ModbHttpServer {
                 var latestCommitInfo = loggingHandler.latestCommit();
                 var batchOffset = latestCommitInfo[0];
                 var tid = latestCommitInfo[1];
-                var numTIDs = latestCommitInfo[2];
 
-                System.out.println(STR."Initializing batchOffset=\{batchOffset}, tid=\{tid}, numTids=\{numTIDs}");
+                System.out.println(STR."Coordinator start latest tid and bid are \{tid} and \{batchOffset}");
 
-                initializeBatchContext(batchOffset, tid, numTIDs);
+                batchOffsetPendingCommit = batchOffset+1;
+
                 this.setUpTransactionWorkers(tid+1, batchOffset+1);
             }
             catch (Exception e) {
+                batchOffsetPendingCommit = 1;
                 e.printStackTrace();
-                System.out.println(STR."Initializing batchOffset=\{0}, tid=\{0}, numTids=\{0}");
-                initializeBatchContext(0, 0, 0);
                 this.setUpTransactionWorkers();
             }
         } else {
-            System.out.println(STR."Initializing batchOffset=\{0}, tid=\{0}, numTids=\{0}");
-            initializeBatchContext(0, 0, 0);
+            batchOffsetPendingCommit = 1;
             this.setUpTransactionWorkers();
         }
         /////////////////////////////////////////////
@@ -404,16 +391,82 @@ public final class Coordinator extends ModbHttpServer {
     }
 
     private Map<String, TransactionWorker.PrecedenceInfo> buildStarterPrecedenceMap() {
+        return buildStarterPrecedenceMap(false);
+    }
+    private Map<String, TransactionWorker.PrecedenceInfo> buildStarterPrecedenceMap(boolean loadFromLogs)
+    {
+        System.out.println(STR."Building starter precedence map from logs=\{loadFromLogs}");
+        // precedence info for each VMS
         Map<String, TransactionWorker.PrecedenceInfo> precedenceMap = new HashMap<>();
-        for(var vms : this.vmsMetadataMap.entrySet()){
-            precedenceMap.put(vms.getKey(), new TransactionWorker.PrecedenceInfo(0, 0, -1));
+
+        // all event types. These are transaction inputs
+        List<String> eventTypes = consumerToEventsMap.values().stream()
+                .flatMap(Collection::stream)
+                .collect(Collectors.toSet())
+                .stream().toList();
+
+        // the tid and bid a given event type was seen at most recently
+        Map<String, long[]> eventTypeLatestAppearance = new HashMap<>();
+        for (var eventType : eventTypes) {
+            eventTypeLatestAppearance.put(eventType, new long[] {0, 0});
         }
+
+        // populate eventTypeLatestAppearance from logs
+        if (loadFromLogs) {
+            try {
+                var loggedAppearances = loggingHandler.getLatestAppearanceOfEventTypes(eventTypes);
+                for (var entry : loggedAppearances.entrySet()) {
+//                    System.out.println(STR."LATEST APPEARANCE FOR \{entry.getKey()} is tid=\{entry.getValue()[0]} and bid=\{entry.getValue()[1]}");
+                    eventTypeLatestAppearance.put(entry.getKey(), entry.getValue());
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        // get the dag for each eventType
+        for (var eventType : eventTypes)
+        {
+            var dag = transactionMap.get(eventType);
+            if (dag == null) {
+                continue;
+            };
+
+            var nodes = dag.getNodes();
+
+            for (var node : nodes)
+            {
+                // should in principle never be triggered
+                if (!vmsMetadataMap.containsKey(node)) continue;
+
+
+                long[] latestInfo = eventTypeLatestAppearance.get(eventType);
+                long lastTid = latestInfo[0];
+                long lastBatch = latestInfo[1];
+//                System.out.println(STR."latest tid and bid for \{node} in dag with eventType \{eventType} are \{lastTid} and \{lastBatch}");
+                var precedenceInfoVms = new TransactionWorker.PrecedenceInfo(lastTid, lastBatch, -1);
+
+                if (!precedenceMap.containsKey(node)) {
+                    precedenceMap.put(node, precedenceInfoVms);
+                    continue;
+                }
+
+                var oldPrecedenceInfoNode = precedenceMap.get(node);
+                if (oldPrecedenceInfoNode.lastTid() < precedenceInfoVms.lastTid()) {
+                    precedenceMap.put(node, precedenceInfoVms);
+                }
+            }
+        }
+//        for (var entry : precedenceMap.entrySet()) {
+//            System.out.println(STR."precedenceMap for \{entry.getKey()} is \{entry.getValue().toString()}");
+//        }
+
         return precedenceMap;
     }
 
     // non recovering
     private void setUpTransactionWorkers() {
-        setUpTransactionWorkers(1, -1);
+        setUpTransactionWorkers(1, 1);
     }
     private void setUpTransactionWorkers(long startingTid, long startingBatchOffset) {
         int numWorkers = this.options.getNumTransactionWorkers();
@@ -423,7 +476,9 @@ public final class Coordinator extends ModbHttpServer {
         var precedenceMapInputQueue = firstPrecedenceInputQueue;
         ConcurrentLinkedDeque<Map<String, TransactionWorker.PrecedenceInfo>> precedenceMapOutputQueue;
 
-        var starterPrecedenceMap = buildStarterPrecedenceMap();
+
+        var starterPrecedenceMap = startingTid == 1 ? buildStarterPrecedenceMap() : buildStarterPrecedenceMap(true);
+
         firstPrecedenceInputQueue.add(starterPrecedenceMap);
 
         int idx = 1;
@@ -1115,7 +1170,10 @@ public final class Coordinator extends ModbHttpServer {
                 continue;
             }
 
-            this.vmsWorkerContainerMap.get(vmsNode.identifier).queueMessage(consumerSetStr);
+            if (!coordinatorIsRecovering)
+            {
+                this.vmsWorkerContainerMap.get(vmsNode.identifier).queueMessage(consumerSetStr);
+            }
         }
     }
 

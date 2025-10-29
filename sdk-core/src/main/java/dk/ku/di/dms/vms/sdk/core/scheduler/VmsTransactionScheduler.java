@@ -233,6 +233,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     @Override
     public void taskClearer(long failedTid)
     {
+        System.out.println(STR."Clearing tasks later than \{failedTid}");
         var lastTidToTidMapIterator = lastTidToTidMap.entrySet().iterator();
         while (lastTidToTidMapIterator.hasNext()) {
             var entry = lastTidToTidMapIterator.next();
@@ -246,8 +247,14 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 //                System.out.println(STR."Removing last TID=\{entry.getKey()} because entry.getValue()=\{entry.getValue()}=failedTid");
                 lastTidToTidMapIterator.remove();
                 lastTidFinished.set(entry.getKey());
+//                System.out.println(STR."lastTidFinished set to \{entry.getKey()}");
                 mustWaitForInputEvent = true;
             }
+        }
+
+        if (failedTid - 1 == 0)
+        {
+            lastTidFinished.set(0);
         }
 
         var transactionTaskMapIterator = transactionTaskMap.entrySet().iterator();
@@ -257,7 +264,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
             var taskTid = entry.getKey();
             if (taskTid >= failedTid) {
-                System.out.println(STR."Removing task for tid=\{taskTid}");
+//                System.out.println(STR."Removing task for tid=\{taskTid}");
                 transactionTaskMapIterator.remove();
             }
         }
@@ -386,9 +393,10 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     }
 
     private void processNewEvent(InboundEvent inboundEvent) {
-//        System.out.println(STR."scheduler inboundEvent.tid=\{inboundEvent.tid()} " +
-//                           STR."transactionTaskMap.containsKey(inboundEvent.tid())=\{this.transactionTaskMap.containsKey(inboundEvent.tid())} " +
-//                           STR."inboundEvent.lastTid()=\{inboundEvent.lastTid()}");
+        System.out.println(STR."scheduler inboundEvent.tid=\{inboundEvent.tid()} " +
+                           STR."transactionTaskMap.containsKey(inboundEvent.tid())=\{this.transactionTaskMap.containsKey(inboundEvent.tid())} " +
+                           STR."inboundEvent.lastTid()=\{inboundEvent.lastTid()}, " +
+                           STR."current lastTidFinished=\{lastTidFinished}");
         if (this.transactionTaskMap.containsKey(inboundEvent.tid())) {
             LOGGER.log(WARNING, this.vmsIdentifier+": Event TID has already been processed! Queue '" + inboundEvent.event() + "' Batch: " + inboundEvent.batch() + " TID: " + inboundEvent.tid());
             return;

@@ -457,7 +457,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     public void queueTransactionEvent(TransactionEvent.PayloadRaw payloadRaw)
     {
         this.transactionEventQueue.insert(payloadRaw);
-//        System.out.println("Queue singular transaction event " + payloadRaw);
     }
 
     @SuppressWarnings("unused")
@@ -481,7 +480,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 this.sendBatchCommitCommand(o);
             }
             case BatchCommitInfo.Payload o -> {
-                System.out.println("\nVmsWorker.sendMessage.BatchCommitInfo payload" + o);
+                System.out.println(STR."\nVmsWorker.sendMessage.BatchCommitInfo for \{consumerVms.identifier} payload \{o}");
                 this.sendBatchCommitInfo(o);
             }
             case TransactionAbort.Payload o -> {
@@ -788,7 +787,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
      */
     private void sendBatchOfEvents(){
         int remaining = this.drained.size();
-//        System.out.println(STR."Sending \{remaining} transaction events");
         int count = remaining;
         ByteBuffer writeBuffer;
         while(remaining > 0) {

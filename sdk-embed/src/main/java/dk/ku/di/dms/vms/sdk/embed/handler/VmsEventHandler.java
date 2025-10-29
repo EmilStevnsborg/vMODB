@@ -624,7 +624,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         loggingHandler.log(payload);
 
         for(IVmsContainer consumerVmsContainer : consumerVMSs) {
-            LOGGER.log(DEBUG,this.me.identifier+": An output event (queue: " + outputEvent.outputQueue() + ") will be queued to VMS: " + consumerVmsContainer.identifier());
+            System.out.println(STR."Queuing payload for \{consumerVmsContainer.identifier()}");
             consumerVmsContainer.queue(payload);
         }
     }
@@ -712,7 +712,6 @@ public final class VmsEventHandler extends ModbHttpServer {
                 this.readBuffer.flip();
             }
             byte messageType = this.readBuffer.get();
-            System.out.println(STR."Vms read message type \{messageType}");
             switch (messageType) {
                 case (BATCH_OF_EVENTS) -> {
                     System.out.println(STR."Vms read BATCH_OF_EVENTS");
@@ -1184,10 +1183,10 @@ public final class VmsEventHandler extends ModbHttpServer {
                             this.fetchMoreBytes(startPos);
                             return;
                         }
+                        System.out.println(STR."This, \{me.identifier}, received BATCH_COMMIT_INFO");
                         // events of this batch from VMSs may arrive before the batch commit info
                         // it means this VMS is a terminal node for the batch
                         BatchCommitInfo.Payload bPayload = BatchCommitInfo.read(this.readBuffer);
-                        LOGGER.log(DEBUG, me.identifier + ": Batch (" + bPayload.batch() + ") commit info received from the leader");
                         this.processNewBatchInfo(bPayload);
                     }
                     case (BATCH_COMMIT_COMMAND) -> {
@@ -1336,7 +1335,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         }
 
         private void processNewBatchInfo(BatchCommitInfo.Payload batchCommitInfo){
-            System.out.println("VmsEventHandler.processNewBatchInfo " + batchCommitInfo);
+            System.out.println(STR."VmsEventHandler.processNewBatchInfo \{batchCommitInfo}");
             BatchContext batchContext = BatchContext.build(batchCommitInfo);
             batchContextMap.put(batchCommitInfo.batch(), batchContext);
             // if it has been completed but not moved to status, then should send
@@ -1380,7 +1379,16 @@ public final class VmsEventHandler extends ModbHttpServer {
                 // argue that both of these should be atomic
                 submitBackgroundTask(()->{
                     checkpoint(batchCommitCommand.batch(), batchMetadata.maxTidExecuted);
-                    commitInfo.put(batchCommitCommand.batch(), trackingBatchMap.get(batchCommitCommand.batch()).maxTidExecuted);
+
+                    // log commit info only if snapshot was modified
+                    if (trackingBatchMap.get(batchCommitCommand.batch()).numberTIDsExecuted > 0) {
+
+                        System.out.println(STR."\{me.identifier} executed " +
+                                           STR."\{trackingBatchMap.get(batchCommitCommand.batch()).numberTIDsExecuted} " +
+                                           STR."tids in batch \{batchCommitCommand.batch()}");
+
+                        commitInfo.put(batchCommitCommand.batch(), trackingBatchMap.get(batchCommitCommand.batch()).maxTidExecuted);
+                    }
                 });
             }
         }
