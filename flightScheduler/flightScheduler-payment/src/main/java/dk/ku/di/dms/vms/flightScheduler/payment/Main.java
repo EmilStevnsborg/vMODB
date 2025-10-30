@@ -53,7 +53,6 @@ public final class Main {
             super(transactionManager);
             this.paymentRepository = paymentRepository;
             this.reimbursableBookingRepository = reimbursableBookingRepository;
-            System.out.println(STR."\nRepo is \{paymentRepository} and \{reimbursableBookingRepository}\n");
         }
 
         @Override

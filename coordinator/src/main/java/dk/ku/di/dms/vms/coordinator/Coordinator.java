@@ -1074,9 +1074,6 @@ public final class Coordinator extends ModbHttpServer {
     private void updateBatchOffsetPendingCommit(BatchContext batchContext)
     {
         if(batchContext.batchOffset == this.batchOffsetPendingCommit){
-
-            System.out.println(STR."Coordinator will initiate commit of batch=\{batchOffsetPendingCommit}");
-
             // STORE committed batch events persistently
             loggingHandler.commit(batchOffsetPendingCommit);
 
@@ -1090,6 +1087,9 @@ public final class Coordinator extends ModbHttpServer {
             if(nextBatchContext != null && nextBatchContext.missingVotes.isEmpty()){
                 this.updateBatchOffsetPendingCommit(nextBatchContext);
             }
+
+            System.out.println(STR."Coordinator will committed batch=\{batchOffsetPendingCommit}");
+
             return;
         }
         // probably some batch complete message got lost or received out of order

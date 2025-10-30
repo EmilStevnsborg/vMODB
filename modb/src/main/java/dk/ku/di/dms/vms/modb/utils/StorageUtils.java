@@ -74,7 +74,6 @@ public class StorageUtils {
     }
 
     public static PrimaryIndex createPrimaryIndex(String tableName, Schema schema, boolean isCheckpointing, boolean isTruncating, boolean isChaining, int maxRecords) {
-        System.out.println("createPrimaryIndex");
         if(isCheckpointing){
             // map this to a file, so whenever a batch commit event arrives, it can trigger checkpointing the entire file
             RecordBufferContext recordBufferContext = StorageUtils.loadRecordBuffer(maxRecords, schema.getRecordSizeWithHeader(), tableName, isTruncating);
@@ -109,7 +108,6 @@ public class StorageUtils {
      * Must consider the header in the record size
      */
     public static RecordBufferContext loadRecordBuffer(int maxNumberOfRecords, int recordSize, String fileName, boolean truncate){
-        System.out.println("loadRecordBuffer");
         long sizeInBytes = (long) maxNumberOfRecords * recordSize;
         MemorySegment segment = mapFileIntoMemorySegment(sizeInBytes, fileName, truncate);
         return RecordBufferContext.build(segment, fileName);

@@ -270,7 +270,8 @@ public final class VmsEventHandler extends ModbHttpServer {
         // setup accept since we need to accept connections from the coordinator and other VMSs
         this.serverSocket.accept(null, new AcceptCompletionHandler());
 
-        var crashOccurred = true;
+        var crashOccurred = true; // check for logs or snapshot
+
         System.out.println(STR."crashOccurred=\{crashOccurred} && recoveryEnabled=\{recoveryEnabled}");
         if (crashOccurred && recoveryEnabled) recoverVms();
 
@@ -278,10 +279,10 @@ public final class VmsEventHandler extends ModbHttpServer {
          new Thread(() -> {
             try {
                 while (isRunning()) {
-                    Object message = vmsQueue.poll(250, TimeUnit.MILLISECONDS);
+                    Object message = vmsQueue.take();
                     if (message == null) continue;
 
-                    System.out.println(STR."VMS read message from worker \{message}");
+//                    System.out.println(STR."VMS read message from worker \{message}");
 
                     switch (message) {
                         case RecoverEvents.Payload recoverEvents -> {
@@ -592,7 +593,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         }
 
         // if one VMS does not reach this point, there is a consistency error
-        System.out.println(STR."Batch \{batch} checkpointed");
+//        System.out.println(STR."Batch \{batch} checkpointed");
     }
 
     private void restoreStableState(long failedTid)
@@ -624,7 +625,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         loggingHandler.log(payload);
 
         for(IVmsContainer consumerVmsContainer : consumerVMSs) {
-            System.out.println(STR."Queuing payload for \{consumerVmsContainer.identifier()}");
+//            System.out.println(STR."Queuing payload for \{consumerVmsContainer.identifier()}");
             consumerVmsContainer.queue(payload);
         }
     }
@@ -714,7 +715,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             byte messageType = this.readBuffer.get();
             switch (messageType) {
                 case (BATCH_OF_EVENTS) -> {
-                    System.out.println(STR."Vms read BATCH_OF_EVENTS");
+//                    System.out.println(STR."Vms read BATCH_OF_EVENTS");
                     int bufferSize = this.getBufferSize();
                     if(this.readBuffer.remaining() < bufferSize){
                         this.fetchMoreBytes(startPos);
@@ -723,7 +724,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                     this.processBatchOfEvents(this.readBuffer);
                 }
                 case (EVENT) -> {
-                    System.out.println(STR."Vms read EVENT");
+//                    System.out.println(STR."Vms read EVENT");
                     int bufferSize = this.getBufferSize();
                     if(this.readBuffer.remaining() < bufferSize){
                         this.fetchMoreBytes(startPos);
@@ -887,7 +888,6 @@ public final class VmsEventHandler extends ModbHttpServer {
                 }
                 return;
             }
-            System.out.println("messageIdentifier == PRESENTATION");
             byte nodeTypeIdentifier = this.buffer.get(1);
             this.buffer.position(2);
             switch (nodeTypeIdentifier) {
@@ -1183,10 +1183,10 @@ public final class VmsEventHandler extends ModbHttpServer {
                             this.fetchMoreBytes(startPos);
                             return;
                         }
-                        System.out.println(STR."This, \{me.identifier}, received BATCH_COMMIT_INFO");
                         // events of this batch from VMSs may arrive before the batch commit info
                         // it means this VMS is a terminal node for the batch
                         BatchCommitInfo.Payload bPayload = BatchCommitInfo.read(this.readBuffer);
+                        System.out.println(STR."This, \{me.identifier}, received BATCH_COMMIT_INFO \{bPayload}");
                         this.processNewBatchInfo(bPayload);
                     }
                     case (BATCH_COMMIT_COMMAND) -> {
@@ -1335,7 +1335,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         }
 
         private void processNewBatchInfo(BatchCommitInfo.Payload batchCommitInfo){
-            System.out.println(STR."VmsEventHandler.processNewBatchInfo \{batchCommitInfo}");
+//            System.out.println(STR."VmsEventHandler.processNewBatchInfo \{batchCommitInfo}");
             BatchContext batchContext = BatchContext.build(batchCommitInfo);
             batchContextMap.put(batchCommitInfo.batch(), batchContext);
             // if it has been completed but not moved to status, then should send
@@ -1352,11 +1352,9 @@ public final class VmsEventHandler extends ModbHttpServer {
          */
         private void processNewBatchCommand(BatchCommitCommand.Payload batchCommitCommand){
             System.out.println(STR."Vms will commit batch=\{batchCommitCommand.batch()} " +
-                               STR."and tid=\{trackingBatchMap.get(batchCommitCommand.batch()).maxTidExecuted}");
+                               STR."and checkpoint with maxTid=\{trackingBatchMap.get(batchCommitCommand.batch()).maxTidExecuted}");
 
             // committing output events sent from the VMS
-            loggingHandler.commit(batchCommitCommand.batch());
-
 
             BatchContext batchContext = BatchContext.build(batchCommitCommand);
             batchContextMap.put(batchCommitCommand.batch(), batchContext);
@@ -1383,11 +1381,12 @@ public final class VmsEventHandler extends ModbHttpServer {
                     // log commit info only if snapshot was modified
                     if (trackingBatchMap.get(batchCommitCommand.batch()).numberTIDsExecuted > 0) {
 
-                        System.out.println(STR."\{me.identifier} executed " +
-                                           STR."\{trackingBatchMap.get(batchCommitCommand.batch()).numberTIDsExecuted} " +
-                                           STR."tids in batch \{batchCommitCommand.batch()}");
+//                        System.out.println(STR."\{me.identifier} executed " +
+//                                           STR."\{trackingBatchMap.get(batchCommitCommand.batch()).numberTIDsExecuted} " +
+//                                           STR."tids in batch \{batchCommitCommand.batch()}");
 
                         commitInfo.put(batchCommitCommand.batch(), trackingBatchMap.get(batchCommitCommand.batch()).maxTidExecuted);
+                        System.out.println(STR."Batch \{batchCommitCommand.batch()} committed in \{me.identifier}");
                     }
                 });
             }

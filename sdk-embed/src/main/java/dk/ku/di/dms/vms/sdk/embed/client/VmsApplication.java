@@ -155,7 +155,7 @@ public final class VmsApplication {
      * This method setups the VMS TCP socket accept and the scheduler thread
      */
     public void start(){
-        System.out.println("Starting VMS application...");
+        System.out.println(STR."\nStarting VMS \{name}...");
         this.eventHandler.run();
         Thread.ofPlatform().name("vms-transaction-scheduler-"+this.name)
                 .inheritInheritableThreadLocals(false)

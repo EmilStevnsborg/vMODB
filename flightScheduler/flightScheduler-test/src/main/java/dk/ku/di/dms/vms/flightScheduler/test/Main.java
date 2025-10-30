@@ -20,8 +20,9 @@ public final class Main
 //        AbortTests.CustomerCantAffordFlightSeat(client);
         try
         {
-//            RecoveryTests.CustomerCrash(client);
-            RecoveryTests.CoordinatorCrash(client);
+            RecoveryTests.CustomerCrash(client);
+//            RecoveryTests.CoordinatorCrash(client);
+//            RecoveryTests.VMSCrash(client);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

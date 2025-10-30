@@ -393,10 +393,10 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     }
 
     private void processNewEvent(InboundEvent inboundEvent) {
-        System.out.println(STR."scheduler inboundEvent.tid=\{inboundEvent.tid()} " +
-                           STR."transactionTaskMap.containsKey(inboundEvent.tid())=\{this.transactionTaskMap.containsKey(inboundEvent.tid())} " +
-                           STR."inboundEvent.lastTid()=\{inboundEvent.lastTid()}, " +
-                           STR."current lastTidFinished=\{lastTidFinished}");
+//        System.out.println(STR."scheduler inboundEvent.tid=\{inboundEvent.tid()} " +
+//                           STR."transactionTaskMap.containsKey(inboundEvent.tid())=\{this.transactionTaskMap.containsKey(inboundEvent.tid())} " +
+//                           STR."inboundEvent.lastTid()=\{inboundEvent.lastTid()}, " +
+//                           STR."current lastTidFinished=\{lastTidFinished}");
         if (this.transactionTaskMap.containsKey(inboundEvent.tid())) {
             LOGGER.log(WARNING, this.vmsIdentifier+": Event TID has already been processed! Queue '" + inboundEvent.event() + "' Batch: " + inboundEvent.batch() + " TID: " + inboundEvent.tid());
             return;

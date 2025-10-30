@@ -363,7 +363,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 this.state = CONNECTION_ESTABLISHED;
             } catch (Exception e) {
                 System.out.println(STR."Connecting to \{consumerVms.identifier} failed");
-                try { sleep(500); } catch (InterruptedException ignored) { }
                 return;
             }
         }
@@ -407,6 +406,9 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             if (this.state == DISCONNECTED)
             {
                 reconnect();
+
+                // skip for some time
+
                 continue; // safeguard: if reconnect failed
             }
 
@@ -645,7 +647,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             try {
                 switch (type) {
                     case PRESENTATION -> {
-                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.Presentation");
                         // this is a very bad conditional statement
                         // we could do better removing this concept of "unknown" and simply check the state
                         if (state == LEADER_PRESENTATION_SENT) {
@@ -655,7 +656,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
                             // events to resend will be in the queue
                             if (consumerIsRecovering) {
-                                System.out.println("Clearing transactionEventQueue");
+                                System.out.println(STR."Clearing transactionEventQueue in coordinator for \{consumerVms.identifier}");
                                 transactionEventQueue.clear();
                                 System.out.println(STR."Coordinator recover events for \{consumerVms.identifier}");
                                 coordinatorQueue.add(RecoverEvents.of(consumerVms.identifier, consumerVms.host, consumerVms.port));
@@ -669,7 +670,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                     }
                     // from all terminal VMSs involved in the last batch
                     case BATCH_COMPLETE -> {
-                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.BATCH_COMPLETE");
+//                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.BATCH_COMPLETE");
                         // don't actually need the host and port in the payload since we have the attachment to this read operation...
                         BatchComplete.Payload response = BatchComplete.read(readBuffer);
                         LOGGER.log(DEBUG, "Leader: Batch (" + response.batch() + ") complete received from: " + consumerVms.identifier);

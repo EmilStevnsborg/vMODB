@@ -61,7 +61,7 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
     {
         rwLock.writeLock().lock();
         try {
-            System.out.println(STR."Logging event for tid=\{event.tid()} and bid=\{event.batch()}");
+//            System.out.println(STR."Logging event for tid=\{event.tid()} and bid=\{event.batch()}");
             eventsSent.put(event.tid(), event);
         } finally {
             rwLock.writeLock().unlock();
@@ -71,7 +71,6 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
     @Override
     public boolean commit(long bid)
     {
-        System.out.println(STR."LoggingHandler Committing batch=\{bid}");
         rwLock.readLock().lock();
         try {
             var buffer = retrieveByteBuffer();

@@ -46,7 +46,6 @@ public final class Main {
                                    ICustomerRepository repository){
             super(transactionManager);
             this.repository = repository;
-            System.out.println(STR."\nRepo is \{repository}\n");
         }
 
         @Override

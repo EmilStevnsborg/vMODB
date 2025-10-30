@@ -105,7 +105,6 @@ final class LeaderWorker extends StoppableRunnable {
     }
 
     public void queueMessage(Object message) {
-        System.out.println(STR."LeaderWorker queueing message \{message.toString()}");
         this.sendMessage(message);
     }
 
@@ -141,13 +140,13 @@ final class LeaderWorker extends StoppableRunnable {
      * the acknowledgment arrives
      */
     private void sendEvent(TransactionEvent.PayloadRaw payload) {
-        System.out.println("Sending event to leader");
+//        System.out.println("Sending event to leader");
         TransactionEvent.write( this.writeBuffer, payload );
         this.write(payload);
     }
 
     private void sendBatchComplete(BatchComplete.Payload payload) {
-        System.out.println("Sending BatchComplete payload to Leader");
+//        System.out.println("Sending BatchComplete payload to Leader");
         this.acquireLock();
         BatchComplete.write( this.writeBuffer, payload );
         this.write(payload);
@@ -155,13 +154,13 @@ final class LeaderWorker extends StoppableRunnable {
     }
 
     private void sendBatchCommitAck(BatchCommitAck.Payload payload) {
-        System.out.println("Sending batch commit ack to leader");
+//        System.out.println("Sending batch commit ack to leader");
         BatchCommitAck.write( this.writeBuffer, payload );
         this.write(payload);
     }
 
     private void sendTransactionAbort(TransactionAbortInfo.Payload payload) {
-        System.out.println(STR."Sending transaction abort to leader \{payload}");
+//        System.out.println(STR."Sending transaction abort to leader \{payload}");
         TransactionAbortInfo.write( this.writeBuffer, payload );
         this.write(payload);
     }

@@ -48,7 +48,6 @@ public final class Main {
                                  IFlightRepository repository){
             super(transactionManager);
             this.repository = repository;
-            System.out.println(STR."\nRepo is \{repository}\n");
         }
 
         @Override

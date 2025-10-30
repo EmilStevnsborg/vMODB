@@ -167,30 +167,28 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
             try {
                 if (this.state == DISCONNECTED)
                 {
-                    System.out.println(STR."Consumer Vms Worker trying to connect to \{consumerVms.identifier}");
                     reconnect();
                     continue; // safeguard: if reconnect failed
                 }
 
                 if (this.consumerIsRecovering) {
-                    System.out.println("Clearing transactionEventQueue");
+                    System.out.println(STR."Clearing transactionEventQueue in \{me.identifier} for \{consumerVms.identifier}");
+
                     transactionEventQueue.clear();
+                    // maybe the queue (based on the queue type) can't be cleared like this.
+
                     drained.clear();
                     System.out.println(STR."Vms recover events for \{consumerVms.identifier}");
                     vmsQueue.add(RecoverEvents.of(consumerVms.identifier, consumerVms.host, consumerVms.port));
                     consumerIsRecovering = false;
                     System.out.println("Sleeping in ConsumerVmsWorker");
-                    Thread.sleep(1000); // if I don't sleep, the event will not send
+                    Thread.sleep(1000); // if I don't sleep, the events queue after RecoverEvents will not send
                 }
 
+                // first take to block thread
+                var event = transactionEventQueue.take();
+                drained.add(event);
                 transactionEventQueue.drain(this.drained::add, this.options.networkBufferSize());
-                if(this.drained.isEmpty()){
-                    pollTimeout = Math.min(pollTimeout * 2, this.options.maxSleep());
-                    processPendingMessages();
-                    this.giveUpCpu(pollTimeout);
-                    continue;
-                }
-                pollTimeout = pollTimeout > 0 ? pollTimeout / 2 : 0;
                 this.sendBatchOfEventsNonBlocking();
                 processPendingMessages();
 
@@ -332,7 +330,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
 
     // TODO sending batch of events (look for format)
     private void sendBatchOfEventsNonBlocking() {
-        System.out.println("Sending batch of events to consumer VMS");
         int remaining = this.drained.size();
         int count = remaining;
         ByteBuffer writeBuffer = null;

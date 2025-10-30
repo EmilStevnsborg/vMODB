@@ -71,9 +71,6 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
         this.checkpointing = checkpointing;
         this.txCtxMap = new ConcurrentHashMap<>();
         this.recovering = recovering;
-
-        String filename = "committed_batches";
-        var truncate = recovering ? false : true;
     }
 
     private boolean fkConstraintViolation(TransactionContext txCtx, Table table, Object[] values){

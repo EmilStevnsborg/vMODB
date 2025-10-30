@@ -5,6 +5,7 @@ import dk.ku.di.dms.vms.flightScheduler.test.DataInjection;
 import dk.ku.di.dms.vms.flightScheduler.test.Transactions;
 import dk.ku.di.dms.vms.flightScheduler.test.Util.Util;
 import dk.ku.di.dms.vms.flightScheduler.test.Util.VmsEndpoints;
+import dk.ku.di.dms.vms.flightScheduler.test.Util.VmsProcess;
 import dk.ku.di.dms.vms.flightScheduler.test.models.Customer;
 import dk.ku.di.dms.vms.flightScheduler.test.models.FlightSeat;
 
@@ -17,6 +18,14 @@ public class AbortTests
     // the booking needs to be reversed if a customer has
     public static void CustomerCantAffordFlightSeat(HttpClient client)
     {
+        VmsProcess.VmsProcessBuilder("customer", false);
+        VmsProcess.VmsProcessBuilder("flight", false);
+        VmsProcess.VmsProcessBuilder("payment", false);
+        VmsProcess.VmsProcessBuilder("booking", false);
+        VmsProcess.VmsProcessBuilder("proxy", false);
+
+        Util.Sleep(1000);
+
         // injecting data
         var dummyCustomers = DataGenerator.GenerateCustomers(client, 50);
         var dummyFlightSeats = DataGenerator.GenerateFlightSeats(client, 0, 50);
@@ -57,26 +66,32 @@ public class AbortTests
         var poorCustomerGet = customers.stream().filter(c -> c.customer_id == poorCustomer.customer_id).toList().get(0);
 
 
-
         // ASSERT RESULT
-        if (poorCustomerGet.money != poorCustomer.money)
+        if (poorCustomerGet.money != poorCustomer.money ||
+            unpaidBookings.size() != 1 ||
+            unpaidBookings.get(0).customer_id != poorCustomer.customer_id
+        )
         {
             System.out.println(STR."FAILED (CustomerCantAffordFlightSeat): " +
-                               STR."poorCustomerGet.money=\{poorCustomerGet.money} != \{poorCustomer.money}=poorCustomer.money");
+                               STR."poorCustomerGet.money=\{poorCustomerGet.money} != \{poorCustomer.money}=poorCustomer.money, " +
+                               STR."unpaid booking = \{unpaidBookings.size()} != 1"); // aborted pay booking
+            return;
         }
-        else if (unpaidBookings.size() != 1 || unpaidBookings.get(0).customer_id != poorCustomer.customer_id)
-        {
-            System.out.println(STR."FAILED (CustomerCantAffordFlightSeat): \{unpaidBookings.size()} unpaid booking");
-        }
-        else
-        {
-            System.out.println(STR."SUCCESS (CustomerCantAffordFlightSeat): only \{unpaidBookings.size()} unpaid booking for " +
-                    STR."customer_id=\{unpaidBookings.get(0).customer_id}");
-        }
+
+        System.out.println(STR."SUCCESS (CustomerCantAffordFlightSeat): only \{unpaidBookings.size()} unpaid booking for " +
+                           STR."customer_id=\{unpaidBookings.get(0).customer_id}");
     }
 
     public void CancelBookingFailed(HttpClient client)
     {
+        VmsProcess.VmsProcessBuilder("customer", false);
+        VmsProcess.VmsProcessBuilder("flight", false);
+        VmsProcess.VmsProcessBuilder("payment", false);
+        VmsProcess.VmsProcessBuilder("booking", false);
+        VmsProcess.VmsProcessBuilder("proxy", false);
+
+        Util.Sleep(1000);
+
 
     }
 }

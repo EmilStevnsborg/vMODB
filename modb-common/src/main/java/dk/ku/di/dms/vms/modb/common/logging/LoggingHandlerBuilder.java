@@ -32,8 +32,6 @@ public final class LoggingHandlerBuilder {
         ILoggingHandler handler;
         try {
             FileChannel fileChannel = FileChannel.open(Path.of(file.toURI()), options);
-
-            System.out.println("thesis v1 logging type");
             handler = new ThesisLoggingHandlerV1(fileChannel, serdesProxy, bufferSize);
 
         }
