@@ -34,6 +34,25 @@ public class RecoveryTests
         VmsProcess.VmsProcessBuilder("proxy", false).start();
     }
 
+    public static void SimpleReconnection(HttpClient client) throws IOException
+    {
+        VmsProcess.KillCurrentVmsProcess("customer");
+        VmsProcess.VmsProcessBuilder("customer", false).start();
+
+        System.console().readLine();
+        System.out.println("Stopping customer");
+        VmsProcess.KillCurrentVmsProcess("customer");
+
+        System.console().readLine();
+        System.out.println("Restarting customer");
+        VmsProcess.VmsProcessBuilder("customer", true).start();
+
+        System.console().readLine();
+        System.out.println("Final stop of customer");
+        VmsProcess.KillCurrentVmsProcess("customer");
+
+    }
+
     public static void VMSCrash(HttpClient client) throws IOException
     {
         killComponents();
@@ -125,12 +144,12 @@ public class RecoveryTests
 
 
         // VERDICT (should be 50, but only reads getAll from memory)
-        if (customersSeatsReserved.size() != 25)
+        if (customersSeatsReserved.size() != 50)
         {
-            System.out.println(STR."FAILURE (CustomerCrash): distinct seats reserved=\{customersSeatsReserved.size()}!=25");
+            System.out.println(STR."FAILURE (CustomerCrash): distinct seats reserved=\{customersSeatsReserved.size()}!=50");
         }
         else {
-            System.out.println(STR."SUCCESS (CustomerCrash) distinct seats reserved=\{customersSeatsReserved.size()}==25");
+            System.out.println(STR."SUCCESS (CustomerCrash) distinct seats reserved=\{customersSeatsReserved.size()}==50");
         }
 
 

@@ -60,6 +60,7 @@ import java.util.stream.Collectors;
 
 import static dk.ku.di.dms.vms.coordinator.election.Constants.*;
 import static dk.ku.di.dms.vms.modb.common.schema.network.Constants.PRESENTATION;
+import static dk.ku.di.dms.vms.modb.common.schema.network.Constants.VMS_RECONNECTION;
 import static dk.ku.di.dms.vms.modb.common.schema.network.control.Presentation.SERVER_TYPE;
 import static dk.ku.di.dms.vms.web_common.meta.ConnectionMetadata.NodeType.SERVER;
 import static java.lang.System.Logger.Level.*;
@@ -247,6 +248,7 @@ public final class Coordinator extends ModbHttpServer {
             }
 
             // network and executor
+            System.out.println(STR."Binding coordinator sockert to \{me.asInetSocketAddress()}");
             this.serverSocket.bind(me.asInetSocketAddress());
         } catch (Exception e){
             throw new RuntimeException(e);
@@ -713,6 +715,7 @@ public final class Coordinator extends ModbHttpServer {
         public void completed(AsynchronousSocketChannel channel, Void void_) {
             ByteBuffer buffer = null;
             try {
+                System.out.println("Accepting connection");
                 NetworkUtils.configure(channel, options.getSoBufferSize());
 
                 // right now I cannot discern whether it is a VMS or follower. perhaps I can keep alive channels from leader election?
@@ -757,7 +760,9 @@ public final class Coordinator extends ModbHttpServer {
          * We would no longer need to establish connection in case the {@link dk.ku.di.dms.vms.coordinator.election.ElectionWorker}
          * maintains the connections.
          */
-        private void processReadAfterAcceptConnection(AsynchronousSocketChannel channel, ByteBuffer buffer){
+        private void processReadAfterAcceptConnection(AsynchronousSocketChannel channel, ByteBuffer buffer)
+        {
+            System.out.println("Coordinator processReadAfterAcceptConnection");
 
             // message identifier
             byte messageIdentifier = buffer.get(0);
@@ -785,6 +790,21 @@ public final class Coordinator extends ModbHttpServer {
                 // buggy node intending to pose as leader...
                 LOGGER.log(WARNING,"Leader: A node is trying to present itself as leader!");
                 try (channel) { MemoryManager.releaseTemporaryDirectBuffer(buffer); } catch(Exception ignored){}
+                return;
+            }
+
+            if (messageIdentifier == VMS_RECONNECTION)
+            {
+                System.out.println("Vms Reconnect");
+                buffer.position(1);
+                var node = IdentifiableNode.read(buffer); // this can potentially be hacked
+
+                var restartedVms = vmsMetadataMap.get(node.identifier);
+                var recoveryMessage = Recovery.of(restartedVms.identifier);
+
+                for (VmsNode vmsNode : vmsMetadataMap.values()) {
+                    vmsWorkerContainerMap.get(vmsNode.identifier).queueMessage(recoveryMessage);
+                }
                 return;
             }
 
@@ -819,6 +839,7 @@ public final class Coordinator extends ModbHttpServer {
             if(type == SERVER_TYPE){
                 this.processServerPresentationMessage(channel, buffer);
             } else {
+                System.out.println("Coordinator unknown type tried to connect");
                 // simply unknown... probably a bug?
                 LOGGER.log(WARNING,"Unknown type of client connection. Probably a bug? ");
                 try (channel) { MemoryManager.releaseTemporaryDirectBuffer(buffer); } catch (Exception ignored){}
@@ -892,20 +913,19 @@ public final class Coordinator extends ModbHttpServer {
             case Recovery.Payload recovery -> this.processRecoveryInCoordinator(recovery);
             case RecoverEvents.Payload recoverEvents ->
             {
-                var currentBatchContext = batchContextMap.get(batchOffsetPendingCommit);
-                var terminalVMSs = currentBatchContext.terminalVMSs;
-
-                if (terminalVMSs.contains(recoverEvents.vms()))
+                for (var batchContext : batchContextMap.values())
                 {
-                    System.out.println(STR."Sending batch commit info to \{recoverEvents.vms()} after reconnecting");
-                    var batchCommitInfo =
-                            BatchCommitInfo.of(
-                                    currentBatchContext.batchOffset,
-                                    currentBatchContext.previousBatchPerVms.get(recoverEvents.vms()),
-                                    currentBatchContext.numberOfTIDsPerVms.get(recoverEvents.vms()));
-                    vmsWorkerContainerMap.get(recoverEvents.vms()).queueMessage(batchCommitInfo);
+                    if (batchContext.batchOffset >= batchOffsetPendingCommit)
+                    {
+                        System.out.println(STR."Sending batch commit info to \{recoverEvents.vms()} after reconnecting");
+                        var batchCommitInfo =
+                                BatchCommitInfo.of(
+                                        batchContext.batchOffset,
+                                        batchContext.previousBatchPerVms.get(recoverEvents.vms()),
+                                        batchContext.numberOfTIDsPerVms.get(recoverEvents.vms()));
+                        vmsWorkerContainerMap.get(recoverEvents.vms()).queueMessage(batchCommitInfo);
+                    }
                 }
-
                 System.out.println(STR."Coordinator queue polled, Resending events to \{recoverEvents.vms()}");
 
                 // resend the uncommitted events
@@ -1088,7 +1108,7 @@ public final class Coordinator extends ModbHttpServer {
                 this.updateBatchOffsetPendingCommit(nextBatchContext);
             }
 
-            System.out.println(STR."Coordinator will committed batch=\{batchOffsetPendingCommit}");
+            System.out.println(STR."Coordinator will committ batch=\{batchContext.batchOffset}");
 
             return;
         }

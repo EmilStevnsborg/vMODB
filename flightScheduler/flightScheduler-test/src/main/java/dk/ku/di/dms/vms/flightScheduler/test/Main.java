@@ -23,6 +23,7 @@ public final class Main
             RecoveryTests.CustomerCrash(client);
 //            RecoveryTests.CoordinatorCrash(client);
 //            RecoveryTests.VMSCrash(client);
+//            RecoveryTests.SimpleReconnection(client);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

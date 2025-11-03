@@ -605,23 +605,59 @@ public final class PrimaryIndex implements IMultiVersionIndex {
     private final class PrimaryIndexIterator implements Iterator<Object[]> {
 
         private final TransactionContext txCtx;
-        private final Iterator<Map.Entry<IKey, OperationSetOfKey>> iterator;
+        private final Iterator<IKey> keyIterator;
         private Object[] currRecord;
 
         public PrimaryIndexIterator(TransactionContext txCtx){
             this.txCtx = txCtx;
-            this.iterator = updatesPerKeyMap.entrySet().iterator();
+            Set<IKey> allKeys = new HashSet<>();
+            rawIndex.iterator().forEachRemaining(allKeys::add);
+            var keysInMemory = updatesPerKeyMap.keySet();
+            allKeys.addAll(keysInMemory);
+            this.keyIterator = allKeys.iterator();
         }
 
         @Override
         public boolean hasNext() {
-            while(this.iterator.hasNext()){
-                Map.Entry<IKey, OperationSetOfKey> next = this.iterator.next();
-                Entry<Long, TransactionWrite> entry = next.getValue().getHigherEntryUpToKey(this.txCtx.tid);
-                if(entry == null) {
-                    this.currRecord = rawIndex.lookupByKey(next.getKey());
-                    if(this.currRecord == null){
-                        if(this.iterator.hasNext()) {
+            while (keyIterator.hasNext()) {
+                IKey key = keyIterator.next();
+                // Prefer updatesPerKeyMap if present
+                OperationSetOfKey operationSetOfKey = updatesPerKeyMap.get(key);
+                if (operationSetOfKey != null) {
+
+
+                    Entry<Long, TransactionWrite> entry = operationSetOfKey.getHigherEntryUpToKey(this.txCtx.tid);
+                    if (entry == null) {
+                        this.currRecord = rawIndex.lookupByKey(key);
+                        if (this.currRecord == null) {
+                            if (this.keyIterator.hasNext()) {
+                                continue;
+                            } else {
+                                return false;
+                            }
+                        }
+                        return true;
+                    }
+                    if (entry.val().type == WriteType.DELETE) {
+                        if (this.keyIterator.hasNext()) {
+                            continue;
+                        } else {
+                            return false;
+                        }
+                    }
+                /* is it returning a deleted entry???
+                if(updatesPerKeyMap.get(next.getKey()).lastWriteType == WriteType.DELETE){
+                    LOGGER.log(ERROR,"ATTENTION: "+this.txCtx.tid+" < "+updatesPerKeyMap.get(next.getKey()).peak().key);
+                }
+                */
+                    this.currRecord = entry.val().record;
+                    return true;
+                }
+                // new
+                else {
+                    this.currRecord = rawIndex.lookupByKey(key);
+                    if (this.currRecord == null) {
+                        if (this.keyIterator.hasNext()) {
                             continue;
                         } else {
                             return false;
@@ -629,20 +665,6 @@ public final class PrimaryIndex implements IMultiVersionIndex {
                     }
                     return true;
                 }
-                if(entry.val().type == WriteType.DELETE) {
-                    if(this.iterator.hasNext()) {
-                        continue;
-                    } else {
-                        return false;
-                    }
-                }
-                /* is it returning a deleted entry???
-                if(updatesPerKeyMap.get(next.getKey()).lastWriteType == WriteType.DELETE){
-                    LOGGER.log(ERROR,"ATTENTION: "+this.txCtx.tid+" < "+updatesPerKeyMap.get(next.getKey()).peak().key);
-                }
-                */
-                this.currRecord = entry.val().record;
-                return true;
             }
             return false;
         }

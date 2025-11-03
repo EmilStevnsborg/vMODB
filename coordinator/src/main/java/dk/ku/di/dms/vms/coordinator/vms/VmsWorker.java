@@ -357,14 +357,13 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     }
 
     private void reconnect() {
-        if (this.state == State.DISCONNECTED || this.state == State.CONNECTION_FAILED) {
-            try {
-                this.connect();
-                this.state = CONNECTION_ESTABLISHED;
-            } catch (Exception e) {
-                System.out.println(STR."Connecting to \{consumerVms.identifier} failed");
-                return;
-            }
+        try {
+            this.connect();
+            this.state = CONNECTION_ESTABLISHED;
+            System.out.println(STR."Connecting to \{consumerVms.identifier} succeeded");
+        } catch (Exception e) {
+            System.out.println(STR."Connecting to \{consumerVms.identifier} failed");
+            return;
         }
         // establish leader relations ship
         ByteBuffer writeBuffer = this.retrieveByteBuffer();
@@ -403,15 +402,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         // exit this loop
         while (this.isRunning())
         {
-            if (this.state == DISCONNECTED)
-            {
-                reconnect();
-
-                // skip for some time
-
-                continue; // safeguard: if reconnect failed
-            }
-
             try {
                 this.transactionEventQueue.drain(this.drained, this.options.networkBufferSize());
                 if(this.drained.isEmpty()){
@@ -510,22 +500,10 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         }
     }
 
-
-
-    // Coordinator VmsWorker observes that connection to VMS crashed,
-    //      1. it starts recovering, and sends message to coordinator,
-    //         which can forward the message to relevant VMSes through other workers
-    private void  initializeRecoveryInCoordinator(IdentifiableNode crashedVms)
+    private void resendUncommittedTransactions()
     {
-        // safeguard in the case, it is triggered after receiving recovery message
-        // from coordinator caused by other connection crash
-        if (consumerIsRecovering) return;
-
-        consumerIsRecovering = true; // will start reestablishing connection
-        this.state = DISCONNECTED;
-
-        Recovery.Payload recoveryMessage = Recovery.of(crashedVms.identifier, crashedVms.host, crashedVms.port);
-        coordinatorQueue.add(recoveryMessage);
+        System.out.println(STR."Vms recover events for \{consumerVms.identifier}");
+        coordinatorQueue.add(RecoverEvents.of(consumerVms.identifier, consumerVms.host, consumerVms.port));
     }
 
 
@@ -533,12 +511,17 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     //      1. starts process of attempting reconnection to crashed consumer VMS
     private void processRecovery(Recovery.Payload recovery)
     {
-        System.out.println(STR."VmsWorker process recovery for consumer=\{consumerVms.identifier} consumerIsRecovering=\{consumerIsRecovering}");
-
-        // already processing the recovery, because it was initialized here
         if (consumerIsRecovering) return;
 
         consumerIsRecovering = true;
+
+        System.out.println(STR."VmsWorker process recovery for consumer=\{consumerVms.identifier}");
+        reconnect();
+        System.out.println(STR."Clearing transactionEventQueue in coordinator for \{consumerVms.identifier}");
+        transactionEventQueue.clear();
+        drained.clear();
+        resendUncommittedTransactions();
+        consumerIsRecovering = false;
     }
 
     private void sendAbortUncommittedTransactions()
@@ -635,7 +618,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
                 // safe disconnect
                 System.out.println("Safe disconnect");
-                initializeRecoveryInCoordinator(consumerVms);
+                state = State.DISCONNECTED;
                 return;
             }
             if(startPos == 0){
@@ -838,19 +821,19 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
             if (exc instanceof AsynchronousCloseException) {
                 System.out.println("Channel failed due to AsynchronousCloseException");
-                initializeRecoveryInCoordinator(consumerVms);
+                state = DISCONNECTED;
             }
             else if (exc instanceof ClosedChannelException) {
                 System.out.println("Channel failed due to ClosedChannelException");
-                initializeRecoveryInCoordinator(consumerVms);
+                state = DISCONNECTED;
             }
             else if (exc instanceof WritePendingException) {
                 System.out.println("Channel failed due to WritePendingException");
-                initializeRecoveryInCoordinator(consumerVms);
+                state = DISCONNECTED;
             }
             else if (exc instanceof IOException) {
                 System.out.println("Channel failed due to IOException");
-                initializeRecoveryInCoordinator(consumerVms);
+                state = DISCONNECTED;
             }
             else {
                 System.out.println(STR."Channel failed due to something else \{exc.getMessage()}");
@@ -881,19 +864,19 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
             if (exc instanceof AsynchronousCloseException) {
                 System.out.println("Channel failed due to AsynchronousCloseException");
-                initializeRecoveryInCoordinator(consumerVms);
+                state = DISCONNECTED;
             }
             else if (exc instanceof ClosedChannelException) {
                 System.out.println("Channel failed due to ClosedChannelException");
-                initializeRecoveryInCoordinator(consumerVms);
+                state = DISCONNECTED;
             }
             else if (exc instanceof WritePendingException) {
                 System.out.println("Channel failed due to WritePendingException");
-                initializeRecoveryInCoordinator(consumerVms);
+                state = DISCONNECTED;
             }
             else if (exc instanceof IOException) {
                 System.out.println("Channel failed due to IOException");
-                initializeRecoveryInCoordinator(consumerVms);
+                state = DISCONNECTED;
             }
             else {
                 System.out.println(STR."Channel failed due to something else \{exc.getMessage()}");

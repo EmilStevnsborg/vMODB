@@ -11,51 +11,36 @@ import java.nio.charset.StandardCharsets;
 
 public final class Recovery
 {
+    public static final int SIZE = 1 + (2 * Long.BYTES);
     public static void write(ByteBuffer buffer, Recovery.Payload payload) {
         buffer.put(Constants.RECOVERY);
-        buffer.putInt( payload.port );
-        buffer.putInt( payload.host().length() );
-        buffer.put( payload.host().getBytes(StandardCharsets.UTF_8) );
         buffer.putInt( payload.vms().length() );
         buffer.put( payload.vms().getBytes(StandardCharsets.UTF_8) );
     }
 
     public static void write(ByteBuffer buffer, IdentifiableNode identifiableNode) {
         buffer.put(Constants.RECOVERY);
-        buffer.putInt(identifiableNode.port);
-        byte[] hostBytes = identifiableNode.host.getBytes(StandardCharsets.UTF_8);
-        buffer.putInt(hostBytes.length);
-        buffer.put(hostBytes);
         byte[] nameBytes = identifiableNode.identifier.getBytes(StandardCharsets.UTF_8);
         buffer.putInt( nameBytes.length );
         buffer.put( nameBytes );
     }
 
     public static Recovery.Payload read(ByteBuffer buffer){
-        int port = buffer.getInt();
-        int sizeHost = buffer.getInt();
-        String host = ByteUtils.extractStringFromByteBuffer(buffer, sizeHost);
         int size = buffer.getInt();
         String vms = ByteUtils.extractStringFromByteBuffer(buffer, size);
-        return Recovery.of(vms, host, port);
+        return Recovery.of(vms);
     }
 
-    public static Recovery.Payload of(String vms, String host, int port) {
-        return new Recovery.Payload(vms, host, port);
-    }
-
-    public static IdentifiableNode crashedVms(Recovery.Payload payload) {
-        return new IdentifiableNode(payload.vms, payload.host, payload.port);
+    public static Recovery.Payload of(String vms) {
+        return new Recovery.Payload(vms);
     }
 
     public record Payload(
-            String vms, String host, int port
+            String vms
             ) {
         @Override
         public String toString() {
             return "Recovery {"
-                    + "\"port\":\"" + port + "\","
-                    + "\"host\":\"" + host + "\","
                     + "\"vms\":\"" + vms + "\""
                     + "}";
         }

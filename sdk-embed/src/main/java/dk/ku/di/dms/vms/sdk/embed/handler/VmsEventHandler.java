@@ -9,6 +9,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.control.ConsumerSet;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.Presentation;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.RecoverEvents;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.Recovery;
+import dk.ku.di.dms.vms.modb.common.schema.network.meta.NetworkAddress;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
@@ -28,6 +29,7 @@ import dk.ku.di.dms.vms.web_common.HttpUtils;
 import dk.ku.di.dms.vms.web_common.IHttpHandler;
 import dk.ku.di.dms.vms.web_common.ModbHttpServer;
 import dk.ku.di.dms.vms.web_common.NetworkUtils;
+import dk.ku.di.dms.vms.web_common.channel.IChannel;
 import dk.ku.di.dms.vms.web_common.channel.JdkAsyncChannel;
 import dk.ku.di.dms.vms.web_common.meta.ConnectionMetadata;
 import org.slf4j.Logger;
@@ -80,6 +82,8 @@ public final class VmsEventHandler extends ModbHttpServer {
     private final Map<String, List<IVmsContainer>> eventToConsumersMap;
     private final Map<String, List<String>> consumerToEventsMap;
 
+    // vms identifier to node
+    private final Map<String, IdentifiableNode> vmsMetadataMap;
     // built while connecting to the consumers
     private final Map<IdentifiableNode, IVmsContainer> consumerVmsContainerMap;
 
@@ -232,6 +236,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         // no concurrent threads modifying them
         this.eventToConsumersMap = new HashMap<>();
         this.consumerToEventsMap = new HashMap<>();
+        this.vmsMetadataMap = new HashMap<>();
         this.consumerVmsContainerMap = new HashMap<>();
         // concurrent threads modifying it
         this.producerConnectionMetadataMap = new ConcurrentHashMap<>();
@@ -273,7 +278,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         var crashOccurred = true; // check for logs or snapshot
 
         System.out.println(STR."crashOccurred=\{crashOccurred} && recoveryEnabled=\{recoveryEnabled}");
-        if (crashOccurred && recoveryEnabled) recoverVms();
+        if (crashOccurred && recoveryEnabled) recoverVms("localhost", 8766);
 
         // this thread is for reading messages from workers
          new Thread(() -> {
@@ -351,12 +356,10 @@ public final class VmsEventHandler extends ModbHttpServer {
     }
 
     // crashed VMS tries to recover
-    private void recoverVms()
+    private void recoverVms(String leaderHost, int leaderPort)
     {
         System.out.println("Recovering vms");
         pauseHandler.accept(true);
-
-        // no need to load snapshot into memory
 
         // fix scheduler metadata
         try {
@@ -366,6 +369,14 @@ public final class VmsEventHandler extends ModbHttpServer {
             recoveryHandler.accept(batch, maxTid);
         } catch (Exception e) {
             //
+        }
+
+        // connect to leader
+        try {
+            var leaderAsInetSocketAddress = new NetworkAddress(leaderHost, leaderPort);
+            connectToCoordinator(leaderAsInetSocketAddress);
+        } catch (Exception e) {
+            System.out.println("Failed to connect to coordinator");
         }
 
         pauseHandler.accept(false);
@@ -406,15 +417,16 @@ public final class VmsEventHandler extends ModbHttpServer {
     //      1. it needs to help recover it
     private void processRecovery(Recovery.Payload recovery)
     {
-        IdentifiableNode crashedVms = Recovery.crashedVms(recovery);
+        System.out.println(STR."Processing recovery of \{recovery.vms()} in \{me.identifier}");
+        var crashedVms = vmsMetadataMap.get(recovery.vms());
         // safeguard
-        if (!consumerVmsContainerMap.containsKey(crashedVms))
+         if (!consumerVmsContainerMap.containsKey(crashedVms))
         {
-            System.out.println(STR."Crashed Vms \{crashedVms.identifier} is not a consumer");
+            System.out.println(STR."Crashed Vms \{crashedVms} is not a consumer");
             return;
         }
 
-        // recover consumer worker (queueMessage)
+        System.out.println(STR."Queue recovery for consumer worker of \{crashedVms.identifier}");
         consumerVmsContainerMap.get(crashedVms).queueMessage(recovery);
     }
 
@@ -556,6 +568,19 @@ public final class VmsEventHandler extends ModbHttpServer {
         });
     }
 
+    private void connectToCoordinator(NetworkAddress leaderAddress) throws IOException, InterruptedException, ExecutionException
+    {
+        var channel = JdkAsyncChannel.create(this.group);
+        NetworkUtils.configure(channel, options.soBufferSize());
+        channel.connect(leaderAddress.asInetSocketAddress()).get();
+
+        var buffer = MemoryManager.getTemporaryDirectBuffer(options.networkBufferSize());
+        buffer.put(VMS_RECONNECTION);
+        me.asIdentifiableNode().write(buffer); // this can be hacked
+        buffer.flip();
+        channel.write(buffer);
+    }
+
     private void connectToReceivedConsumerSet(Map<String, List<IdentifiableNode>> receivedConsumerVms) {
         Map<IdentifiableNode, List<String>> consumerToEventsMap = new HashMap<>();
         // build an indirect map
@@ -652,8 +677,10 @@ public final class VmsEventHandler extends ModbHttpServer {
                 .start(consumerVmsWorker);
         if(!this.consumerVmsContainerMap.containsKey(node)){
             if(this.options.numVmsWorkers == 1) {
+                vmsMetadataMap.put(node.identifier, node);
                 this.consumerVmsContainerMap.put(node, consumerVmsWorker);
             } else {
+                vmsMetadataMap.put(node.identifier, node);
                 MultiVmsContainer multiVmsContainer = new MultiVmsContainer(consumerVmsWorker, node, this.options.numVmsWorkers);
                 this.consumerVmsContainerMap.put(node, multiVmsContainer);
             }
@@ -672,6 +699,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             } else {
                 // stop previous, replace by the new one
                 vmsContainer.stop();
+                vmsMetadataMap.put(node.identifier, node);
                 this.consumerVmsContainerMap.put(node, consumerVmsWorker);
             }
         }
@@ -1142,6 +1170,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         @Override
         public void completed(Integer result, Integer startPos) {
+            System.out.println("Read from leader");
             if(result == -1){
                 System.out.println("Leader has disconnected");
                 LOGGER.log(INFO,me.identifier+": Leader has disconnected");
@@ -1160,6 +1189,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             }
             // guaranteed we always have at least one byte to read
             byte messageType = this.readBuffer.get();
+            System.out.println(STR."Read \{messageType} from leader");
             try {
                 switch (messageType) {
                     case (BATCH_OF_EVENTS) -> {
@@ -1209,12 +1239,8 @@ public final class VmsEventHandler extends ModbHttpServer {
                         processAbort(txAbortPayload);
                     }
                     case (RECOVERY) -> {
-                        if (this.readBuffer.remaining() < (TransactionAbort.SIZE - 1)) {
-                            this.fetchMoreBytes(startPos);
-                            return;
-                        }
-                        Recovery.Payload recovery = Recovery.read(this.readBuffer);
                         System.out.println(STR."Received recovery message from leader");
+                        Recovery.Payload recovery = Recovery.read(this.readBuffer);
                         processRecovery(recovery);
                     }
                     case (ABORT_UNCOMMITTED_TRANSACTIONS) -> {
@@ -1241,8 +1267,9 @@ public final class VmsEventHandler extends ModbHttpServer {
                             LOGGER.log(ERROR, me.identifier + ": Message type sent by the leader cannot be identified: " + messageType);
                 }
             } catch (Exception e){
+                System.out.println(STR."Error reading \{messageType} from leader");
                 LOGGER.log(ERROR, "Leader: Error caught\n"+e.getMessage(), e);
-                e.printStackTrace(System.out);
+                e.printStackTrace();
             }
 
             if(this.readBuffer.hasRemaining()){

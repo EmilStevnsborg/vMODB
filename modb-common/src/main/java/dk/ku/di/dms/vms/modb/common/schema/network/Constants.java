@@ -15,6 +15,7 @@ public final class Constants {
     public static final byte PRESENTATION = 5;
 
     public static final byte CONSUMER_SET = 15;
+    public static final byte VMS_RECONNECTION = 20;
 
     /**
      * Transaction-related Events

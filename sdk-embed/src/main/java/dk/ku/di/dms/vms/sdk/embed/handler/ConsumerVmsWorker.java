@@ -162,32 +162,9 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     }
 
     private void eventLoopNoLogging() {
-        int pollTimeout = 1;
-        while (this.isRunning()){
+        while (this.isRunning())
+        {
             try {
-                if (this.state == DISCONNECTED)
-                {
-                    reconnect();
-                    continue; // safeguard: if reconnect failed
-                }
-
-                if (this.consumerIsRecovering) {
-                    System.out.println(STR."Clearing transactionEventQueue in \{me.identifier} for \{consumerVms.identifier}");
-
-                    transactionEventQueue.clear();
-                    // maybe the queue (based on the queue type) can't be cleared like this.
-
-                    drained.clear();
-                    System.out.println(STR."Vms recover events for \{consumerVms.identifier}");
-                    vmsQueue.add(RecoverEvents.of(consumerVms.identifier, consumerVms.host, consumerVms.port));
-                    consumerIsRecovering = false;
-                    System.out.println("Sleeping in ConsumerVmsWorker");
-                    Thread.sleep(1000); // if I don't sleep, the events queue after RecoverEvents will not send
-                }
-
-                // first take to block thread
-                var event = transactionEventQueue.take();
-                drained.add(event);
                 transactionEventQueue.drain(this.drained::add, this.options.networkBufferSize());
                 this.sendBatchOfEventsNonBlocking();
                 processPendingMessages();
@@ -201,11 +178,13 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     private void processPendingMessages() {
         Object pendingMessage;
         while((pendingMessage = this.messageQueue.pollFirst()) != null){
+            System.out.println(STR."ConsumerVmsWorker polled a message \{pendingMessage}");
             switch (pendingMessage)
             {
                 case Recovery.Payload recovery ->
                 {
                     System.out.println(STR."Process Recovery for consumer=\{consumerVms.identifier}");
+                    this.state = DISCONNECTED;
                     processRecoveryInVms();
                 }
                 case AbortUncommittedTransactions.Payload abort ->
@@ -219,20 +198,27 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         }
     }
 
-    private void reconnect() {
+    private boolean reconnect() {
         System.out.println(STR."Reconnect to consumer VMS \{this.consumerVms.identifier} with state=\{this.state}");
         var connected = connect();
         if (!connected) {
-            try { sleep(500); } catch (InterruptedException ignored) { }
-            return;
+            return false;
         }
         else {
             this.state = CONNECTED;
         }
 
-        // send pr
-
         System.out.println(STR."Reconnected to \{this.consumerVms.identifier}");
+        return true;
+    }
+    private void resendUncommittedTransactions()
+    {
+        System.out.println(STR."Vms recover events for \{consumerVms.identifier}");
+        vmsQueue.add(RecoverEvents.of(consumerVms.identifier, consumerVms.host, consumerVms.port));
+        System.out.println("Sleeping in ConsumerVmsWorker");
+        try {
+            Thread.sleep(1000); // if I don't sleep, the events queue after RecoverEvents will not send
+        } catch (InterruptedException e) {}
     }
 
     /**
@@ -273,59 +259,22 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         return true;
     }
 
-    // consumer vms has crashed
-    //      1. this may have not been registered yest
-    public void initializeRecoveryInVms()
-    {
-        if (consumerIsRecovering) return;
-
-        System.out.println("Initializing recovery in ConsumerVmsWorker");
-        consumerIsRecovering = true;
-        this.state = DISCONNECTED;
-
-        // inform coordinator
-        var recoveryMessage = Recovery.of(consumerVms.identifier, consumerVms.host, consumerVms.port);
-
-        // queue message for coordinator (replace with queuing for the Vms first later)
-        this.leaderQueueRecovery.accept(recoveryMessage);
-    }
-
     // called from the VmsEventHandler
     @Override
     public void processRecoveryInVms()
     {
-        // message from vms comes while already recovering
-        if (consumerIsRecovering) return;
-
         System.out.println(STR."Processing recovery of consumer=\{consumerVms.identifier} in ConsumerVmsWorker");
 
-        consumerIsRecovering = true;
-        this.state = DISCONNECTED;
-    }
+        if (consumerIsRecovering) return;
 
-    private void processPendingWrites() {
-        // do we have pending writes?
-        ByteBuffer bb = this.pendingWritesBuffer.poll();
-        if (bb != null) {
-            LOGGER.log(INFO, me.identifier+": Retrying sending failed buffer to "+consumerVms.identifier);
-            try {
-                // sleep with the intention to let the OS flush the previous buffer
-                try { sleep(100); } catch (InterruptedException ignored) { }
-                this.acquireLock();
-                this.channel.write(bb, options.networkSendTimeout(), TimeUnit.MILLISECONDS, bb, this.writeCompletionHandler);
-            } catch (Exception e) {
-                LOGGER.log(ERROR, me.identifier+": ERROR on retrying to send failed buffer to "+consumerVms.identifier+": \n"+e);
-                if(e instanceof IllegalStateException){
-                    LOGGER.log(INFO, me.identifier+": Connection to "+consumerVms.identifier+" is open? "+this.channel.isOpen());
-                    // probably comes from the class {@AsynchronousSocketChannelImpl}:
-                    // "Writing not allowed due to timeout or cancellation"
-                    this.stop();
-                }
-                this.releaseLock();
-                bb.clear();
-                this.pendingWritesBuffer.add(bb);
-            }
-        }
+        consumerIsRecovering = true;
+
+        reconnect();
+        System.out.println(STR."Clearing transactionEventQueue in \{me.identifier} for \{consumerVms.identifier}");
+        transactionEventQueue.clear();
+        drained.clear();
+        resendUncommittedTransactions();
+        consumerIsRecovering = false;
     }
 
     // TODO sending batch of events (look for format)
@@ -459,7 +408,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
 
     @Override
     public void queueMessage(Object message) {
-        System.out.println(STR."Queued message in ConsumerVmsWorker for \{consumerVms.identifier}");
+//        System.out.println(STR."Queued message in ConsumerVmsWorker for \{consumerVms.identifier}");
         this.queueMessage_.accept(message);
     }
 

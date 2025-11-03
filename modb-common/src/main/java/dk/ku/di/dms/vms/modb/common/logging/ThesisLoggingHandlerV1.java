@@ -78,6 +78,8 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
                     .filter(e -> e.batch() == bid)
                     .toList();
 
+            System.out.println(STR."Committing batch=\{bid} of \{committedEvents.size()} events");
+
             if (committedEvents.isEmpty()) return true;
 
             try {
@@ -92,7 +94,9 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
                 System.out.println(STR."LoggingHandler Committing batch=\{bid} has been forced");
 
                 // remove committed events atomically
-                committedEvents.forEach(e -> eventsSent.remove(e.tid()));
+                committedEvents.forEach(e -> {
+                    eventsSent.remove(e.tid());
+                });
 
                 returnByteBuffer(buffer);
                 return true;
