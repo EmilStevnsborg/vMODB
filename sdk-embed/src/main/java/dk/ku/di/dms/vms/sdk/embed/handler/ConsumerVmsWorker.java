@@ -164,8 +164,15 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     private void eventLoopNoLogging() {
         while (this.isRunning())
         {
+            int pollTimeout = 1;
             try {
                 transactionEventQueue.drain(this.drained::add, this.options.networkBufferSize());
+                if(this.drained.isEmpty()){
+                    pollTimeout = Math.min(pollTimeout * 2, this.options.maxSleep());
+                    processPendingMessages();
+                    this.giveUpCpu(pollTimeout);
+                    continue;
+                }
                 this.sendBatchOfEventsNonBlocking();
                 processPendingMessages();
 

@@ -97,6 +97,7 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
                 committedEvents.forEach(e -> {
                     eventsSent.remove(e.tid());
                 });
+                System.out.println(STR."Removed \{committedEvents.size()} events after commit");
 
                 returnByteBuffer(buffer);
                 return true;
