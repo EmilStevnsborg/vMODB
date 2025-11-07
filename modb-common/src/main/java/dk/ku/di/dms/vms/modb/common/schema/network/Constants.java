@@ -95,4 +95,6 @@ public final class Constants {
 
     public static final byte ABORT_UNCOMMITTED_TRANSACTIONS = 19;
 
+    public static final byte VMS_CRASH = 21;
+
 }

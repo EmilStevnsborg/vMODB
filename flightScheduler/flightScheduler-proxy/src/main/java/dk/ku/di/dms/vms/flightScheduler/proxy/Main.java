@@ -20,6 +20,13 @@ public final class Main
 
         if (args != null && args.length > 0) {
             var recoverable = Boolean.parseBoolean(args[0]);
+            var batch_window_ms = args[1];
+            var num_max_transactions_batch=args[2];
+
+            // setting it deliberately
+            properties.setProperty("batch_window_ms", batch_window_ms);
+            properties.setProperty("num_max_transactions_batch", num_max_transactions_batch);
+
             loadCoordinator(properties, recoverable);
         } else {
             loadCoordinator(properties, false);

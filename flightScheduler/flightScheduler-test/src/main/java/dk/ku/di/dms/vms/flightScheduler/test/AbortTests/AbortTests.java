@@ -1,4 +1,4 @@
-package dk.ku.di.dms.vms.flightScheduler.test.Abort;
+package dk.ku.di.dms.vms.flightScheduler.test.AbortTests;
 
 import dk.ku.di.dms.vms.flightScheduler.test.DataGenerator;
 import dk.ku.di.dms.vms.flightScheduler.test.DataInjection;
@@ -18,11 +18,6 @@ public class AbortTests
     // the booking needs to be reversed if a customer has
     public static void CustomerCantAffordFlightSeat(HttpClient client)
     {
-        VmsProcess.VmsProcessBuilder("customer", false);
-        VmsProcess.VmsProcessBuilder("flight", false);
-        VmsProcess.VmsProcessBuilder("payment", false);
-        VmsProcess.VmsProcessBuilder("booking", false);
-        VmsProcess.VmsProcessBuilder("proxy", false);
 
         Util.Sleep(1000);
 
@@ -84,13 +79,6 @@ public class AbortTests
 
     public void CancelBookingFailed(HttpClient client)
     {
-        VmsProcess.VmsProcessBuilder("customer", false);
-        VmsProcess.VmsProcessBuilder("flight", false);
-        VmsProcess.VmsProcessBuilder("payment", false);
-        VmsProcess.VmsProcessBuilder("booking", false);
-        VmsProcess.VmsProcessBuilder("proxy", false);
-
-        Util.Sleep(1000);
 
 
     }

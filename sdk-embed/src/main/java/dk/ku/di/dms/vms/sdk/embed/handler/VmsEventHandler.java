@@ -383,7 +383,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     }
 
     // this function only updates in memory structures
-    private void abortUncommittedTransactions()
+    private void abortUncommittedTransactions(AbortUncommittedTransactions.Payload abort)
     {
         System.out.println("Aborting all uncommitted transactions");
         pauseHandler.accept(true);
@@ -393,9 +393,8 @@ public final class VmsEventHandler extends ModbHttpServer {
             var batch = latestCommitInfo[0];
             var maxTid = latestCommitInfo[1];
 
-            var message = new AbortUncommittedTransactions.Payload();
             consumerVmsContainerMap.values().forEach(worker -> {
-                worker.queueMessage(message);
+                worker.queueMessage(abort);
             });
 
             // clear all tasks later than the latest committed
@@ -438,7 +437,6 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         // pause the transactionScheduler safely
         pauseHandler.accept(true);
-
 
         // cut the log
         loggingHandler.cutLog(transactionAbort.tid());
@@ -490,7 +488,6 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         // update batch metadata
         fixTrackingBatch(abortMessage.batch(), eventsInBatchAfterCut);
-        fixBatchContext(abortMessage.batch());
 
         try {
             taskClearer.accept(abortMessage.tid());
@@ -1244,7 +1241,8 @@ public final class VmsEventHandler extends ModbHttpServer {
                         processRecovery(recovery);
                     }
                     case (ABORT_UNCOMMITTED_TRANSACTIONS) -> {
-                        abortUncommittedTransactions();
+                        AbortUncommittedTransactions.Payload abort = AbortUncommittedTransactions.read(this.readBuffer);
+                        abortUncommittedTransactions(abort);
                     }
                     case (CONSUMER_SET) -> {
                         try {

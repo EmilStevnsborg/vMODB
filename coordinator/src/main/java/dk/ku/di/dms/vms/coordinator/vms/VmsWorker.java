@@ -488,8 +488,8 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 // if the vms is the crashed one, process the connection
                 this.processRecovery(o);
             }
-            case AbortUncommittedTransactions.Payload o -> {
-                sendAbortUncommittedTransactions();
+            case AbortUncommittedTransactions.Payload abort -> {
+                sendAbortUncommittedTransactions(abort);
             }
             case String o -> {
                 this.consumerSetVmsStr = o;
@@ -524,11 +524,11 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         consumerIsRecovering = false;
     }
 
-    private void sendAbortUncommittedTransactions()
+    private void sendAbortUncommittedTransactions(AbortUncommittedTransactions.Payload abort)
     {
         System.out.println(STR."VmsWorker sendAbortUncommittedTransactions message to \{consumerVms.identifier}");
         ByteBuffer writeBuffer = retrieveByteBuffer();
-        AbortUncommittedTransactions.write(writeBuffer);
+        AbortUncommittedTransactions.write(writeBuffer, abort.bid());
         writeBuffer.flip();
         this.acquireLock();
         this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);

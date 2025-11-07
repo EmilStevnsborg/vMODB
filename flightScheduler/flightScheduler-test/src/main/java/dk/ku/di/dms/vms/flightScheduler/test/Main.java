@@ -1,7 +1,6 @@
 package dk.ku.di.dms.vms.flightScheduler.test;
 
-import dk.ku.di.dms.vms.flightScheduler.test.Abort.AbortTests;
-import dk.ku.di.dms.vms.flightScheduler.test.Recovery.RecoveryTests;
+import dk.ku.di.dms.vms.flightScheduler.test.RecoveryTests.RecoveryTests;
 
 import java.io.IOException;
 import java.net.http.HttpClient;

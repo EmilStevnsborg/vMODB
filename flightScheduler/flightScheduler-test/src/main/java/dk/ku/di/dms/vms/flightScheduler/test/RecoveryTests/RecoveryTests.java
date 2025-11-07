@@ -1,4 +1,4 @@
-package dk.ku.di.dms.vms.flightScheduler.test.Recovery;
+package dk.ku.di.dms.vms.flightScheduler.test.RecoveryTests;
 
 import dk.ku.di.dms.vms.flightScheduler.test.DataGenerator;
 import dk.ku.di.dms.vms.flightScheduler.test.Transactions;
@@ -17,46 +17,10 @@ public class RecoveryTests
         this.client = client;
     }
 
-    private static void killComponents()
-    {
-        VmsProcess.KillCurrentVmsProcess("customer");
-        VmsProcess.KillCurrentVmsProcess("flight");
-        VmsProcess.KillCurrentVmsProcess("payment");
-        VmsProcess.KillCurrentVmsProcess("booking");
-        VmsProcess.KillCurrentVmsProcess("proxy");
-    }
-    private static void startComponents() throws IOException
-    {
-        VmsProcess.VmsProcessBuilder("customer", false).start();
-        VmsProcess.VmsProcessBuilder("flight", false).start();
-        VmsProcess.VmsProcessBuilder("payment", false).start();
-        VmsProcess.VmsProcessBuilder("booking", false).start();
-        VmsProcess.VmsProcessBuilder("proxy", false).start();
-    }
-
-    public static void SimpleReconnection(HttpClient client) throws IOException
-    {
-        VmsProcess.KillCurrentVmsProcess("customer");
-        VmsProcess.VmsProcessBuilder("customer", false).start();
-
-        System.console().readLine();
-        System.out.println("Stopping customer");
-        VmsProcess.KillCurrentVmsProcess("customer");
-
-        System.console().readLine();
-        System.out.println("Restarting customer");
-        VmsProcess.VmsProcessBuilder("customer", true).start();
-
-        System.console().readLine();
-        System.out.println("Final stop of customer");
-        VmsProcess.KillCurrentVmsProcess("customer");
-
-    }
-
     public static void VMSCrash(HttpClient client) throws IOException
     {
-        killComponents();
-        startComponents();
+//        VmsProcess.KillComponents();
+//        VmsProcess.StartComponents();
         System.console().readLine();
         Util.Sleep(1000);
 
@@ -82,7 +46,7 @@ public class RecoveryTests
 
         var customersSeatsReserved = VmsEndpoints.GetCustomers(client).stream().map(c -> c.seat_number).distinct().toList();
 
-        killComponents();
+//        VmsProcess.KillComponents();
 
         System.out.println(STR."There are \{flightSeats.size()} distinct flight seats, and \{customersSeatsReserved.size()} distinct customer seats");
     }

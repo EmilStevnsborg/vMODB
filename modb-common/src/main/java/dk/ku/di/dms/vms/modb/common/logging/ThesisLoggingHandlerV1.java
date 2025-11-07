@@ -323,7 +323,31 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
     }
 
     @Override
-    public void abort(long failedTid, long failedTidBatch) {
+    public void abort(List<Long> failedTIDs) {
+        // quick existence check under read-lock for better concurrency
+        rwLock.writeLock().lock();
+        try
+        {
+            for (long failedTid : failedTIDs)
+            {
+                TransactionEvent.PayloadRaw failedEvent = findAndRemoveFailedEvent(failedTid);
+                if (failedEvent == null) {
+                    System.out.println(STR."Can't find failed event in batch");
+                    return;
+                }
+                System.out.println(STR."Removing failed event Success: \{failedEvent.tid()}");
+
+                System.out.println("Fixing precedence");
+                fixPrecedence(failedEvent);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }finally {
+            rwLock.writeLock().unlock();
+        }
+    }
+    @Override
+    public void abort(long failedTid) {
         // quick existence check under read-lock for better concurrency
         rwLock.writeLock().lock();
         try {

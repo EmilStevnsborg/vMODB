@@ -244,6 +244,7 @@ public final class WorkloadUtils {
             }
             itemIds[i] = item_;
 
+            // if the flag is on, it will generate an inexisting item and force an abort
             if(FORCE_ABORTS) {
                 if ((i == ol_cnt - 1) && (rbk == 1)) {
                     // this can lead to exception and then abort in app code

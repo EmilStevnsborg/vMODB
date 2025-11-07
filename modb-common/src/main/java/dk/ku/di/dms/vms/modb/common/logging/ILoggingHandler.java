@@ -17,7 +17,8 @@ public interface ILoggingHandler {
     default void log(TransactionEvent.PayloadRaw payloadRaw) {}
     default boolean commit(long bid) { return false; }
     default long[] latestCommit() throws IOException { return new long[] {0,0,0}; }
-    default void abort(long failedTid, long failedTidBatch) {}
+    default void abort(long failedTid) {}
+    default void abort(List<Long> failedTIDs) {}
     default void cutLog(long failedTid) {}
     default int countEventsInBatch(long batch) { return 0; }
     default List<TransactionEvent.PayloadRaw> getAffectedEvents(long failedTid) { return List.of(); }
