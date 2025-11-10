@@ -5,7 +5,6 @@ import dk.ku.di.dms.vms.flightScheduler.test.DataInjection;
 import dk.ku.di.dms.vms.flightScheduler.test.Transactions;
 import dk.ku.di.dms.vms.flightScheduler.test.Util.Util;
 import dk.ku.di.dms.vms.flightScheduler.test.Util.VmsEndpoints;
-import dk.ku.di.dms.vms.flightScheduler.test.Util.VmsProcess;
 import dk.ku.di.dms.vms.flightScheduler.test.models.Customer;
 import dk.ku.di.dms.vms.flightScheduler.test.models.FlightSeat;
 

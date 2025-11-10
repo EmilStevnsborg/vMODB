@@ -4,7 +4,7 @@ import dk.ku.di.dms.vms.flightScheduler.test.DataGenerator;
 import dk.ku.di.dms.vms.flightScheduler.test.Transactions;
 import dk.ku.di.dms.vms.flightScheduler.test.Util.Util;
 import dk.ku.di.dms.vms.flightScheduler.test.Util.VmsEndpoints;
-import dk.ku.di.dms.vms.flightScheduler.test.Util.VmsProcess;
+import dk.ku.di.dms.vms.flightScheduler.test.Util.ComponentProcess;
 
 import java.io.IOException;
 import java.net.http.HttpClient;
@@ -34,14 +34,14 @@ public class RecoveryTests
         Util.Sleep(500);
 
         System.out.println("Customer crashing...");
-        VmsProcess.KillCurrentVmsProcess("customer");
+        ComponentProcess.Kill("customer");
 
         System.out.println("Ordering flights...");
         for (var i = 25; i < 50; i++) { Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i)); }
         Util.Sleep(500);
 
         System.out.println("Customer restarting...");
-        VmsProcess.VmsProcessBuilder("customer", false).start();
+        ComponentProcess.VmsProcessBuilder("customer", false).start();
         Util.Sleep(1000);
 
         var customersSeatsReserved = VmsEndpoints.GetCustomers(client).stream().map(c -> c.seat_number).distinct().toList();
@@ -55,8 +55,8 @@ public class RecoveryTests
     // All injected customers need to have paid for a flight
     public static void CustomerCrash(HttpClient client) throws IOException
     {
-        VmsProcess.KillCurrentVmsProcess("customer");
-        VmsProcess.VmsProcessBuilder("customer", false).start();
+        ComponentProcess.Kill("customer");
+        ComponentProcess.VmsProcessBuilder("customer", false).start();
         Util.Sleep(1000);
         System.out.println("\nCustomer process has started");
 
@@ -81,7 +81,7 @@ public class RecoveryTests
         // stop customer
         System.console().readLine();
         System.out.println("\nStopping customer process...");
-        VmsProcess.KillCurrentVmsProcess("customer");
+        ComponentProcess.Kill("customer");
 
 
         // submit workload
@@ -96,7 +96,7 @@ public class RecoveryTests
         // Restart customer
         System.console().readLine();
         System.out.println("\nRestarting customer process...");
-        VmsProcess.VmsProcessBuilder("customer", true).start();
+        ComponentProcess.VmsProcessBuilder("customer", true).start();
 
 
         // wait for restart and recovery
@@ -122,13 +122,13 @@ public class RecoveryTests
         System.out.println("\nStopping customer process final...");
 
         // Final kill
-        VmsProcess.KillCurrentVmsProcess("customer");
+        ComponentProcess.Kill("customer");
     }
 
     public static void CoordinatorCrash(HttpClient client) throws IOException
     {
-        VmsProcess.KillCurrentVmsProcess("proxy");
-        VmsProcess.VmsProcessBuilder("proxy", false).start();
+        ComponentProcess.Kill("proxy");
+        ComponentProcess.VmsProcessBuilder("proxy", false).start();
         Util.Sleep(1000);
         System.out.println("\nCoordinator process has started");
 
@@ -153,11 +153,11 @@ public class RecoveryTests
         for (var i = 0; i < half; i++) {
             Transactions.PayBooking(client, allBookings.get(i).booking_id, "VISA");
         }
-        VmsProcess.KillCurrentVmsProcess("proxy");
+        ComponentProcess.Kill("proxy");
         System.out.println("\nCoordinator crashed...");
         System.console().readLine();
 
-        VmsProcess.VmsProcessBuilder("proxy", true).start();
+        ComponentProcess.VmsProcessBuilder("proxy", true).start();
         Util.Sleep(1000);
         System.out.println("\nCoordinator restarted...");
 
@@ -173,7 +173,7 @@ public class RecoveryTests
 
         var unpaidBookings = VmsEndpoints.GetBookings(client).stream().filter(b -> b.paid == 1).toList();
         System.out.println(STR."(CoordinatorCrash): unpaid bookings count=\{unpaidBookings.size()}");
-        VmsProcess.KillCurrentVmsProcess("proxy");
+        ComponentProcess.Kill("proxy");
     }
 
 

@@ -338,22 +338,6 @@ public final class VmsEventHandler extends ModbHttpServer {
             failedTidBatchMetadata.numberTIDsExecuted = eventsInBatchAfterCut;
         }
     }
-    private void fixBatchContext(long failedTidBatch)
-    {
-        var currentBatchContext = this.batchContextMap.get(failedTidBatch);
-        if (currentBatchContext == null) return;
-
-        // no more events in batch
-        if (currentBatchContext.numberOfTIDsBatch-1 == 0)
-        {
-        }
-
-        var newBatchContext = new BatchContext(failedTidBatch,
-                                               currentBatchContext.previousBatch,
-                              currentBatchContext.numberOfTIDsBatch-1,
-                                               currentBatchContext.terminal);
-        this.batchContextMap.put(failedTidBatch, newBatchContext);
-    }
 
     // crashed VMS tries to recover
     private void recoverVms(String leaderHost, int leaderPort)
@@ -432,7 +416,6 @@ public final class VmsEventHandler extends ModbHttpServer {
     // for affected vms
     private void processAbort(TransactionAbort.Payload transactionAbort)
     {
-        System.out.println("Processing abort");
         abortingTransaction = true;
 
         // pause the transactionScheduler safely
@@ -442,7 +425,6 @@ public final class VmsEventHandler extends ModbHttpServer {
         loggingHandler.cutLog(transactionAbort.tid());
 
         var eventsInBatchAfterCut = loggingHandler.countEventsInBatch(transactionAbort.batch());
-        System.out.println("After cut: " + eventsInBatchAfterCut);
 
         // restore stable state
         restoreStableState(transactionAbort.tid());
@@ -480,7 +462,6 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         // send abort message
         var abortMessage = TransactionAbortInfo.of(eventOutput.batch(), eventOutput.tid(), me.identifier);
-        System.out.println("Queueing abort message");
         this.leaderWorker.queueMessage(abortMessage);
 
         // restore stable state
@@ -590,7 +571,6 @@ public final class VmsEventHandler extends ModbHttpServer {
         for( Map.Entry<IdentifiableNode,List<String>> consumerEntry : consumerToEventsMap.entrySet() ) {
             // connect to more consumers...
             for(int i = 0; i < this.options.numVmsWorkers; i++){
-                System.out.println(STR."Create consumer vms worker \{consumerEntry.getKey()}");
                 this.initConsumerVmsWorker(consumerEntry.getKey(), consumerEntry.getValue(), i);
             }
         }
@@ -604,7 +584,6 @@ public final class VmsEventHandler extends ModbHttpServer {
         // I need to make access to the data versions data race free
         // so new transactions get data versions from the version map or the store
         //long initTs = System.currentTimeMillis();
-        System.out.println(STR."Checkpointing batch \{batch}");
         this.transactionManager.checkpoint(batch, maxTid);
 
         //LOGGER.log(WARNING, me.identifier+": Checkpointing latency is "+(System.currentTimeMillis()-initTs));
@@ -727,7 +706,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         public void completed(Integer result, Integer startPos) {
             if(result == -1){
                 // end-of-stream signal, no more data can be read
-                System.out.println(STR."VMS \{node.identifier} has disconnected!");
+                // System.out.println(STR."VMS \{node.identifier} has disconnected from \{me.identifier}");
                 LOGGER.log(WARNING,me.identifier+": VMS "+node.identifier+" has disconnected!");
                 try {
                     this.connectionMetadata.channel.close();
@@ -890,7 +869,6 @@ public final class VmsEventHandler extends ModbHttpServer {
             // message identifier
             byte messageIdentifier = this.buffer.get(0);
             if(messageIdentifier != PRESENTATION){
-                System.out.println("messageIdentifier != PRESENTATION");
                 this.buffer.flip();
                 String request = StandardCharsets.UTF_8.decode(this.buffer).toString();
                 if(HttpUtils.isHttpClient(request)){
@@ -1167,7 +1145,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         @Override
         public void completed(Integer result, Integer startPos) {
-            System.out.println("Read from leader");
+//            System.out.println("Read from leader");
             if(result == -1){
                 System.out.println("Leader has disconnected");
                 LOGGER.log(INFO,me.identifier+": Leader has disconnected");
@@ -1186,7 +1164,6 @@ public final class VmsEventHandler extends ModbHttpServer {
             }
             // guaranteed we always have at least one byte to read
             byte messageType = this.readBuffer.get();
-            System.out.println(STR."Read \{messageType} from leader");
             try {
                 switch (messageType) {
                     case (BATCH_OF_EVENTS) -> {
@@ -1232,7 +1209,6 @@ public final class VmsEventHandler extends ModbHttpServer {
                             return;
                         }
                         TransactionAbort.Payload txAbortPayload = TransactionAbort.read(this.readBuffer);
-                        System.out.println("Transaction in batch (" + txAbortPayload.batch() + ") abort received from the leader?");
                         processAbort(txAbortPayload);
                     }
                     case (RECOVERY) -> {
@@ -1246,7 +1222,6 @@ public final class VmsEventHandler extends ModbHttpServer {
                     }
                     case (CONSUMER_SET) -> {
                         try {
-                            System.out.println("Read consumerSet from leader");
                             LOGGER.log(INFO, me.identifier + ": Consumer set received from the leader");
                             Map<String, List<IdentifiableNode>> receivedConsumerVms = ConsumerSet.read(this.readBuffer, serdesProxy);
                             if (!receivedConsumerVms.isEmpty()) {
@@ -1365,7 +1340,9 @@ public final class VmsEventHandler extends ModbHttpServer {
             batchContextMap.put(batchCommitInfo.batch(), batchContext);
             // if it has been completed but not moved to status, then should send
             if(trackingBatchMap.containsKey(batchCommitInfo.batch())
-                    && trackingBatchMap.get(batchCommitInfo.batch()).numberTIDsExecuted == batchCommitInfo.numberOfTIDsBatch()){
+                    && trackingBatchMap.get(batchCommitInfo.batch()).numberTIDsExecuted == batchCommitInfo.numberOfTIDsBatch())
+            {
+
 
                 LOGGER.log(INFO,me.identifier+": Requesting leader worker to send batch ("+batchCommitInfo.batch()+") complete (LATE)");
                 leaderWorker.queueMessage(BatchComplete.of(batchCommitInfo.batch(), me.identifier));

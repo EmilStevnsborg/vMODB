@@ -114,6 +114,7 @@ public final class Coordinator extends ModbHttpServer {
 
     // metadata about all non-committed batches. when a batch commit finishes, it is removed from this map
     private final Map<Long, BatchContext> batchContextMap;
+    private final Set<Long> batchesThatRequireFixing;
 
     // transaction requests coming from the http event loop
     private final List<ConcurrentLinkedDeque<TransactionInput>> transactionInputDeques;
@@ -313,6 +314,7 @@ public final class Coordinator extends ModbHttpServer {
 
         // to store information about a batch
         this.batchContextMap = new ConcurrentHashMap<>();
+        this.batchesThatRequireFixing = new HashSet<>();
 
         this.vmsWorkerContainerMap = new HashMap<>();
         this.transactionWorkers = new ArrayList<>();
@@ -628,9 +630,7 @@ public final class Coordinator extends ModbHttpServer {
             this.queueFunc.accept(payload);
         }
         @Override
-        public void requeueTransactionEvent(TransactionEvent.PayloadRaw payload){
-            System.out.println();
-            log.accept(payload);
+        public void requeueTransactionEvent(TransactionEvent.PayloadRaw payload) {
             this.queueFunc.accept(payload);
         }
     }
@@ -926,7 +926,10 @@ public final class Coordinator extends ModbHttpServer {
                     this.abortTransactionInCoordinator(txAbort, txAbortInfo.vms());
                 }
             case BatchComplete.Payload batchComplete -> this.processBatchComplete(batchComplete);
-            case VmsCrash.Payload vmsCrash -> this.processVmsCrashInCoordinator(vmsCrash);
+            case VmsCrash.Payload vmsCrash ->
+            {
+                this.processVmsCrashInCoordinator(vmsCrash);
+            }
             case Recovery.Payload recovery -> this.processRecoveryInCoordinator(recovery);
             case RecoverEvents.Payload recoverEvents ->
             {
@@ -976,64 +979,95 @@ public final class Coordinator extends ModbHttpServer {
         for (VmsNode vms : affectedVMSes) {
             // don't need to send to the vms that aborted
             if(vms.identifier.equals(failedVms)) {
-                System.out.println(STR."NOT Sending abort tid to vms identifier \{vms.identifier} == \{failedVms}");
                 continue;
             }
 
-            System.out.println(STR."Sending abort tid to vms identifier \{vms.identifier} != \{failedVms}");;
             this.vmsWorkerContainerMap.get(vms.identifier).queueMessage(txAbort);
         }
     }
-    private void fixBatchContext(TransactionAbort.Payload txAbort)
+
+    private void fixBatchContext(long batch)
     {
-        long failedTid = txAbort.tid();
-        long failedTidBatch = txAbort.batch();
+        if (!batchContextMap.containsKey(batch)) {
+            batchesThatRequireFixing.add(batch);
+            return;
+        }
 
-        var batchContext = batchContextMap.get(failedTidBatch);
-        batchContext.numTIDsOverall -= 1;
-        if (batchContext.numTIDsOverall == 0)
-        {
-            if (batchOffsetPendingCommit == failedTidBatch)
-            {
-                this.batchOffsetPendingCommit += 1;
-            };
+        System.out.println(STR."Fixing batch context for batch=\{batch}");
 
-            var failedBatchPreviousBatchPerVms = batchContext.previousBatchPerVms;
-            var nextBatchContext = batchContextMap.get(failedTidBatch+1);
-            var nextBatchPreviousBatchPerVms = nextBatchContext.previousBatchPerVms;
-            for (var entry : nextBatchPreviousBatchPerVms.entrySet())
-            {
-                if (entry.getValue() == failedTidBatch)
-                {
-                    // vms -> previousBatch
-                    nextBatchPreviousBatchPerVms.put(entry.getKey(), failedBatchPreviousBatchPerVms.get(entry.getKey()));
-                }
+        var batchContext = batchContextMap.get(batch);
+        var eventsInBatch = loggingHandler.getUncommittedEvents(batch);
+        batchContext.numTIDsOverall = eventsInBatch.size();
+
+        System.out.println(STR."Now, there are only \{eventsInBatch} events in batch=\{batch}");
+
+        var inputs = eventsInBatch.stream()
+                .map(e -> new String(e.event(), StandardCharsets.UTF_8))
+                .toList(); // or collect(Collectors.toList())
+
+        var terminalVMSes = inputs.stream()
+                .map(transactionMap::get)
+                .filter(Objects::nonNull)
+                .flatMap(d -> d.terminalNodes.stream())
+                .collect(Collectors.toSet());
+
+        var inputsCount = inputs.stream()
+                .collect(Collectors.groupingBy(s -> s, Collectors.counting()));
+
+        batchContext.terminalVMSs = terminalVMSes;
+
+        // Fix
+        for (var entry : inputsCount.entrySet()) {
+            var input = entry.getKey();
+            var count = entry.getValue().intValue();
+            for (var vms : eventToConsumersMap.get(input)) {
+                batchContext.numberOfTIDsPerVms.put(
+                        vms,
+                        batchContext.numberOfTIDsPerVms.get(vms) + count
+                );
             }
         }
-        if (batchContext.lastTid == failedTid)
+
+        if (batchContext.numTIDsOverall == 0)
         {
-            batchContext.lastTid -= 1;
+            batchContext.lastTid = -1;
+
+            if (batchOffsetPendingCommit == batch)
+                this.batchOffsetPendingCommit += 1;
+
+            return;
+        }
+        batchContext.lastTid = eventsInBatch.stream()
+                .max(Comparator.comparingLong(TransactionEvent.PayloadRaw::tid))
+                .get()
+                .tid();
+
+        // Send batch commit info to VMSes
+        for (var vms : batchContext.terminalVMSs)
+        {
+            this.vmsWorkerContainerMap.get(vms).queueMessage(
+                    BatchCommitInfo.of(batchContext.batchOffset,
+                            batchContext.previousBatchPerVms.get(vms),
+                            batchContext.numberOfTIDsPerVms.get(vms)));
         }
     }
 
     private void resendTransactions(long failedTid)
     {
-        System.out.println(STR."Send transactions aborted");
         var affectedEvents = loggingHandler.getAffectedEvents(failedTid);
-        System.out.println(STR."There are \{affectedEvents.size()} affected events to resend");
         for (var event: affectedEvents)
         {
             var eventName = new String(event.event(), StandardCharsets.UTF_8);
-            System.out.println(STR."Resending event \{eventName} with tid=\{event.tid()}");
 
             var consumerVMSes = eventToConsumersMap.get(eventName);
             for (var consumerVms : consumerVMSes) {
-                System.out.println(STR."Sending \{event.tid()} to \{consumerVms}");
+                System.out.println(STR."Resending \{eventName} tid=\{event.tid()} to \{consumerVms}");
                 vmsWorkerContainerMap.get(consumerVms).requeueTransactionEvent(event);
             }
         }
     }
 
+    // single abort
     private void abortTransactionInCoordinator(TransactionAbort.Payload txAbort, String failedVms)
     {
         System.out.println("Coordinator abort transaction");
@@ -1044,30 +1078,21 @@ public final class Coordinator extends ModbHttpServer {
         // sending aborts
         multiCast(txAbort, failedVms);
 
-        // fix metadata
-        fixBatchContext(txAbort);
-
         // update log
         loggingHandler.abort(failedTid);
 
-        // send new batch commit info
-        var updatedBatchContext = batchContextMap.get(failedTidBatch);
-        for (var entry : updatedBatchContext.terminalVMSs)
-        {
-            this.vmsWorkerContainerMap.get(entry).queueMessage(
-                    BatchCommitInfo.of(updatedBatchContext.batchOffset,
-                            updatedBatchContext.previousBatchPerVms.get(entry),
-                            updatedBatchContext.numberOfTIDsPerVms.get(entry)));
-        }
+        fixBatchContext(failedTidBatch);
 
         // resend events
         resendTransactions(failedTid);
     }
 
+    // list of aborts
     private void abortTransactionInCoordinator(List<TransactionAbort.Payload> txAborts, String failedVms)
     {
+        System.out.println(STR."Aborting \{txAborts.size()} transactions");
+
         var TIDs = txAborts.stream().map(a -> a.tid()).toList();
-        var BIDs = txAborts.stream().map(a -> a.batch()).distinct().toList();
         var earliestTxAbort = txAborts
                 .stream()
                 .min(Comparator.comparingLong(e->e.tid()))
@@ -1077,24 +1102,11 @@ public final class Coordinator extends ModbHttpServer {
 
         loggingHandler.abort(TIDs);
 
-        // maybe this can be optimized
-        for (var txAbort: txAborts)
-        {
-            fixBatchContext(txAbort);
-        }
-
         // send commit info to terminal VMSes
-        for (var batch: BIDs)
+        txAborts.stream().map(a -> a.batch()).distinct().forEach(batch ->
         {
-            var updatedBatchContext = batchContextMap.get(batch);
-            for (var entry : updatedBatchContext.terminalVMSs)
-            {
-                this.vmsWorkerContainerMap.get(entry).queueMessage(
-                        BatchCommitInfo.of(updatedBatchContext.batchOffset,
-                                updatedBatchContext.previousBatchPerVms.get(entry),
-                                updatedBatchContext.numberOfTIDsPerVms.get(entry)));
-            }
-        }
+            fixBatchContext(batch);
+        });
 
         // resend events
         resendTransactions(earliestTxAbort.tid());
@@ -1117,20 +1129,35 @@ public final class Coordinator extends ModbHttpServer {
 
     private void processVmsCrashInCoordinator(VmsCrash.Payload vmsCrash)
     {
-        //
+        if (offlineVMSes.contains(vmsCrash.vms())) return;
+
+        System.out.println(STR."processVmsCrashInCoordinator");
         this.offlineVMSes.add(vmsCrash.vms());
 
         // find the DAGs that use the crashed VMS
         var dags = transactionMap.values();
-        var affectedDags = dags
-                .stream()
-                .filter(d -> d.getNodes().contains(vmsCrash.vms()));
 
-        var affectedDagsNames = affectedDags.map(d -> d.name).toList();
+        var affectedDags = dags.stream()
+                .filter(d -> d.getNodes().contains(vmsCrash.vms()))
+                .toList(); // <-- now it's a list, not a stream
+
+        var affectedDagsNames = affectedDags.stream()
+                .map(d -> d.name)
+                .toList();
 
         suspendedTransactions.addAll(affectedDagsNames);
 
-        var affectedEventTypes = affectedDags
+        for (var batchContext : batchContextMap.values())
+        {
+            if (batchContext.missingVotes.isEmpty()) continue;
+            if (!batchContext.terminalVMSs.contains(vmsCrash.vms())) continue;
+
+            System.out.println(STR."Removing \{vmsCrash.vms()} from terminal VMSes in batch=\{batchContext.batchOffset}");
+            batchContext.terminalVMSs.remove(vmsCrash.vms());
+            batchContext.missingVotes.remove(vmsCrash.vms());
+        }
+
+        var affectedEventTypes = affectedDags.stream()
                 .flatMap(d -> d.inputEvents.values().stream())
                 .map(e -> e.name)
                 .distinct()
@@ -1153,13 +1180,13 @@ public final class Coordinator extends ModbHttpServer {
     }
 
     private void processBatchComplete(BatchComplete.Payload batchComplete) {
-        System.out.println("Coordinator processBatchComplete");
         // what if ACKs from VMSs take too long? or never arrive?
         // need to deal with intersecting batches? actually just continue emitting for higher throughput
         LOGGER.log(DEBUG,"Leader: Processing batch ("+ batchComplete.batch()+") complete from: "+ batchComplete.vms());
         BatchContext batchContext = this.batchContextMap.get( batchComplete.batch() );
         // only if it is not a duplicate vote
         batchContext.missingVotes.remove( batchComplete.vms() );
+        System.out.println(STR."Coordinator batch complete from \{batchComplete.vms()} and missingVotes=\{batchContext.missingVotes.size()}");
         if(batchContext.missingVotes.isEmpty()){
             LOGGER.log(INFO,"Leader: Received all missing votes of batch "+ batchContext.batchOffset + " with "+batchContext.numTIDsOverall+" transactions");
             this.updateBatchOffsetPendingCommit(batchContext);
@@ -1185,7 +1212,7 @@ public final class Coordinator extends ModbHttpServer {
                 this.updateBatchOffsetPendingCommit(nextBatchContext);
             }
 
-            System.out.println(STR."Coordinator will committ batch=\{batchContext.batchOffset}");
+            System.out.println(STR."Coordinator will commit batch=\{batchContext.batchOffset}");
 
             return;
         }
@@ -1201,7 +1228,19 @@ public final class Coordinator extends ModbHttpServer {
     // seal batch and send batch complete to all terminals...
     private void processNewBatchContext(BatchContext batchContext) {
         System.out.println("Coordinator processNewBatchContext");
+
+        // if there was a failure
         this.batchContextMap.put(batchContext.batchOffset, batchContext);
+        var batchOffset = batchContext.batchOffset;
+
+        if (batchesThatRequireFixing.contains(batchOffset))
+        {
+            System.out.println(STR."This batch context \{batchOffset} arrived late and requires fixing");
+            fixBatchContext(batchOffset);
+            batchesThatRequireFixing.remove(batchOffset);
+            return;
+        }
+
         // after storing batch context, send to vms workers
         for(var entry : batchContext.terminalVMSs) {
             this.vmsWorkerContainerMap.get(entry).queueMessage(
@@ -1259,7 +1298,6 @@ public final class Coordinator extends ModbHttpServer {
             } else {
                 consumerSetStr = this.serdesProxy.serializeConsumerSet(vmsConsumerSet);
                 LOGGER.log(INFO,"Leader: Consumer set built for "+vmsNode.identifier+": \n"+consumerSetStr);
-                System.out.println(STR."Leader: Consumer set built for \{vmsNode.identifier}");
             }
 
             if(!this.vmsWorkerContainerMap.containsKey(vmsNode.identifier)){

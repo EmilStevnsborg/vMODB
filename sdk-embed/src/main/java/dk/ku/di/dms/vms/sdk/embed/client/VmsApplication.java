@@ -90,7 +90,6 @@ public final class VmsApplication {
 
         // never truncating if recovering
         boolean isTruncating = isRecovering ? false : options.isTruncating();
-        System.out.println(STR."VmsApplication isRecovering=\{isRecovering} ? false : options.isTruncating()=\{options.isTruncating()}");
 
         if(!isCheckpointing){
             String checkpointingStr = System.getProperty("checkpointing");
@@ -130,6 +129,8 @@ public final class VmsApplication {
                 vmsMetadata.dataModel(),
                 vmsMetadata.inputEventSchema(),
                 vmsMetadata.outputEventSchema());
+
+        System.out.println(STR."VmsApplication \{vmsIdentifier.identifier} isRecovering=\{isRecovering}");
 
         IHttpHandler httpHandler = builder.build(transactionManager, tableToRepositoryMap::get);
 

@@ -211,7 +211,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
     @Override
     public void pauseHandler(boolean pause) {
-        System.out.println(STR."VmsTransactionScheduler Setting paused to \{pause}");
+//        System.out.println(STR."VmsTransactionScheduler Setting paused to \{pause}");
         synchronized (this) {
             if (pause) {
                 pause();
@@ -233,7 +233,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     @Override
     public void taskClearer(long failedTid)
     {
-        System.out.println(STR."Clearing tasks later than \{failedTid}");
+//        System.out.println(STR."Clearing tasks later than \{failedTid}");
         var lastTidToTidMapIterator = lastTidToTidMap.entrySet().iterator();
         while (lastTidToTidMapIterator.hasNext()) {
             var entry = lastTidToTidMapIterator.next();

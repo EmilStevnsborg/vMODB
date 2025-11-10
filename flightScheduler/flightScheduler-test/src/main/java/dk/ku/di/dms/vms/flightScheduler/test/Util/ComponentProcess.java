@@ -4,7 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-public class VmsProcess
+public class ComponentProcess
 {
     private static ProcessBuilder CreateProcessBuilder(String jarPath, boolean recoverEnabled, List<String> args)
     {
@@ -27,7 +27,7 @@ public class VmsProcess
         return processBuilder;
     }
 
-    public static void KillCurrentVmsProcess(String vmsIdentifier)
+    public static void Kill(String vmsIdentifier)
     {
         var vms = STR."flightScheduler-\{vmsIdentifier}";
         ProcessHandle.allProcesses()
@@ -39,6 +39,10 @@ public class VmsProcess
                 });
 
         System.out.println(STR."\{vmsIdentifier} killed");
+    }
+    public static ProcessBuilder VmsProcessBuilder(String vmsIdentifier, boolean recoverEnabled)
+    {
+        return ComponentProcess.VmsProcessBuilder(vmsIdentifier, recoverEnabled, List.of());
     }
     public static ProcessBuilder VmsProcessBuilder(String vmsIdentifier, boolean recoverEnabled, List<String> args)
     {
@@ -52,14 +56,39 @@ public class VmsProcess
     {
         for (var component : components)
         {
-            VmsProcess.KillCurrentVmsProcess(component);
+            ComponentProcess.Kill(component);
         }
     }
+    public static void KillVMSes()
+    {
+        List<String> components = List.of("customer", "booking", "flight", "payment");
+        KillComponents(components);
+    }
+
     public static void StartComponents(List<String> components) throws IOException
     {
         for (var component : components)
         {
-            VmsProcess.VmsProcessBuilder(component, false, List.of()).start();
+            ComponentProcess.VmsProcessBuilder(component, false, List.of()).start();
         }
+    }
+
+    public static void StartVms(String vms, boolean recoveryEnabled) throws IOException
+    {
+        ComponentProcess.VmsProcessBuilder(vms, recoveryEnabled, List.of()).start();
+    }
+    public static void StartVMSes() throws Exception
+    {
+        List<String> components = List.of("customer", "booking", "flight", "payment");
+        ComponentProcess.StartComponents(components);
+    }
+    public static void StartProxy(boolean recoverable, int batchTimeoutWindow, int batchMaxTransactions)
+            throws IOException
+    {
+        ComponentProcess.VmsProcessBuilder(
+                "proxy",
+                false,
+                List.of(String.valueOf(batchTimeoutWindow), String.valueOf(batchMaxTransactions))
+        ).start();
     }
 }

@@ -29,7 +29,7 @@ public class Transactions
         try {
             client.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (Exception e) {
-            System.err.println("Failed to place order");
+//            System.err.println("Failed to place order");
         }
     }
 
@@ -52,7 +52,7 @@ public class Transactions
         try {
             client.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (Exception e) {
-            System.err.println("Failed to pay booking");
+//            System.err.println("Failed to pay booking");
         }
     }
 

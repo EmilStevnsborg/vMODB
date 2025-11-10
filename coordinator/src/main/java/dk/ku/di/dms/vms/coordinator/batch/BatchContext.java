@@ -15,15 +15,13 @@ public final class BatchContext {
     public final long batchOffset;
 
     // set of terminal VMSs that has not voted yet
-    public final Set<String> missingVotes;
+    public Set<String> missingVotes;
 
-    public final Set<String> terminalVMSs;
+    public Set<String> terminalVMSs;
 
     public Map<String, Long> previousBatchPerVms;
 
     public Map<String,Integer> numberOfTIDsPerVms;
-
-    public long tidAborted;
 
     public volatile long numTIDsOverall;
 

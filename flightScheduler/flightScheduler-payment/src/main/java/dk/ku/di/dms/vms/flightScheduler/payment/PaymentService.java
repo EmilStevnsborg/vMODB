@@ -39,7 +39,6 @@ public class PaymentService
         paymentRepository.upsert(payment);
 
         var paymentSucceeded = new PaymentSucceeded(payBooking.booking_id);
-//        System.out.println(STR."return paymentSucceeded for bId=\{paymentSucceeded.booking_id}");
         return paymentSucceeded;
     }
 

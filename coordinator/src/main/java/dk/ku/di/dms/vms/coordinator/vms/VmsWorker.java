@@ -7,10 +7,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitAck;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitCommand;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitInfo;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchComplete;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.ConsumerSet;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.Presentation;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.RecoverEvents;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.Recovery;
+import dk.ku.di.dms.vms.modb.common.schema.network.control.*;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
@@ -33,6 +30,7 @@ import java.nio.channels.AsynchronousCloseException;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.CompletionHandler;
 import java.nio.channels.WritePendingException;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -270,7 +268,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     }
 
     private void connect() throws IOException, InterruptedException, ExecutionException {
-        System.out.println(STR."VmsWorker tries to connect to \{consumerVms.identifier}");
+        // System.out.println(STR."VmsWorker tries to connect to \{consumerVms.identifier}");
         this.channel = channelFactory.get();
         NetworkUtils.configure(this.channel, options.networkBufferSize());
         // if not active, maybe set tcp_nodelay to true?
@@ -282,13 +280,11 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         int waitTime = 1000;
         LOGGER.log(INFO, "Leader: Attempting connection to "+this.consumerVms.identifier);
         while(true) {
-            System.out.println(STR."VmsWorker Attempting connection to \{consumerVms.identifier} via initHandshakeProtocol");
             try {
                 this.connect();
                 LOGGER.log(INFO, "Leader: Connection established to "+this.consumerVms.identifier);
                 break;
             } catch (IOException | InterruptedException | ExecutionException e) {
-                System.out.println(STR."VmsWorker connect threw Exception");
                 LOGGER.log(ERROR, "Leader: Connection attempt to " + this.consumerVms.identifier + " failed. Retrying in "+waitTime/1000+" second(s)...");
                 try {
                     sleep(waitTime);
@@ -335,7 +331,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
     // write presentation
     private void sendLeaderPresentationToVms(ByteBuffer writeBuffer) {
-        System.out.println(STR."Sending leader presentation to \{consumerVms.identifier}");
         Presentation.writeServer(writeBuffer, this.me, true);
         writeBuffer.flip();
         this.acquireLock();
@@ -350,7 +345,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         } else {
             if (this.initSimpleConnection()) return;
         }
-        System.out.println(STR."consumer=\{consumerVms.identifier} connected");
+        // System.out.println(STR."consumer=\{consumerVms.identifier} connected");
         this.eventLoop();
         System.out.println(STR."RUN is over");
         LOGGER.log(INFO, "VmsWorker finished for consumer VMS: "+this.consumerVms);
@@ -402,6 +397,8 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         // exit this loop
         while (this.isRunning())
         {
+            if (this.state == DISCONNECTED) continue;
+
             try {
                 this.transactionEventQueue.drain(this.drained, this.options.networkBufferSize());
                 if(this.drained.isEmpty()){
@@ -468,15 +465,12 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private void sendMessage(Object message) {
         switch (message) {
             case BatchCommitCommand.Payload o -> {
-                System.out.println("\nVmsWorker.sendMessage.BatchCommitCommand\n");
                 this.sendBatchCommitCommand(o);
             }
             case BatchCommitInfo.Payload o -> {
-                System.out.println(STR."\nVmsWorker.sendMessage.BatchCommitInfo for \{consumerVms.identifier} payload \{o}");
                 this.sendBatchCommitInfo(o);
             }
             case TransactionAbort.Payload o -> {
-                System.out.println(STR."VmsWorker.sendMessage.TransactionAbort: \{message}");
                 this.sendTransactionAbort(o);
             }
             case Recovery.Payload o -> {
@@ -573,7 +567,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     }
 
     private void sendConsumerSet(String vmsConsumerSet) {
-        System.out.println(STR."VmsWorker sendConsumerSet to consumer=\{consumerVms.identifier}");
         // the first or new information
         if(this.state == VMS_PRESENTATION_PROCESSED) {
             this.state = CONSUMER_SET_READY_FOR_SENDING;
@@ -612,13 +605,13 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         @Override
         public void completed(Integer result, Integer startPos) {
             if(result == -1){
-                System.out.println(STR."VMS \{consumerVms.identifier} has disconnected");
+                System.out.println(STR."VMS \{consumerVms.identifier} has disconnected from coordinator");
                 LOGGER.log(WARNING, "Leader: " + consumerVms.identifier+" has disconnected!");
                 channel.close();
-
-                // safe disconnect
-                System.out.println("Safe disconnect");
                 state = State.DISCONNECTED;
+
+                var vmsCrash = VmsCrash.of(consumerVms.identifier);
+                coordinatorQueue.add(vmsCrash);
                 return;
             }
             if(startPos == 0){
@@ -664,14 +657,12 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                         // because only the aborted transaction will be rolled back
                     }
                     case BATCH_COMMIT_ACK -> {
-                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.BATCH_COMMIT_ACK");
                         LOGGER.log(DEBUG, "Leader: Batch commit ACK received from: " + consumerVms.identifier);
                         BatchCommitAck.Payload response = BatchCommitAck.read(readBuffer);
                         // logger.config("Just logging it, since we don't necessarily need to wait for that. "+response);
                         coordinatorQueue.add(response);
                     }
                     case TX_ABORT -> {
-                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.TX_ABORT");
                         TransactionAbortInfo.Payload response = TransactionAbortInfo.read(readBuffer);
                         coordinatorQueue.add(response);
                     }
@@ -777,6 +768,10 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             try {
                 // get new buffer and send new batch
                 writeBuffer = this.retrieveByteBuffer();
+                for (var event : drained) {
+                    var eventName = new String(event.event(), StandardCharsets.UTF_8);
+                    System.out.println(STR."coordinator sends event \{eventName} of tid=\{event.tid()} and bid=\{event.batch()} to \{consumerVms.identifier}");
+                }
                 remaining = BatchUtils.assembleBatchPayload(remaining, this.drained, writeBuffer);
 
                 LOGGER.log(DEBUG, "Leader: Submitting ["+(count - remaining)+"] events to "+consumerVms.identifier);

@@ -105,7 +105,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                                   VmsEventHandler.VmsHandlerOptions options,
                                   IVmsSerdesProxy serdesProxy) {
 
-        System.out.println(STR."ConsumerVmsWorker has been built for \{consumerVms.identifier}");
         return new ConsumerVmsWorker(me, consumerVms, vmsQueue,
                 channelSupplier, leaderQueueRecovery, options, serdesProxy);
     }
@@ -164,6 +163,8 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     private void eventLoopNoLogging() {
         while (this.isRunning())
         {
+            if (this.state == DISCONNECTED) continue;
+
             int pollTimeout = 1;
             try {
                 transactionEventQueue.drain(this.drained::add, this.options.networkBufferSize());

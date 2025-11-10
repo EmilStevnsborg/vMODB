@@ -22,23 +22,11 @@ public interface ILoggingHandler {
     default void cutLog(long failedTid) {}
     default int countEventsInBatch(long batch) { return 0; }
     default List<TransactionEvent.PayloadRaw> getAffectedEvents(long failedTid) { return List.of(); }
+    default List<TransactionEvent.PayloadRaw> getUncommittedEvents(long batch) { return List.of(); }
     default List<TransactionEvent.PayloadRaw> getUncommittedEvents(List<String> eventTypes) { return List.of(); }
     default Map<String, long[]> getLatestAppearanceOfEventTypes(List<String> eventTypes) throws IOException { return Map.of(); }
 
-
-
-
-    // OLD STYLE
-    default void log(ByteBuffer byteBuffer) throws IOException { }
     default SegmentMetadata loadSegment(ByteBuffer byteBuffer, long filePosition) throws IOException { return null; }
-    default TransactionEvent.Payload removeFailedEvent(ByteBuffer placeHolderBuffer, long failedTid, long batch) throws IOException { return null; }
-    default void fixPrecedence(ByteBuffer placeHolderBuffer,
-                               long failedTid, long batch,
-                               Map<String, Integer> precedenceMapOfFailedEvent,
-                               Function<String, Map<String, Integer>> deserializer,
-                               Function<Map<String, Integer>, String> serializer) throws IOException { }
-    default int cutLog(ByteBuffer placeHolderBuffer, long failedTid, long batch) throws IOException { return -1;}
-    default int readBatch(ByteBuffer byteBuffer, long batch) throws IOException { return 0; }
 
     default void force() { }
 

@@ -41,12 +41,9 @@ public class CustomerService
     @Transactional(type=RW)
     public void customerPaid(CustomerPaid customerPaid)
     {
-        System.out.println(STR."customerPaid for cId=\{customerPaid.customer_id}");
-
         Customer customer = this.customerRepository.lookupByKey(customerPaid.customer_id);
         customer.deduct(customerPaid.price);
         this.customerRepository.update(customer);
-        System.out.println(STR."cId=\{customer.customer_id} has customerPaid");
     }
 
     // part of ReimburseBooking

@@ -427,7 +427,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
     private static final boolean GARBAGE_COLLECTION = false;
 
     public void checkpoint(long maxTid){
-        System.out.println(STR."PrimaryIndex checkpoint maxTid \{maxTid}");
+        // System.out.println(STR."PrimaryIndex checkpoint maxTid \{maxTid}");
 
         if(this.keysToFlush.isEmpty() || this.updatesPerKeyMap.isEmpty()) return;
         int numRecords = 0;
@@ -435,7 +435,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         this.rawIndex.lock();
         while(it.hasNext()){
             IKey key = it.next();
-//            System.out.println("PrimaryIndex checkpoint key: "+key);
+            // System.out.println("PrimaryIndex checkpoint key: "+key);
             OperationSetOfKey operationSetOfKey = this.updatesPerKeyMap.get(key); // updates by transactions to the key
             if(operationSetOfKey == null){
                 this.rawIndex.unlock();
@@ -469,7 +469,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
 
     public void restoreStableState(long failedTid)
     {
-        System.out.println("PrimaryIndex restoring stable state");
+//        System.out.println("PrimaryIndex restoring stable state");
         if (this.updatesPerKeyMap.isEmpty()) return;
 
         // removing latest changes

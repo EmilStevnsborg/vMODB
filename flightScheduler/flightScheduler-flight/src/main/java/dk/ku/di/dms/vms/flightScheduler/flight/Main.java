@@ -36,7 +36,7 @@ public final class Main {
                 FLIGHT_VMS_PORT, new String[]{
                         "dk.ku.di.dms.vms.flightScheduler.flight",
                         "dk.ku.di.dms.vms.flightScheduler.common"
-                });
+                }, recoverable);
         return VmsApplication.build(options, (x,y) ->
                 new FlightHttpHandler(x, (IFlightRepository) y.apply("flight_seats"))); // apply on y.apply({VmsTable Name})
     }

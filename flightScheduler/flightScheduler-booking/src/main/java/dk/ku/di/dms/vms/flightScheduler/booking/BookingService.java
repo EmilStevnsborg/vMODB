@@ -45,13 +45,11 @@ public class BookingService
     @Outbound(CUSTOMER_PAID)
     public CustomerPaid bookingHasBeenPaid(PaymentSucceeded paymentSucceeded)
     {
-        System.out.println(STR."paymentSucceeded for bId=\{paymentSucceeded.booking_id}");
         var booking = bookingRepository.lookupByKey(paymentSucceeded.booking_id);
         booking.bookingHasBeenPaid();
         bookingRepository.update(booking);
 
         var customerPaid = new CustomerPaid(booking.customer_id, booking.price);
-        System.out.println(STR."return customerPaid for cId=\{customerPaid.customer_id}");
         return customerPaid;
     }
 
