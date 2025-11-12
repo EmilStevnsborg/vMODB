@@ -37,11 +37,11 @@ public final class VmsTransactionTaskBuilder {
 
     public final class VmsTransactionTask implements Runnable {
 
-        private final long tid;
+        public final long tid;
 
         private final long lastTid;
 
-        private final long batch;
+        public final long batch;
 
         // the information necessary to run the method
         private final VmsTransactionSignature signature;

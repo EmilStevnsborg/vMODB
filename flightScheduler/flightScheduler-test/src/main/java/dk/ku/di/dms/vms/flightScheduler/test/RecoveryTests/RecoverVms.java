@@ -49,19 +49,27 @@ public class RecoverVms
 
         var bookings = VmsEndpoints.GetBookings(client);
         System.out.println(STR."There are \{bookings.size()} registered bookings");
+        System.console().readLine();
 
         // 3rd batch (abort flight orders)
         for (var i = 20; i < 25; i++)
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
 
+        System.out.println(STR."Sending order_flights with TIDs of [21-26)");
         System.console().readLine();
+
         for (var i = 0; i < 4; i++)
             Transactions.PayBooking(client, bookings.get(i).booking_id, "VISA");
 
+        System.out.println(STR."Sending pay_bookings with TIDs of [26-30)");
+        System.console().readLine();
+
         // wait for flight orders to complete
         ComponentProcess.Kill("flight");
-        System.out.println("Submitting rest of batch 3");
+
         Transactions.PayBooking(client, bookings.get(4).booking_id, "VISA"); // finish batch
+
+        System.out.println(STR."Sending pay_booking with TID of 30");
         System.console().readLine();
 
         // 4th batch
@@ -74,6 +82,7 @@ public class RecoverVms
         System.console().readLine();
 
         ComponentProcess.StartVms("flight", true);
+        System.out.println("Flight is back online");
 
         // wait for VMS to recover
         System.console().readLine();
@@ -89,20 +98,21 @@ public class RecoverVms
         var unpaidBookings = updatedBookings.stream().filter(b -> b.paid == 1).toList();
 
         var updatedFlightSeats = VmsEndpoints.GetFlightSeats(client, 0);
-        var numOccupiedFlightSeats = updatedFlightSeats.stream().filter(fs -> fs.occupied == 1).count();
+        var occupiedFlightSeats = updatedFlightSeats.stream().filter(fs -> fs.occupied == 1).toList();
 
-        var success = numOccupiedFlightSeats == 30 && unpaidBookings.size() == 15;
-        if (numOccupiedFlightSeats != 30)
+        var success = unpaidBookings.size() == 15;
+        if (unpaidBookings.size() != 15)
         {
-            System.out.println(STR."FAILURE (RecoverVms): numOccupiedFlightSeats=\{numOccupiedFlightSeats} != 30");
+            System.out.println(STR."FAILURE (RecoverVms): unpaidBookings=\{unpaidBookings.size()} != 15");
         }
-        else if (unpaidBookings.size() != 15)
+        else if (occupiedFlightSeats.size() != 30)
         {
-            System.out.println(STR."FAILURE (RecoverVms): numOccupiedFlightSeats=\{numOccupiedFlightSeats} != 30");
+            System.out.println(STR."FAILURE (RecoverVms): occupiedFlightSeats=\{occupiedFlightSeats.size()} != 30");
         }
         else
         {
-            System.out.println(STR."SUCCESS (RecoverVms)");
+            System.out.println(STR."SUCCESS (RecoverVms): unpaidBookings=\{unpaidBookings.size()} == 15, " +
+                               STR."occupiedFlightSeats=\{occupiedFlightSeats.size()} == 30");
         }
 
         return success;

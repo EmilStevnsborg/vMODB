@@ -46,6 +46,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import static dk.ku.di.dms.vms.modb.common.schema.network.Constants.*;
 import static java.lang.System.Logger.Level.*;
@@ -144,7 +145,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
     private boolean abortingTransaction;
     private Consumer<Boolean> pauseHandler;
-    private Consumer<Long> taskClearer;
+    private Function<Long, Long[]> taskClearer;
     private BiConsumer<Long, Long> recoveryHandler;
 
     private ILoggingHandler loggingHandler;
@@ -317,25 +318,29 @@ public final class VmsEventHandler extends ModbHttpServer {
         this.pauseHandler = pauseHandler;
     }
 
-    public void AddSchedulerTaskClearer(Consumer<Long> taskClearer){
+    public void AddSchedulerTaskClearer(Function<Long, Long[]> taskClearer){
         this.taskClearer = taskClearer;
     }
     public void AddSchedulerRecoveryHandler(BiConsumer<Long, Long> recoveryHandler){
         this.recoveryHandler = recoveryHandler;
     }
-    private void fixTrackingBatch(long failedTidBatch, int eventsInBatchAfterCut)
+    private void fixTrackingBatch(long batch, long numberTIDsExecuted, long maxTidExecuted)
     {
         var trackedBatchKeys = trackingBatchMap.keySet();
         for(var trackedBatchKey : trackedBatchKeys) {
-            if (trackedBatchKey < failedTidBatch) continue;
-            if (trackedBatchKey > failedTidBatch) {
+            if (trackedBatchKey < batch) continue;
+            if (trackedBatchKey > batch) {
                 trackingBatchMap.put(trackedBatchKey, new BatchMetadata());
                 continue;
             }
 
             // trackedBatchKey == failedTidBatch
             var failedTidBatchMetadata = trackingBatchMap.get(trackedBatchKey);
-            failedTidBatchMetadata.numberTIDsExecuted = eventsInBatchAfterCut;
+
+            // set numTIDsExecuted based executed tasks in scheduler
+            failedTidBatchMetadata.numberTIDsExecuted = (int) numberTIDsExecuted;
+            failedTidBatchMetadata.maxTidExecuted = maxTidExecuted;
+
         }
     }
 
@@ -382,7 +387,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             });
 
             // clear all tasks later than the latest committed
-            taskClearer.accept(maxTid+1);
+            taskClearer.apply(maxTid+1);
 
             loggingHandler.cutLog(maxTid+1);
             restoreStableState(maxTid+1);
@@ -416,31 +421,26 @@ public final class VmsEventHandler extends ModbHttpServer {
     // for affected vms
     private void processAbort(TransactionAbort.Payload transactionAbort)
     {
-        abortingTransaction = true;
-
         // pause the transactionScheduler safely
         pauseHandler.accept(true);
 
-        // cut the log
+        // cut the output log
         loggingHandler.cutLog(transactionAbort.tid());
-
-        var eventsInBatchAfterCut = loggingHandler.countEventsInBatch(transactionAbort.batch());
 
         // restore stable state
         restoreStableState(transactionAbort.tid());
 
-        // update batch metadata
-        fixTrackingBatch(transactionAbort.tid(), eventsInBatchAfterCut);
-
         try {
-            taskClearer.accept(transactionAbort.tid());
+            var metadata = taskClearer.apply(transactionAbort.tid());
+            var numTIDsExecuted = metadata[0];
+            var maxTidExecuted = metadata[1];
+            fixTrackingBatch(transactionAbort.batch(), numTIDsExecuted, maxTidExecuted);
         } catch (Exception e) {
             e.printStackTrace();
         }
 
         // resume the transactionScheduler
         pauseHandler.accept(false);
-        abortingTransaction = false;
     }
 
     // for vms that failed
@@ -467,11 +467,11 @@ public final class VmsEventHandler extends ModbHttpServer {
         // restore stable state
         restoreStableState(abortMessage.tid());
 
-        // update batch metadata
-        fixTrackingBatch(abortMessage.batch(), eventsInBatchAfterCut);
-
         try {
-            taskClearer.accept(abortMessage.tid());
+            var metadata = taskClearer.apply(abortMessage.tid());
+            var numTIDsExecuted = metadata[0];
+            var maxTidExecuted = metadata[1];
+            fixTrackingBatch(abortMessage.batch(), numTIDsExecuted, maxTidExecuted);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -542,6 +542,8 @@ public final class VmsEventHandler extends ModbHttpServer {
                     if(toMod.maxTidExecuted < outputEvent.tid()){
                         toMod.maxTidExecuted = outputEvent.tid();
                     }
+//                    System.out.println(STR."\{me.identifier} processed tid \{outputEvent.tid()} " +
+//                                       STR."of batch \{outputEvent.batch()} now with \{toMod.numberTIDsExecuted} numberTIDsExecuted");
                     return toMod;
         });
     }
@@ -1334,27 +1336,34 @@ public final class VmsEventHandler extends ModbHttpServer {
             }
         }
 
-        private void processNewBatchInfo(BatchCommitInfo.Payload batchCommitInfo){
-//            System.out.println(STR."VmsEventHandler.processNewBatchInfo \{batchCommitInfo}");
+        private void processNewBatchInfo(BatchCommitInfo.Payload batchCommitInfo)
+        {
             BatchContext batchContext = BatchContext.build(batchCommitInfo);
-            batchContextMap.put(batchCommitInfo.batch(), batchContext);
-            // if it has been completed but not moved to status, then should send
-            if(trackingBatchMap.containsKey(batchCommitInfo.batch())
-                    && trackingBatchMap.get(batchCommitInfo.batch()).numberTIDsExecuted == batchCommitInfo.numberOfTIDsBatch())
-            {
+            var batch = batchCommitInfo.batch();
+            batchContextMap.put(batch, batchContext);
 
+            // if it has been completed but not moved to status, then should send
+            if(trackingBatchMap.containsKey(batch))
+            {
+                var trackedBatch = trackingBatchMap.get(batchCommitInfo.batch());
+                System.out.println(STR."\{me.identifier} has processed \{trackedBatch.numberTIDsExecuted} for batch \{batch}");
+
+                if (trackedBatch.numberTIDsExecuted != batchCommitInfo.numberOfTIDsBatch())
+                    return;
 
                 LOGGER.log(INFO,me.identifier+": Requesting leader worker to send batch ("+batchCommitInfo.batch()+") complete (LATE)");
                 leaderWorker.queueMessage(BatchComplete.of(batchCommitInfo.batch(), me.identifier));
+                return;
             }
+
+            System.out.println(STR."\{me.identifier} has not tracked any events for batch \{batch}");
         }
 
         /**
          * Context of execution of this method:
          */
         private void processNewBatchCommand(BatchCommitCommand.Payload batchCommitCommand){
-            System.out.println(STR."Vms will commit batch=\{batchCommitCommand.batch()} " +
-                               STR."and checkpoint with maxTid=\{trackingBatchMap.get(batchCommitCommand.batch()).maxTidExecuted}");
+            System.out.println(STR."Vms \{me.identifier} will commit batch=\{batchCommitCommand.batch()} ");
 
             // committing output events sent from the VMS
 

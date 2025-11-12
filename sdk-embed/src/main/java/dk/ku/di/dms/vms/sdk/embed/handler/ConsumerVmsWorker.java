@@ -294,8 +294,12 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
             try {
                 writeBuffer = this.retrieveByteBuffer();
                 remaining = BatchUtils.assembleBatchPayload(remaining, this.drained, writeBuffer);
+
+//                for (var event : this.drained) {
+//                    System.out.println(STR."\{me.identifier} sends tid \{event.tid()} to \{consumerVms.identifier}");
+//                }
+
                 writeBuffer.flip();
-//                System.out.println(STR."Buffer has pos and limit of \{writeBuffer.position()} and \{writeBuffer.limit()}");
                 count = remaining;
                 // maximize useful work
                 while(!this.tryAcquireLock()){

@@ -163,22 +163,17 @@ public final class TransactionWorker extends StoppableRunnable {
                     // process precedence from previous worker in the ring
                     // we could do it in advance current batch, but can lead to higher wait in vms
                     this.processTransactionInput(data);
-                    this.processPendingInput();
                 }
             } while (this.tid <= lastTidBatch && System.currentTimeMillis() < end);
 
             // no tid was processed in this batch
             if(this.tid == this.startingTidBatch) continue;
 
-            System.out.println(STR."this.tid=\{this.tid} <= lastTidBatch=\{lastTidBatch}");
-
             do {
                 this.processPendingInput();
             } while(!this.advanceCurrentBatch() && this.isRunning());
 
             this.tid = this.getTidNextBatch();
-
-            System.out.println(STR."this.tid=\{this.tid} next batch");
 
             this.startingTidBatch = this.tid;
         }
@@ -224,6 +219,7 @@ public final class TransactionWorker extends StoppableRunnable {
                 vms_.batch = this.batchContext.batchOffset;
                 vms_.numberOfTIDsCurrentBatch = 0;
                 pendingVMSs.add(vms_.identifier);
+                // TODO
                 // can't assign last tid here since it is unknown
                 // whether the previous worker has assigned a tid
                 // for this VMS. must wait until precedence set
@@ -233,11 +229,6 @@ public final class TransactionWorker extends StoppableRunnable {
             vms_.numberOfTIDsCurrentBatch++;
         }
 
-//        System.out.println(STR."Adding terminal nodes in \{transactionDAG.name} to batchContext terminal nodes");
-//        for (var node : transactionDAG.terminalNodes) {
-//            System.out.println(STR."node: \{node}");
-//        }
-
         this.batchContext.terminalVMSs.addAll( transactionDAG.terminalNodes );
 
         if(!pendingVMSs.isEmpty()) {
@@ -245,25 +236,25 @@ public final class TransactionWorker extends StoppableRunnable {
             this.generatePendingTransactionInput(pendingVMSs, previousTidPerVms, transactionInput);
         } else {
             String precedenceMapStr = this.serdesProxy.serializeMap(previousTidPerVms);
-//            System.out.println(STR."Assigning tid=\{this.tid}");
+            // System.out.println(STR."Assigning tid=\{this.tid}");
             TransactionEvent.PayloadRaw txEvent = TransactionEvent.of(this.tid, this.batchContext.batchOffset,
                     transactionInput.event.name, transactionInput.event.payload, precedenceMapStr);
-            LOGGER.log(DEBUG,"Leader: Transaction worker "+id+" adding event "+event.name+" to "+inputVms.identifier+" worker:\n"+txEvent+"\n"+previousTidPerVms);
 
-            System.out.println(STR."Queue transaction event tid=\{txEvent.tid()} of batch=\{txEvent.batch()}");
             this.vmsWorkerContainerMap.get(inputVms.identifier).queueTransactionEvent(txEvent);
         }
-//        System.out.println(STR."Increasing tid from \{this.tid} to \{this.tid+1}");
         this.tid++;
     }
 
     private void generatePendingTransactionInput(Set<String> pendingVMSs, Map<String, Long> previousTidPerVms, TransactionInput transactionInput)
     {
+        System.out.println(STR."generatePendingTransactionInput for \{transactionInput.name} with tid=\{this.tid}");
         // this has to be emitted when batch info from previous worker in the ring arrives
         long lastBatchOffset = this.batchContext.batchOffset - this.numWorkers;
         PendingTransactionInput pendingInput = new PendingTransactionInput(
                 this.tid, this.batchContext.batchOffset, transactionInput, pendingVMSs, previousTidPerVms);
         this.pendingInputMap.computeIfAbsent(lastBatchOffset, (ignored) -> new ArrayList<>()).add(pendingInput);
+
+        System.out.println(STR."pending input tid \{pendingInput.tid}");
     }
 
     public static class PrecedenceInfo {
@@ -295,6 +286,7 @@ public final class TransactionWorker extends StoppableRunnable {
     }
 
     private void processPendingInput() {
+        // System.out.println("processPendingInput");
         // comes in order always
         Map<String, PrecedenceInfo> precedenceMap = this.precedenceMapInputQueue.peek();
         if(precedenceMap == null){ return; }
@@ -328,7 +320,6 @@ public final class TransactionWorker extends StoppableRunnable {
                     pendingInput.input.event.name, pendingInput.input.event.payload, precedenceMapStr);
             LOGGER.log(DEBUG,"Leader: Transaction worker "+id+" adding event "+event.name+" to "+inputVms.identifier+" worker:\n"+txEvent+"\n"+pendingInput.previousTidPerVms);
 
-            System.out.println(STR."Queue transaction event tid=\{txEvent.tid()} of batch=\{txEvent.batch()}");
             this.vmsWorkerContainerMap.get(inputVms.identifier).queueTransactionEvent(txEvent);
         }
 

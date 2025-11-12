@@ -33,7 +33,7 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
 {
     protected final FileChannel fileChannel;
     private IVmsSerdesProxy serdesProxy;
-    private final ConcurrentHashMap<Long, TransactionEvent.PayloadRaw> eventsSent = new ConcurrentHashMap<>();
+    private final HashMap<Long, TransactionEvent.PayloadRaw> eventsSent = new HashMap<>();
     private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final Deque<ByteBuffer> writeBufferPool;
     private int writeBufferSize;
@@ -128,7 +128,6 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
     {
         rwLock.readLock().lock();
         eventsSent.values().forEach(e -> {
-            System.out.println(STR."Uncommitted tid \{e.tid()} and batch \{e.batch()}");
         });
         try
         {
@@ -318,6 +317,7 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
 
                 var newTid = precedenceMapOfFailedEvent.get(precedence);
                 eventPrecedenceMap.put(precedence, newTid);
+                System.out.println(STR."Setting precedence \{precedence} for \{eventReadable.tid()} to \{newTid}");
                 precedenceToUpdate.remove(precedence);
                 updated = true;
             }
@@ -338,33 +338,36 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
     }
 
     @Override
-    public void abort(List<Long> failedTIDs) {
-        // quick existence check under read-lock for better concurrency
+    public List<TransactionEvent.PayloadRaw> abort(List<Long> failedTIDs) {
         rwLock.writeLock().lock();
+        List<TransactionEvent.PayloadRaw> abortedEvents = new ArrayList<>();
 
-        try
-        {
-            for (long failedTid : failedTIDs)
-            {
+        try {
+            for (long failedTid : failedTIDs) {
                 TransactionEvent.PayloadRaw failedEvent = findAndRemoveFailedEvent(failedTid);
                 if (failedEvent == null) {
                     System.out.println(STR."Can't find failed event in batch");
                     continue;
                 }
-                var eventName = new String(failedEvent.event(), StandardCharsets.UTF_8);
+
+                String eventName = new String(failedEvent.event(), StandardCharsets.UTF_8);
                 System.out.println(STR."Removing \{eventName} with tid \{failedEvent.tid()} of batch \{failedEvent.batch()}");
 
                 System.out.println("Fixing precedence");
                 fixPrecedence(failedEvent);
+
+                abortedEvents.add(failedEvent);
             }
         } catch (Exception e) {
             e.printStackTrace();
-        }finally {
+        } finally {
             rwLock.writeLock().unlock();
         }
+
+        return abortedEvents;
     }
     @Override
-    public void abort(long failedTid) {
+    public TransactionEvent.PayloadRaw abort(long failedTid) {
         // quick existence check under read-lock for better concurrency
         rwLock.writeLock().lock();
         try {
@@ -372,15 +375,16 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
             TransactionEvent.PayloadRaw failedEvent = findAndRemoveFailedEvent(failedTid);
             if (failedEvent == null) {
                 System.out.println(STR."Can't find failed event in batch");
-                return;
+                return null;
             }
             var eventName = new String(failedEvent.event(), StandardCharsets.UTF_8);
             System.out.println(STR."Removing \{eventName} with tid \{failedEvent.tid()} of batch \{failedEvent.batch()}");
 
-            System.out.println("Fixing precedence");
             fixPrecedence(failedEvent);
+            return failedEvent;
         } catch (Exception e) {
             e.printStackTrace();
+            return null;
         }finally {
             rwLock.writeLock().unlock();
         }

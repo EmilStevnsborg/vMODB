@@ -231,9 +231,9 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     }
 
     @Override
-    public void taskClearer(long failedTid)
+    public Long[] taskClearer(long failedTid)
     {
-//        System.out.println(STR."Clearing tasks later than \{failedTid}");
+        long numTIDsExecuted = 0;
         var lastTidToTidMapIterator = lastTidToTidMap.entrySet().iterator();
         while (lastTidToTidMapIterator.hasNext()) {
             var entry = lastTidToTidMapIterator.next();
@@ -244,10 +244,8 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                 lastTidToTidMapIterator.remove();
             }
             if (entry.getValue() == failedTid) {
-//                System.out.println(STR."Removing last TID=\{entry.getKey()} because entry.getValue()=\{entry.getValue()}=failedTid");
                 lastTidToTidMapIterator.remove();
                 lastTidFinished.set(entry.getKey());
-//                System.out.println(STR."lastTidFinished set to \{entry.getKey()}");
                 mustWaitForInputEvent = true;
             }
         }
@@ -257,17 +255,28 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             lastTidFinished.set(0);
         }
 
+        var maxTidExecuted = lastTidFinished.get();
+
         var transactionTaskMapIterator = transactionTaskMap.entrySet().iterator();
+        var failedTask = transactionTaskMap.get(failedTid);
         while (transactionTaskMapIterator.hasNext()) {
             var entry = transactionTaskMapIterator.next();
             if (entry == null) break;
 
             var taskTid = entry.getKey();
+            var taskBatchId = entry.getValue().batch;
             if (taskTid >= failedTid) {
 //                System.out.println(STR."Removing task for tid=\{taskTid}");
                 transactionTaskMapIterator.remove();
             }
+
+            // count the events
+            if (failedTask == null || taskBatchId == failedTask.batch) continue;
+            if (taskTid < failedTid) {
+                numTIDsExecuted += 1;
+            }
         }
+        return new Long[] {numTIDsExecuted, maxTidExecuted};
     }
 
     private void executeReadyTasks()
@@ -281,7 +290,6 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         }
         VmsTransactionTask task = this.transactionTaskMap.get( nextTid );
         if (task == null) {
-            System.out.println(STR."Task is null for tid=\{nextTid}");
             return;
         }
         while(true) {
@@ -393,10 +401,9 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     }
 
     private void processNewEvent(InboundEvent inboundEvent) {
-//        System.out.println(STR."scheduler inboundEvent.tid=\{inboundEvent.tid()} " +
-//                           STR."transactionTaskMap.containsKey(inboundEvent.tid())=\{this.transactionTaskMap.containsKey(inboundEvent.tid())} " +
-//                           STR."inboundEvent.lastTid()=\{inboundEvent.lastTid()}, " +
-//                           STR."current lastTidFinished=\{lastTidFinished}");
+//        System.out.println(STR."inboundEvent \{inboundEvent.tid()} in \{vmsIdentifier} " +
+//                           STR."comes after \{inboundEvent.lastTid()}, " +
+//                           STR."with current being lastTidFinished=\{lastTidFinished}");
         if (this.transactionTaskMap.containsKey(inboundEvent.tid())) {
             LOGGER.log(WARNING, this.vmsIdentifier+": Event TID has already been processed! Queue '" + inboundEvent.event() + "' Batch: " + inboundEvent.batch() + " TID: " + inboundEvent.tid());
             return;

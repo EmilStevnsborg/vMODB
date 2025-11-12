@@ -770,7 +770,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 writeBuffer = this.retrieveByteBuffer();
                 for (var event : drained) {
                     var eventName = new String(event.event(), StandardCharsets.UTF_8);
-                    System.out.println(STR."coordinator sends event \{eventName} of tid=\{event.tid()} and bid=\{event.batch()} to \{consumerVms.identifier}");
+//                    System.out.println(STR."coordinator sends event \{eventName} of tid=\{event.tid()} and bid=\{event.batch()} to \{consumerVms.identifier}");
                 }
                 remaining = BatchUtils.assembleBatchPayload(remaining, this.drained, writeBuffer);
 
