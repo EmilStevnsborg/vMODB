@@ -142,7 +142,13 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
         @Override
         public void success(ExecutionModeEnum executionMode, OutboundEventResult outboundEventResult) {
+            // System.out.println(STR."Scheduler: success on task for \{outboundEventResult.tid()} in \{vmsIdentifier}");
             VmsTransactionTask task = transactionTaskMap.get(outboundEventResult.tid());
+            if (task == null) {
+                // task has been cleared
+                return;
+            }
+
             task.signalFinished();
             updateLastFinishedTid(outboundEventResult.tid());
             this.eventHandler.accept(outboundEventResult);
@@ -156,7 +162,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             // in this case, the error must be informed to the event handler, so the event handler
             // can forward the error to downstream VMSs. if input VMS, easier to handle, just send a noop to them
 
-            System.out.println("VmsTransactionScheduler error during execution");
+            System.out.println(STR."Scheduler: error during execution for \{tid} in \{vmsIdentifier}");
 
             // remove from map to avoid reescheduling? no, it will lead to null pointer in scheduler loop
             VmsTransactionTask task = transactionTaskMap.get(tid);
@@ -211,10 +217,29 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
     @Override
     public void pauseHandler(boolean pause) {
-//        System.out.println(STR."VmsTransactionScheduler Setting paused to \{pause}");
         synchronized (this) {
             if (pause) {
                 pause();
+
+                long RUNNING = 2;
+                var runningTasks = transactionTaskMap.values().stream().filter(task -> task.status() == RUNNING).toList();
+                // System.out.println(STR."TASKS: \{vmsIdentifier} has \{runningTasks.size()} running tasks");
+                boolean runningTasksExist;
+                do {
+                    runningTasksExist = transactionTaskMap.values()
+                            .stream()
+                            .anyMatch(task -> task.status() == RUNNING);
+                    if (runningTasksExist) {
+                        try {
+                            this.wait(50); // wait a bit and re-check
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                    }
+                } while (runningTasksExist);
+                // System.out.println(STR."TASKS: \{vmsIdentifier} has NO running tasks");
+
             } else {
                 resume();
                 notifyAll();
@@ -230,34 +255,26 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         lastTidFinished.set(lastCommitTid);
     }
 
-    @Override
     public Long[] taskClearer(long failedTid)
     {
+        System.out.println(STR."\{vmsIdentifier} clearing tasks at and later than \{failedTid}");
         long numTIDsExecuted = 0;
         var lastTidToTidMapIterator = lastTidToTidMap.entrySet().iterator();
-        while (lastTidToTidMapIterator.hasNext()) {
+        while (lastTidToTidMapIterator.hasNext())
+        {
             var entry = lastTidToTidMapIterator.next();
             if (entry == null) break;
 
+            // transactions after failedTid
             if (entry.getKey() >= failedTid) {
-//                System.out.println(STR."Removing last TID=\{entry.getKey()}");
+                lastTidToTidMapIterator.remove();
+            } else if (entry.getValue() >= failedTid) {
                 lastTidToTidMapIterator.remove();
             }
-            if (entry.getValue() == failedTid) {
-                lastTidToTidMapIterator.remove();
-                lastTidFinished.set(entry.getKey());
-                mustWaitForInputEvent = true;
-            }
         }
-
-        if (failedTid - 1 == 0)
-        {
-            lastTidFinished.set(0);
-        }
-
-        var maxTidExecuted = lastTidFinished.get();
-
         var transactionTaskMapIterator = transactionTaskMap.entrySet().iterator();
+
+        // the task of the supposed failed transaction. May be null if aborted during recovery
         var failedTask = transactionTaskMap.get(failedTid);
         while (transactionTaskMapIterator.hasNext()) {
             var entry = transactionTaskMapIterator.next();
@@ -276,6 +293,17 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                 numTIDsExecuted += 1;
             }
         }
+
+        var floorEntry = transactionTaskMap.entrySet()
+                .stream()
+                .filter(e -> e.getValue().isFinished() && e.getKey() < failedTid)
+                .map(e -> e.getKey())
+                .max(Long::compare)
+                .orElse(0L);
+        lastTidFinished.set(floorEntry);
+        var maxTidExecuted = lastTidFinished.get();
+
+        System.out.println(STR."\{vmsIdentifier} sets lastTidFinished to \{lastTidFinished}");
         return new Long[] {numTIDsExecuted, maxTidExecuted};
     }
 
@@ -292,16 +320,20 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         if (task == null) {
             return;
         }
+        // System.out.println(STR."next task of lastTidFinished=\{lastTidFinished} in \{vmsIdentifier} of tid=\{task.tid}");
         while(true) {
             if(task.isScheduled()){
+//                System.out.println(STR."task \{task} with lastTidFinished=\{lastTidFinished} in \{vmsIdentifier} isScheduled");
                 return;
             }
             // must check because partitioned task interleave and may finish before a lower TID
             if(task.isFinished()){
+//                System.out.println(STR."task \{task} with lastTidFinished=\{lastTidFinished} in \{vmsIdentifier} isFinished");
                 this.updateLastFinishedTid(nextTid);
                 return;
             }
             if (task.isFailed()) {
+//                System.out.println(STR."task \{task} with lastTidFinished=\{lastTidFinished} in \{vmsIdentifier} isFailed");
                 return;
             }
 //            System.out.println(STR."Execute task tid=\{task.tid()}");
@@ -401,9 +433,10 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     }
 
     private void processNewEvent(InboundEvent inboundEvent) {
-//        System.out.println(STR."inboundEvent \{inboundEvent.tid()} in \{vmsIdentifier} " +
-//                           STR."comes after \{inboundEvent.lastTid()}, " +
-//                           STR."with current being lastTidFinished=\{lastTidFinished}");
+        System.out.println(STR."\{vmsIdentifier} scheduler " +
+                           STR."inboundEvent \{inboundEvent.tid()} in \{vmsIdentifier} " +
+                           STR."comes after \{inboundEvent.lastTid()}, " +
+                           STR."with current being lastTidFinished=\{lastTidFinished}");
         if (this.transactionTaskMap.containsKey(inboundEvent.tid())) {
             LOGGER.log(WARNING, this.vmsIdentifier+": Event TID has already been processed! Queue '" + inboundEvent.event() + "' Batch: " + inboundEvent.batch() + " TID: " + inboundEvent.tid());
             return;

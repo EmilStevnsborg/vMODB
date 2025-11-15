@@ -433,11 +433,10 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
      */
     @Override
     public void checkpoint(long batch, long maxTid){
-        System.out.println(STR."TransactionManager checkpointing batch=\{batch} and maxTid=\{maxTid}");
         LOGGER.log(INFO, "Checkpoint for max TID "+maxTid+" started at "+System.currentTimeMillis());
         if(this.checkpointing) {
             for (Table table : this.catalog.values()) {
-                LOGGER.log(INFO, "Checkpointing table "+table.getName());
+                System.out.println(STR."Checkpointing \{table.name} at batch=\{batch} and maxTid=\{maxTid}");
                 table.primaryKeyIndex().checkpoint(maxTid); // checkpointing here
             }
 

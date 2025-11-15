@@ -49,6 +49,9 @@ public class ComponentProcess
         var jarPath = STR."../flightScheduler-\{vmsIdentifier}/target/flightScheduler-\{vmsIdentifier}-1.0-SNAPSHOT-jar-with-dependencies.jar";
         var processBuilder = CreateProcessBuilder(jarPath, recoverEnabled, args);
 
+        File workingDir = new File(STR."../flightScheduler-\{vmsIdentifier}");
+        processBuilder.directory(workingDir);
+
         return processBuilder;
     }
 

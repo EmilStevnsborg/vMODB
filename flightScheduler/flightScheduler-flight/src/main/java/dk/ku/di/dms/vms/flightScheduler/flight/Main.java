@@ -75,10 +75,14 @@ public final class Main {
         {
             String[] split = uri.split("/");
             int flight_id = Integer.parseInt(split[split.length - 1]);
-            this.transactionManager.beginTransaction(-1, -1, -1,true);
-            var flightSeats = this.repository.getFlightSeats(flight_id);
+            long lastTid = VMS.lastTidFinished();
+            this.transactionManager.beginTransaction(lastTid, 0, lastTid,true);
+            var flightSeats = this.repository.getAll();
 
-            return flightSeats.toString();
+            return flightSeats.stream()
+                    .filter((fs -> fs.flight_id == flight_id))
+                    .toList()
+                    .toString();
         }
     }
 

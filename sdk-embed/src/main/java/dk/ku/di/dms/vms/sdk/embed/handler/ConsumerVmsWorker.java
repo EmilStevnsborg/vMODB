@@ -163,6 +163,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     private void eventLoopNoLogging() {
         while (this.isRunning())
         {
+            processPendingMessages();
             if (this.state == DISCONNECTED) continue;
 
             int pollTimeout = 1;
@@ -170,7 +171,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                 transactionEventQueue.drain(this.drained::add, this.options.networkBufferSize());
                 if(this.drained.isEmpty()){
                     pollTimeout = Math.min(pollTimeout * 2, this.options.maxSleep());
-                    processPendingMessages();
                     this.giveUpCpu(pollTimeout);
                     continue;
                 }
@@ -186,18 +186,17 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     private void processPendingMessages() {
         Object pendingMessage;
         while((pendingMessage = this.messageQueue.pollFirst()) != null){
-            System.out.println(STR."ConsumerVmsWorker polled a message \{pendingMessage}");
+            // System.out.println(STR."ConsumerVmsWorker polled a message \{pendingMessage}");
             switch (pendingMessage)
             {
                 case Recovery.Payload recovery ->
                 {
-                    System.out.println(STR."Process Recovery for consumer=\{consumerVms.identifier}");
-                    this.state = DISCONNECTED;
+                    System.out.println(STR."\{me.identifier} process Recovery for consumer=\{consumerVms.identifier}");
                     processRecoveryInVms();
                 }
                 case AbortUncommittedTransactions.Payload abort ->
                 {
-                    System.out.println(STR."Clearing queue for consumer=\{consumerVms.identifier}");
+                    // System.out.println(STR."\{me.identifier} clearing queue for consumer=\{consumerVms.identifier}");
                     transactionEventQueue.clear();
                     drained.clear();
                 }
@@ -207,28 +206,16 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     }
 
     private boolean reconnect() {
-        System.out.println(STR."Reconnect to consumer VMS \{this.consumerVms.identifier} with state=\{this.state}");
         var connected = connect();
         if (!connected) {
             return false;
         }
         else {
             this.state = CONNECTED;
+            System.out.println(STR."\{me.identifier} reconnected to \{this.consumerVms.identifier}");
+            return true;
         }
-
-        System.out.println(STR."Reconnected to \{this.consumerVms.identifier}");
-        return true;
     }
-    private void resendUncommittedTransactions()
-    {
-        System.out.println(STR."Vms recover events for \{consumerVms.identifier}");
-        vmsQueue.add(RecoverEvents.of(consumerVms.identifier, consumerVms.host, consumerVms.port));
-        System.out.println("Sleeping in ConsumerVmsWorker");
-        try {
-            Thread.sleep(1000); // if I don't sleep, the events queue after RecoverEvents will not send
-        } catch (InterruptedException e) {}
-    }
-
     /**
      * Responsible for making sure the handshake protocol is
      * successfully performed with a consumer VMS
@@ -271,8 +258,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     @Override
     public void processRecoveryInVms()
     {
-        System.out.println(STR."Processing recovery of consumer=\{consumerVms.identifier} in ConsumerVmsWorker");
-
         if (consumerIsRecovering) return;
 
         consumerIsRecovering = true;
@@ -281,7 +266,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         System.out.println(STR."Clearing transactionEventQueue in \{me.identifier} for \{consumerVms.identifier}");
         transactionEventQueue.clear();
         drained.clear();
-        resendUncommittedTransactions();
         consumerIsRecovering = false;
     }
 

@@ -35,12 +35,14 @@ public class RecoverVms
         var flightSeats = DataGenerator.GenerateFlightSeats(client, 0, 40);
 
         // 1st batch
+        System.out.println(STR."TEST: sending order_flights with TIDs of [1-11)");
         for (var i = 0; i < 10; i++)
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
 
         System.console().readLine();
 
         // 2nd batch
+        System.out.println(STR."TEST: sending order_flights with TIDs of [11-21)");
         for (var i = 10; i < 20; i++)
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
 
@@ -52,42 +54,46 @@ public class RecoverVms
         System.console().readLine();
 
         // 3rd batch (abort flight orders)
+        System.out.println(STR."TEST: sending order_flights with TIDs of [21-26)");
         for (var i = 20; i < 25; i++)
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
 
-        System.out.println(STR."Sending order_flights with TIDs of [21-26)");
         System.console().readLine();
 
+        System.out.println(STR."TEST: sending pay_bookings with TIDs of [26-30)");
         for (var i = 0; i < 4; i++)
             Transactions.PayBooking(client, bookings.get(i).booking_id, "VISA");
 
-        System.out.println(STR."Sending pay_bookings with TIDs of [26-30)");
         System.console().readLine();
 
         // wait for flight orders to complete
         ComponentProcess.Kill("flight");
 
+        System.console().readLine();
+
+        System.out.println(STR."TEST: sending pay_booking with TID of [21]");
         Transactions.PayBooking(client, bookings.get(4).booking_id, "VISA"); // finish batch
 
-        System.out.println(STR."Sending pay_booking with TID of 30");
         System.console().readLine();
 
         // 4th batch
+        System.out.println(STR."TEST: sending pay_booking with TIDs of [22-31)");
         for (var i = 25; i < 30; i++)
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
-        for (var i = 5; i < 15; i++)
+        for (var i = 5; i < 14; i++)
             Transactions.PayBooking(client, bookings.get(i).booking_id, "VISA");
 
         // wait for batch to commit
         System.console().readLine();
 
         ComponentProcess.StartVms("flight", true);
-        System.out.println("Flight is back online");
 
         // wait for VMS to recover
         System.console().readLine();
+        System.out.println("flight is back online");
 
         // 5th batch
+        System.out.println(STR."TEST: sending order_flights with TIDs of [31-41)");
         for (var i = 30; i < 40; i++)
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
 
@@ -99,11 +105,12 @@ public class RecoverVms
 
         var updatedFlightSeats = VmsEndpoints.GetFlightSeats(client, 0);
         var occupiedFlightSeats = updatedFlightSeats.stream().filter(fs -> fs.occupied == 1).toList();
+        System.out.println(STR."updatedFlightSeats.size = \{updatedFlightSeats.size()}");
 
         var success = unpaidBookings.size() == 15;
-        if (unpaidBookings.size() != 15)
+        if (unpaidBookings.size() != 20)
         {
-            System.out.println(STR."FAILURE (RecoverVms): unpaidBookings=\{unpaidBookings.size()} != 15");
+            System.out.println(STR."FAILURE (RecoverVms): unpaidBookings=\{unpaidBookings.size()} != 20");
         }
         else if (occupiedFlightSeats.size() != 30)
         {

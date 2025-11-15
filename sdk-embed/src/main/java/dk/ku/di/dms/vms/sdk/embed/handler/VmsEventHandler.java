@@ -290,21 +290,8 @@ public final class VmsEventHandler extends ModbHttpServer {
 
 //                    System.out.println(STR."VMS read message from worker \{message}");
 
+                    // messages from the workers
                     switch (message) {
-                        case RecoverEvents.Payload recoverEvents -> {
-                            var crashedVmsEvents = consumerToEventsMap.get(recoverEvents.vms());
-                            if (crashedVmsEvents != null)
-                            {
-                                var uncommittedEventsForCrashedVms = loggingHandler.getUncommittedEvents(crashedVmsEvents);
-                                System.out.println(STR."Resending \{uncommittedEventsForCrashedVms.size()} events to \{recoverEvents.vms()}");
-
-                                var node = RecoverEvents.crashedVms(recoverEvents);
-                                for (var event : uncommittedEventsForCrashedVms)
-                                {
-                                    consumerVmsContainerMap.get(node).queue(event);
-                                }
-                            }
-                        }
                         default -> System.out.println(STR."Unrecognized message \{message}");
                     }
                 }
@@ -347,7 +334,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     // crashed VMS tries to recover
     private void recoverVms(String leaderHost, int leaderPort)
     {
-        System.out.println("Recovering vms");
+        System.out.println(STR."\{me.identifier} started, and is now recovering");
         pauseHandler.accept(true);
 
         // fix scheduler metadata
@@ -374,7 +361,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     // this function only updates in memory structures
     private void abortUncommittedTransactions(AbortUncommittedTransactions.Payload abort)
     {
-        System.out.println("Aborting all uncommitted transactions");
+        System.out.println(STR."\{me.identifier} aborts all uncommitted transactions");
         pauseHandler.accept(true);
         try {
 
@@ -396,7 +383,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             batchContextMap.entrySet().removeIf(entry -> entry.getKey() > batch);
 
         } catch (Exception e) {
-            //
+            // e.printStackTrace();
         }
         pauseHandler.accept(false);
     }
@@ -405,17 +392,19 @@ public final class VmsEventHandler extends ModbHttpServer {
     //      1. it needs to help recover it
     private void processRecovery(Recovery.Payload recovery)
     {
-        System.out.println(STR."Processing recovery of \{recovery.vms()} in \{me.identifier}");
         var crashedVms = vmsMetadataMap.get(recovery.vms());
         // safeguard
          if (!consumerVmsContainerMap.containsKey(crashedVms))
         {
-            System.out.println(STR."Crashed Vms \{crashedVms} is not a consumer");
+            // System.out.println(STR."Crashed Vms \{crashedVms} is not a consumer");
             return;
         }
 
-        System.out.println(STR."Queue recovery for consumer worker of \{crashedVms.identifier}");
-        consumerVmsContainerMap.get(crashedVms).queueMessage(recovery);
+        System.out.println(STR."\{me.identifier} initiates recovery of consumer \{crashedVms}");
+        var crashedVmsWorkerContainer = consumerVmsContainerMap.remove(crashedVms);
+        crashedVmsWorkerContainer.stop();
+
+        initConsumerVmsWorker(crashedVms, consumerToEventsMap.get(crashedVms.identifier));
     }
 
     // for affected vms
@@ -483,7 +472,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     }
 
     public void processOutputEvent(IVmsTransactionResult txResult) {
-        LOGGER.log(DEBUG,this.me.identifier+": New transaction result in event handler. TID = "+ txResult.tid());
+        // System.out.println(STR."new transaction result in \{me.identifier} for tid=\{txResult.tid()}");
 
         if (txResult.getOutboundEventResult().isAbort()) {
             System.out.println(STR."tId=\{txResult.tid()} failed");
@@ -524,7 +513,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         thisBatch.setStatus(BatchContext.BATCH_COMPLETED);
         // if terminal, must send batch complete
         if (thisBatch.terminal) {
-//            System.out.println("VmsEventHandler.updateBatchStats TERMINAL BatchComplete to leaderWorker");
+            System.out.println(STR."this, \{me.identifier}, is TERMINAL for batch=\{thisBatch.batch} and has completed");
 //            LOGGER.log(DEBUG, this.me.identifier + ": Requesting leader worker to send batch " + thisBatch.batch + " complete");
             // must be queued in case leader is off and comes back online
             this.leaderWorker.queueMessage(BatchComplete.of(thisBatch.batch, this.me.identifier));
@@ -567,13 +556,13 @@ public final class VmsEventHandler extends ModbHttpServer {
         for(Map.Entry<String,List<IdentifiableNode>> entry : receivedConsumerVms.entrySet()) {
             for(IdentifiableNode consumer : entry.getValue()){
                 LOGGER.log(DEBUG, "me: " + me.identifier + " connect to consumer: " + consumer.identifier);
-                consumerToEventsMap.computeIfAbsent(consumer, (ignored) -> new ArrayList<>()).add(entry.getKey());
+                consumerToEventsMap.computeIfAbsent(consumer, (ignored) -> new CopyOnWriteArrayList<>()).add(entry.getKey());
             }
         }
         for( Map.Entry<IdentifiableNode,List<String>> consumerEntry : consumerToEventsMap.entrySet() ) {
             // connect to more consumers...
             for(int i = 0; i < this.options.numVmsWorkers; i++){
-                this.initConsumerVmsWorker(consumerEntry.getKey(), consumerEntry.getValue(), i);
+                this.initConsumerVmsWorker(consumerEntry.getKey(), consumerEntry.getValue());
             }
         }
     }
@@ -620,6 +609,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         */
         List<IVmsContainer> consumerVMSs = this.eventToConsumersMap.get(outputEvent.outputQueue());
         if(consumerVMSs == null || consumerVMSs.isEmpty()){
+            System.out.println(STR."\{me.identifier} processed \{outputEvent.tid()} but consumerVMSs is empty or null");
             LOGGER.log(DEBUG,this.me.identifier+": An output event (queue: "+outputEvent.outputQueue()+") has no target virtual microservices.");
             return;
         }
@@ -628,14 +618,14 @@ public final class VmsEventHandler extends ModbHttpServer {
         loggingHandler.log(payload);
 
         for(IVmsContainer consumerVmsContainer : consumerVMSs) {
-//            System.out.println(STR."Queuing payload for \{consumerVmsContainer.identifier()}");
+            // System.out.println(STR."\{me.identifier} queuing \{outputEvent.tid()} for \{consumerVmsContainer.identifier()}");
             consumerVmsContainer.queue(payload);
         }
     }
 
-    public void initConsumerVmsWorker(IdentifiableNode node, List<String> outputEvents, int identifier){
+    public void initConsumerVmsWorker(IdentifiableNode node, List<String> outputEvents){
 
-        this.consumerToEventsMap.computeIfAbsent(node.identifier, (ignored) -> new ArrayList<>());
+        this.consumerToEventsMap.computeIfAbsent(node.identifier, (ignored) -> new CopyOnWriteArrayList<>());
 
         if(this.producerConnectionMetadataMap.containsKey(node.hashCode())){
             LOGGER.log(WARNING,"The node "+ node.host+" "+ node.port+" already contains a connection as a producer");
@@ -650,7 +640,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                         this.leaderWorker::queueMessage,
                         this.options,
                         this.serdesProxy);
-        Thread.ofPlatform().name("vms-consumer-"+node.identifier+"-"+identifier)
+        Thread.ofPlatform().name("vms-consumer-"+node.identifier+"-")
                 .inheritInheritableThreadLocals(false)
                 .start(consumerVmsWorker);
         if(!this.consumerVmsContainerMap.containsKey(node)){
@@ -665,7 +655,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             // add to tracked VMSs
             for (String outputEvent : outputEvents) {
                 LOGGER.log(INFO,me.identifier+ " adding "+outputEvent+" to consumers map with "+node.identifier);
-                this.eventToConsumersMap.computeIfAbsent(outputEvent, (ignored) -> new ArrayList<>());
+                this.eventToConsumersMap.computeIfAbsent(outputEvent, (ignored) -> new CopyOnWriteArrayList<>());
                 this.eventToConsumersMap.get(outputEvent).add(consumerVmsWorker);
 
                 this.consumerToEventsMap.get(node.identifier).add(outputEvent);
@@ -903,7 +893,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         }
 
         private void processServerPresentation() {
-            LOGGER.log(INFO,me.identifier+": Start processing presentation message from a node claiming to be a server");
+            System.out.println(STR."\{me.identifier} processing presentation message from a node claiming to be a server");
             if(!leader.isActive()) {
                 ConnectionFromLeaderProtocol connectionFromLeader = new ConnectionFromLeaderProtocol(this.channel, this.buffer);
                 connectionFromLeader.processLeaderPresentation();
@@ -934,7 +924,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             // that should be delivered to this vms
             VmsNode producerVms = Presentation.readVms(this.buffer, serdesProxy);
 
-            System.out.println(STR."Producer=\{producerVms.identifier} connected");
+            System.out.println(STR."\{producerVms.identifier} presented itself to \{me.identifier}");
             LOGGER.log(INFO, me.identifier+": Producer VMS received:\n"+producerVms);
             this.buffer.clear();
 
@@ -946,8 +936,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
             // what if a vms is both producer to and consumer from this vms?
             if(consumerVmsContainerMap.containsKey(producerVms)){
-                System.out.println(STR."The node \{producerVms.host} \{producerVms.port} already contains a connection as a consumer");
-                LOGGER.log(WARNING,me.identifier+": The node "+producerVms.host+" "+producerVms.port+" already contains a connection as a consumer");
+                System.out.println(STR."\{me.identifier} already contains a connection to \{producerVms.identifier} as a consumer");
             }
 
             // just to keep track whether this
@@ -956,6 +945,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             } else {
                 producerConnectionMetadataMap.put(producerVms.hashCode(), connMetadata);
                 // setup event receiving from this vms
+                System.out.println(STR."\{producerVms.identifier} is now connected to \{me.identifier} as a producer");
                 LOGGER.log(INFO,me.identifier+": Setting up consumption from producer "+producerVms);
             }
 
@@ -963,6 +953,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         }
 
         private void processUnknownNodeType(byte nodeTypeIdentifier) {
+            System.out.println(STR."\{me.identifier} processing message from unknown node type");
             LOGGER.log(WARNING,me.identifier+": Presentation message from unknown source:" + nodeTypeIdentifier);
             this.buffer.clear();
             MemoryManager.releaseTemporaryDirectBuffer(this.buffer);
@@ -973,7 +964,6 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         @Override
         public void failed(Throwable exc, Void void_) {
-            System.out.println(STR."(VmsEventHandler) unknown node failed");
             LOGGER.log(WARNING,"Error on processing presentation message!");
         }
     }
@@ -1214,7 +1204,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                         processAbort(txAbortPayload);
                     }
                     case (RECOVERY) -> {
-                        System.out.println(STR."Received recovery message from leader");
+                        // System.out.println(STR."Received recovery message from leader");
                         Recovery.Payload recovery = Recovery.read(this.readBuffer);
                         processRecovery(recovery);
                     }
@@ -1224,16 +1214,15 @@ public final class VmsEventHandler extends ModbHttpServer {
                     }
                     case (CONSUMER_SET) -> {
                         try {
-                            LOGGER.log(INFO, me.identifier + ": Consumer set received from the leader");
+                            System.out.println(STR."\{me.identifier} received consumer set");
                             Map<String, List<IdentifiableNode>> receivedConsumerVms = ConsumerSet.read(this.readBuffer, serdesProxy);
                             if (!receivedConsumerVms.isEmpty()) {
                                 connectToReceivedConsumerSet(receivedConsumerVms);
                             } else {
-                                LOGGER.log(WARNING, me.identifier + ": Consumer set is empty");
+                                System.out.println(STR."consumerSet receoved in \{me.identifier} is empty");
                             }
-                        } catch (IOException e) {
-                            LOGGER.log(ERROR, me.identifier + ": IOException while reading consumer set: " + e);
-                            e.printStackTrace(System.out);
+                        } catch (Exception e) {
+                            e.printStackTrace();
                         }
                     }
                     case (PRESENTATION) ->
@@ -1362,9 +1351,8 @@ public final class VmsEventHandler extends ModbHttpServer {
         /**
          * Context of execution of this method:
          */
-        private void processNewBatchCommand(BatchCommitCommand.Payload batchCommitCommand){
-            System.out.println(STR."Vms \{me.identifier} will commit batch=\{batchCommitCommand.batch()} ");
-
+        private void processNewBatchCommand(BatchCommitCommand.Payload batchCommitCommand)
+        {
             // committing output events sent from the VMS
 
             BatchContext batchContext = BatchContext.build(batchCommitCommand);
@@ -1380,6 +1368,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             }
             LOGGER.log(DEBUG, me.identifier + ": All TIDs for the batch " + batchCommitCommand.batch() + " have been executed");
             batchContext.setStatus(BatchContext.BATCH_COMPLETED);
+            loggingHandler.commit(batchCommitCommand.batch());
 
             if(options.checkpointing()){
                 LOGGER.log(INFO, me.identifier + ": Requesting checkpoint for batch " + batchCommitCommand.batch());

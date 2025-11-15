@@ -78,8 +78,6 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
                     .filter(e -> e.batch() == bid)
                     .toList();
 
-            System.out.println(STR."Committing batch=\{bid} of \{committedEvents.size()} events");
-
             if (committedEvents.isEmpty()) return true;
 
             try {
@@ -106,37 +104,6 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
                 return false;
             }
         } finally {
-            rwLock.readLock().unlock();
-        }
-    }
-
-    @Override
-    public List<TransactionEvent.PayloadRaw> getUncommittedEvents(long batch)
-    {
-        rwLock.readLock().lock();
-        try
-        {
-            return eventsSent.values().stream().filter(e -> e.batch() == batch).toList();
-        }
-        finally {
-            rwLock.readLock().unlock();
-        }
-    }
-
-    @Override
-    public List<TransactionEvent.PayloadRaw> getUncommittedEvents(List<String> eventTypes)
-    {
-        rwLock.readLock().lock();
-        eventsSent.values().forEach(e -> {
-        });
-        try
-        {
-            return eventsSent.values().stream().filter(e-> {
-                var eventString = new String(e.event(), StandardCharsets.UTF_8);
-                return eventTypes.contains(eventString);
-            }).toList();
-        }
-        finally {
             rwLock.readLock().unlock();
         }
     }
@@ -219,8 +186,6 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
         long batchPosition = 0;
         fileChannel.position(batchPosition);
 
-        System.out.println(STR."Loading latest commit from logs file size=\{fileChannel.size()}");
-
         while (fileChannel.position() < fileChannel.size())
         {
             metadataBuffer.clear();
@@ -245,6 +210,7 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
             latestCommittedBid = bid;
 
             fileChannel.position(batchPosition);
+            buffer.clear();
             buffer.limit(segmentSize);
             while (buffer.hasRemaining()) {
                 fileChannel.read(buffer);
@@ -252,14 +218,12 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
             buffer.flip();
             var events = BatchUtils.disAssembleBatchPayload(buffer);
             var batchMaxTid = events.stream()
-                    .mapToLong(TransactionEvent.Payload::tid)
+                    .mapToLong(e->e.tid())
                     .max()
                     .orElse(-1);
 
-            if (batchMaxTid > latestCommittedTid) latestCommittedTid = batchMaxTid;
-
-            System.out.println(STR."Updated: latestCommittedBid=\{latestCommittedBid}, latestCommittedTid=\{latestCommittedTid}");
-
+            latestCommittedTid = batchMaxTid;
+            // System.out.println(STR."Updated: latestCommittedBid=\{latestCommittedBid}, latestCommittedTid=\{latestCommittedTid}");
             batchPosition += segmentSize;
             fileChannel.position(batchPosition);
         }
@@ -317,7 +281,6 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
 
                 var newTid = precedenceMapOfFailedEvent.get(precedence);
                 eventPrecedenceMap.put(precedence, newTid);
-                System.out.println(STR."Setting precedence \{precedence} for \{eventReadable.tid()} to \{newTid}");
                 precedenceToUpdate.remove(precedence);
                 updated = true;
             }
@@ -332,6 +295,12 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
                 );
                 // atomically replace the event in the map
                 eventsSent.replace(entry.getKey(), updatedEventRaw);
+
+                // debugging
+                for (var updatedPrecedence : eventPrecedenceMap.entrySet())
+                {
+                    System.out.println(STR."Updated precedence \{updatedPrecedence.getKey()} for \{eventReadable.tid()} to \{updatedPrecedence.getValue()}");
+                }
             }
             if (precedenceToUpdate.isEmpty()) return;
         }
