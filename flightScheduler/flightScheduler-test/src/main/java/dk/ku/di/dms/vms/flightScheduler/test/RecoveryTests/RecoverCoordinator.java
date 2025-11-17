@@ -11,7 +11,7 @@ import java.net.http.HttpClient;
 
 public class RecoverCoordinator
 {
-    public static boolean Run(HttpClient client)throws IOException
+    public static boolean Run(HttpClient client) throws IOException
     {
         ComponentProcess.KillVMSes();
         ComponentProcess.Kill("proxy");

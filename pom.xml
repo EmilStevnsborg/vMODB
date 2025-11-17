@@ -29,9 +29,9 @@
 
 <!--     applications -->
 <!--    <module>marketplace</module>-->
-<!--    <module>tpcc</module>-->
+    <module>tpcc</module>
     <module>flightScheduler</module>
-      <module>hotelReservation</module>
+<!--      <module>hotelReservation</module>-->
 
   </modules>
 
