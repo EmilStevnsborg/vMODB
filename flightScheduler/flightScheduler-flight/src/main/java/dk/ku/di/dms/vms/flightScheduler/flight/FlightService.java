@@ -32,10 +32,6 @@ public class FlightService
     @Transactional(type=RW)
     public BookSeat orderingFlight(OrderFlight orderFlight)
     {
-        if (orderFlight == null)
-        {
-            throw new RuntimeException("orderFlight is null");
-        }
         var flightSeatId = new FlightSeat.FlightSeatId(orderFlight.flight_id, orderFlight.seat_number);
         FlightSeat flightSeat = this.flightRepository.lookupByKey(flightSeatId);
 
@@ -46,7 +42,7 @@ public class FlightService
         }
 
         // update occupied status
-        flightSeat.occupied = 1;
+        flightSeat.flightSeatHasBeenBooked();
         this.flightRepository.update(flightSeat);
 
         return new BookSeat(new Date(), orderFlight);

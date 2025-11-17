@@ -179,7 +179,8 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
         List<Object[]> res = new ArrayList<>();
         Iterator<Object[]> iterator = table.primaryKeyIndex().iterator(this.txCtxMap.get(Thread.currentThread().threadId()));
         while(iterator.hasNext()){
-            res.add(iterator.next());
+            var object = iterator.next();
+            res.add(object);
         }
         return res;
     }
@@ -433,20 +434,17 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
      */
     @Override
     public void checkpoint(long batch, long maxTid){
-        LOGGER.log(INFO, "Checkpoint for max TID "+maxTid+" started at "+System.currentTimeMillis());
         if(this.checkpointing) {
             for (Table table : this.catalog.values()) {
-                System.out.println(STR."Checkpointing \{table.name} at batch=\{batch} and maxTid=\{maxTid}");
+                // System.out.println(STR."Checkpointing \{table.name} at batch=\{batch} and maxTid=\{maxTid}");
                 table.primaryKeyIndex().checkpoint(maxTid); // checkpointing here
             }
 
         } else {
-            LOGGER.log(INFO, "Checkpoint disabled. Starting only garbage collection for max TID "+maxTid);
             for (Table table : this.catalog.values()) {
                 table.primaryKeyIndex().garbageCollection(maxTid);
             }
         }
-        LOGGER.log(INFO, "Checkpoint for max TID "+maxTid+" finished at "+System.currentTimeMillis());
     }
 
     @Override
@@ -484,6 +482,7 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
 
     @Override
     public void reset() {
+        System.out.println(STR."transactionManager reset}");
         LOGGER.log(INFO, "Reset triggered at "+System.currentTimeMillis());
         for (Table table : this.catalog.values()) {
             LOGGER.log(INFO, "Resetting "+table.name);

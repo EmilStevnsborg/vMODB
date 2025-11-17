@@ -162,8 +162,6 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             // in this case, the error must be informed to the event handler, so the event handler
             // can forward the error to downstream VMSs. if input VMS, easier to handle, just send a noop to them
 
-            System.out.println(STR."Scheduler: error during execution for \{tid} in \{vmsIdentifier}");
-
             // remove from map to avoid reescheduling? no, it will lead to null pointer in scheduler loop
             VmsTransactionTask task = transactionTaskMap.get(tid);
             task.signalFailed();
@@ -250,8 +248,8 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     @Override
     public void recover(long lastCommitBatch,  long lastCommitTid)
     {
-        System.out.println(STR."Scheduler setting lastTidFinished=lastCommitTid=\{lastCommitTid}, " +
-                           STR."where lastCommitBatch=\{lastCommitBatch}");
+//        System.out.println(STR."Scheduler setting lastTidFinished=lastCommitTid=\{lastCommitTid}, " +
+//                           STR."where lastCommitBatch=\{lastCommitBatch}");
         lastTidFinished.set(lastCommitTid);
     }
 
@@ -288,8 +286,8 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             }
 
             // count the events
-            if (failedTask == null || taskBatchId == failedTask.batch) continue;
-            if (taskTid < failedTid) {
+            if (failedTask == null || taskBatchId > failedTask.batch) continue;
+            if (taskBatchId == failedTask.batch && taskTid < failedTid) {
                 numTIDsExecuted += 1;
             }
         }
@@ -303,7 +301,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         lastTidFinished.set(floorEntry);
         var maxTidExecuted = lastTidFinished.get();
 
-        System.out.println(STR."\{vmsIdentifier} sets lastTidFinished to \{lastTidFinished}");
+        // System.out.println(STR."\{vmsIdentifier} sets lastTidFinished to \{lastTidFinished}");
         return new Long[] {numTIDsExecuted, maxTidExecuted};
     }
 
@@ -433,10 +431,10 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     }
 
     private void processNewEvent(InboundEvent inboundEvent) {
-        System.out.println(STR."\{vmsIdentifier} scheduler " +
-                           STR."inboundEvent \{inboundEvent.tid()} in \{vmsIdentifier} " +
-                           STR."comes after \{inboundEvent.lastTid()}, " +
-                           STR."with current being lastTidFinished=\{lastTidFinished}");
+//        System.out.println(STR."\{vmsIdentifier} scheduler " +
+//                           STR."inboundEvent \{inboundEvent.tid()} in \{vmsIdentifier} " +
+//                           STR."comes after \{inboundEvent.lastTid()}, " +
+//                           STR."with current being lastTidFinished=\{lastTidFinished}");
         if (this.transactionTaskMap.containsKey(inboundEvent.tid())) {
             LOGGER.log(WARNING, this.vmsIdentifier+": Event TID has already been processed! Queue '" + inboundEvent.event() + "' Batch: " + inboundEvent.batch() + " TID: " + inboundEvent.tid());
             return;

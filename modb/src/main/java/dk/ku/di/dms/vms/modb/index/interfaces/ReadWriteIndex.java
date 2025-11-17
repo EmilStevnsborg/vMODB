@@ -2,6 +2,7 @@ package dk.ku.di.dms.vms.modb.index.interfaces;
 
 import dk.ku.di.dms.vms.modb.definition.Schema;
 import dk.ku.di.dms.vms.modb.index.AbstractIndex;
+import dk.ku.di.dms.vms.modb.storage.record.RecordBufferContext;
 
 public abstract class ReadWriteIndex<K> extends AbstractIndex<K> {
 
@@ -25,6 +26,7 @@ public abstract class ReadWriteIndex<K> extends AbstractIndex<K> {
         this.insert(key, record);
     }
 
+    public RecordBufferContext RecordBufferContext() { return null; }
     public void lock(){
         throw new RuntimeException("Not supported.");
     }
@@ -39,7 +41,6 @@ public abstract class ReadWriteIndex<K> extends AbstractIndex<K> {
 
     // flush updates
     public void flush(){
-        System.out.println("Flushing index");
         throw new RuntimeException("Not supported.");
     }
 

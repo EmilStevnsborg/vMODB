@@ -6,7 +6,8 @@ import java.util.List;
 
 public class ComponentProcess
 {
-    private static ProcessBuilder CreateProcessBuilder(String jarPath, boolean recoverEnabled, List<String> args)
+    private static ProcessBuilder CreateProcessBuilder(String jarPath,
+                                                       List<String> args)
     {
         String javaBin = STR."\{System.getProperty("java.home")}\{File.separator}bin\{File.separator}java";
 
@@ -16,8 +17,7 @@ public class ComponentProcess
                 "--add-exports", "java.base/jdk.internal.misc=ALL-UNNAMED",
                 "--add-opens", "java.base/jdk.internal.util=ALL-UNNAMED",
                 "-jar",
-                jarPath,
-                STR."\{recoverEnabled}"
+                jarPath
         );
         processBuilder.command().addAll(args);
 
@@ -40,14 +40,14 @@ public class ComponentProcess
 
         System.out.println(STR."\{vmsIdentifier} killed");
     }
-    public static ProcessBuilder VmsProcessBuilder(String vmsIdentifier, boolean recoverEnabled)
+    public static ProcessBuilder VmsProcessBuilder(String vmsIdentifier)
     {
-        return ComponentProcess.VmsProcessBuilder(vmsIdentifier, recoverEnabled, List.of());
+        return ComponentProcess.VmsProcessBuilder(vmsIdentifier, List.of());
     }
-    public static ProcessBuilder VmsProcessBuilder(String vmsIdentifier, boolean recoverEnabled, List<String> args)
+    public static ProcessBuilder VmsProcessBuilder(String vmsIdentifier, List<String> args)
     {
         var jarPath = STR."../flightScheduler-\{vmsIdentifier}/target/flightScheduler-\{vmsIdentifier}-1.0-SNAPSHOT-jar-with-dependencies.jar";
-        var processBuilder = CreateProcessBuilder(jarPath, recoverEnabled, args);
+        var processBuilder = CreateProcessBuilder(jarPath, args);
 
         File workingDir = new File(STR."../flightScheduler-\{vmsIdentifier}");
         processBuilder.directory(workingDir);
@@ -72,26 +72,35 @@ public class ComponentProcess
     {
         for (var component : components)
         {
-            ComponentProcess.VmsProcessBuilder(component, false, List.of()).start();
+            ComponentProcess.VmsProcessBuilder(component, List.of()).start();
         }
     }
 
-    public static void StartVms(String vms, boolean recoveryEnabled) throws IOException
+    public static void StartVms(String vms, boolean recoverable, int numVmsWorkers) throws IOException
     {
-        ComponentProcess.VmsProcessBuilder(vms, recoveryEnabled, List.of()).start();
+        var args = List.of(STR."recoverable=\{recoverable}", STR."num_vms_workers=\{numVmsWorkers}");
+        ComponentProcess.VmsProcessBuilder(vms, args).start();
     }
     public static void StartVMSes() throws Exception
     {
         List<String> components = List.of("customer", "booking", "flight", "payment");
         ComponentProcess.StartComponents(components);
     }
-    public static void StartProxy(boolean recoverable, int batchTimeoutWindow, int batchMaxTransactions)
+    public static void StartProxy(boolean recoverable, int numVmsWorkers, int numQueuesVmsWorker,
+                                  int numTransactionWorkers, int timeout, int maxTransactionsPerBatch)
             throws IOException
     {
+        var args = List.of(STR."recoverable=\{recoverable}",
+                           STR."n1um_vms_workers=\{numVmsWorkers}",
+                           STR."num_queues_vms_worker=\{numQueuesVmsWorker}",
+                           STR."num_transaction_workers=\{numTransactionWorkers}",
+                           STR."batch_window_ms=\{timeout}",
+                           STR."num_max_transactions_batch=\{maxTransactionsPerBatch}");
         ComponentProcess.VmsProcessBuilder(
                 "proxy",
-                false,
-                List.of(String.valueOf(batchTimeoutWindow), String.valueOf(batchMaxTransactions))
+                args
         ).start();
+
+        System.out.println(STR."STARTED PROXY with args: \{String.join(",", args)}");
     }
 }

@@ -69,6 +69,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
 
     private PrimaryIndex(ReadWriteIndex<IKey> rawIndex, IPrimaryKeyGenerator<?> primaryKeyGenerator) {
         this.rawIndex = rawIndex;
+        // System.out.println(STR."primaryKeyIndex filename \{rawIndex.RecordBufferContext().fileName}");
         this.updatesPerKeyMap = new ConcurrentHashMap<>(1024*1000);
         this.primaryKeyGenerator = Optional.ofNullable(primaryKeyGenerator);
         this.writeSetMap = new ConcurrentHashMap<>();
@@ -461,6 +462,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         this.rawIndex.unlock();
         if(numRecords > 0) {
             LOGGER.log(INFO, "Updated "+numRecords+" records in disk");
+            // System.out.println(STR."flushed records to disk");
             this.rawIndex.flush();
         } else {
             LOGGER.log(WARNING, "No records have been flushed");
@@ -613,6 +615,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
             Set<IKey> allKeys = new HashSet<>();
             rawIndex.iterator().forEachRemaining(allKeys::add);
             var keysInMemory = updatesPerKeyMap.keySet();
+            // System.out.println(STR."allKeys size \{allKeys.size()}");
             allKeys.addAll(keysInMemory);
             this.keyIterator = allKeys.iterator();
         }
@@ -624,8 +627,6 @@ public final class PrimaryIndex implements IMultiVersionIndex {
                 // Prefer updatesPerKeyMap if present
                 OperationSetOfKey operationSetOfKey = updatesPerKeyMap.get(key);
                 if (operationSetOfKey != null) {
-
-
                     Entry<Long, TransactionWrite> entry = operationSetOfKey.getHigherEntryUpToKey(this.txCtx.tid);
                     if (entry == null) {
                         this.currRecord = rawIndex.lookupByKey(key);
@@ -645,17 +646,13 @@ public final class PrimaryIndex implements IMultiVersionIndex {
                             return false;
                         }
                     }
-                /* is it returning a deleted entry???
-                if(updatesPerKeyMap.get(next.getKey()).lastWriteType == WriteType.DELETE){
-                    LOGGER.log(ERROR,"ATTENTION: "+this.txCtx.tid+" < "+updatesPerKeyMap.get(next.getKey()).peak().key);
-                }
-                */
                     this.currRecord = entry.val().record;
                     return true;
                 }
                 // new
                 else {
                     this.currRecord = rawIndex.lookupByKey(key);
+                    // System.out.println(STR."looking up in rawIndex for \{key} record \{currRecord}");
                     if (this.currRecord == null) {
                         if (this.keyIterator.hasNext()) {
                             continue;

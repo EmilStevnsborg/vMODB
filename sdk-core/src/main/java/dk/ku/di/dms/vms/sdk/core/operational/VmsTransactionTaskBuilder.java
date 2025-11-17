@@ -106,7 +106,9 @@ public final class VmsTransactionTaskBuilder {
         private void handleErrorOnTask(ReflectiveOperationException e, Object input) {
             System.out.println("VmsTransactionTaskBuilder handleErrorOnTask");
             LOGGER.log(ERROR, "Error during invoking task "+this.toString()+"\n Input event: "+input+"\n"+ e);
-            e.printStackTrace(System.out);
+
+            System.out.println(STR."!!!! TASK FAILURE: \{input} !!!");
+
             schedulerCallback.error(signature.executionMode(), this.tid, this.batch, e);
         }
 

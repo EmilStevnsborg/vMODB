@@ -30,6 +30,7 @@ public sealed class RecordBufferContext permits AppendOnlyBuffer {
     }
 
     public final void force(){
+        // System.out.println(STR."flushing memorySegment");
         this.memorySegment.force();
     }
 

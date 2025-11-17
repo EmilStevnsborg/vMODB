@@ -19,21 +19,27 @@ public final class Main
         Properties properties = ConfigUtils.loadProperties();
 
         if (args != null && args.length > 0) {
-            var recoverable = Boolean.parseBoolean(args[0]);
-            var batch_window_ms = args[1];
-            var num_max_transactions_batch=args[2];
 
-            // setting it deliberately
-            properties.setProperty("batch_window_ms", batch_window_ms);
-            properties.setProperty("num_max_transactions_batch", num_max_transactions_batch);
+            for (var arg : args)
+            {
+                var argSplit = arg.split("=");
+                if (argSplit.length != 2) {
+                    System.out.println(STR."invalid arg}");
+                    continue;
+                }
 
-            loadCoordinator(properties, recoverable);
+                var argName = argSplit[0];
+                var argValue = argSplit[1];
+                properties.setProperty(argName, argValue);
+            }
+
+            loadCoordinator(properties);
         } else {
-            loadCoordinator(properties, false);
+            loadCoordinator(properties);
         }
     }
 
-    private static void loadCoordinator(Properties properties, boolean recoverable)
+    private static void loadCoordinator(Properties properties)
     {
         Map<String, TransactionDAG> transactionMap = new HashMap<>();
 
@@ -86,7 +92,8 @@ public final class Main
         starterVMSs.putIfAbsent(customerAddress.identifier, customerAddress);
         starterVMSs.putIfAbsent(paymentAddress.identifier, paymentAddress);
 
-        Coordinator coordinator = Coordinator.build(properties, starterVMSs, transactionMap, ProxyHttpServerAsyncJdk::new, recoverable);
+        Coordinator coordinator = Coordinator.build(properties, starterVMSs,
+                transactionMap, ProxyHttpServerAsyncJdk::new);
 
         Thread coordinatorThread = new Thread(coordinator);
         coordinatorThread.start();

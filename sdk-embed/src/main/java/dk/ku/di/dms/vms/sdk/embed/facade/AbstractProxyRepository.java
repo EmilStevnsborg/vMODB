@@ -116,9 +116,11 @@ public abstract class AbstractProxyRepository<PK extends Serializable, T extends
     @Override
     public final List<T> getAll(){
         List<Object[]> records = this.operationalAPI.getAll(this.table);
+        // System.out.println(STR."getAll, there are \{records.size()}");
         List<T> resultList = new ArrayList<>(records.size());
         for (var record : records){
-            resultList.add(this.parseObjectIntoEntity(record));
+            var recordParsed = this.parseObjectIntoEntity(record);
+            resultList.add(recordParsed);
         }
         return resultList;
     }

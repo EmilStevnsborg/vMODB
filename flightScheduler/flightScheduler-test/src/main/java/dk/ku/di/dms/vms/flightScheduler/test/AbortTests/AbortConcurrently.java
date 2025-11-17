@@ -21,7 +21,8 @@ public class AbortConcurrently
 
         try {
             ComponentProcess.StartVMSes();
-            ComponentProcess.StartProxy(false, Integer.MAX_VALUE, 10);
+            ComponentProcess.StartProxy(false, 1, 1, 1,
+                                        Integer.MAX_VALUE, 10);
         } catch (Exception e) {
             System.out.println("Failure starting components");
             return false;

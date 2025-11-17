@@ -47,6 +47,10 @@ public final class FlightSeat implements IEntity<FlightSeat.FlightSeatId> {
     @Column
     public int occupied;
 
+    public void flightSeatHasBeenBooked()
+    {
+        this.occupied = 1;
+    }
     @Override
     public String toString() {
         return "{\n"

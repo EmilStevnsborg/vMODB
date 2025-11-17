@@ -22,7 +22,8 @@ public class RecoverVms
 
         try {
             ComponentProcess.StartVMSes();
-            ComponentProcess.StartProxy(false, Integer.MAX_VALUE, 10);
+            ComponentProcess.StartProxy(false, 1, 1, 1,
+                    Integer.MAX_VALUE, 10);
         } catch (Exception e) {
             System.out.println("Failure starting components");
             return false;
@@ -30,15 +31,21 @@ public class RecoverVms
 
         // wait for components to come online
         System.console().readLine();
+        System.out.println("TEST: injecting data");
 
         var customers = DataGenerator.GenerateCustomers(client, 40);
         var flightSeats = DataGenerator.GenerateFlightSeats(client, 0, 40);
 
         // 1st batch
+        System.console().readLine();
         System.out.println(STR."TEST: sending order_flights with TIDs of [1-11)");
         for (var i = 0; i < 10; i++)
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
 
+        System.console().readLine();
+        System.out.println(STR."There are \{VmsEndpoints.GetFlightSeats(client, 0)
+                                            .stream().filter(fs -> fs.occupied == 1)
+                                            .count()} occupied flight seats");
         System.console().readLine();
 
         // 2nd batch
@@ -47,6 +54,10 @@ public class RecoverVms
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
 
         // wait for flight orders to commit
+        System.console().readLine();
+        System.out.println(STR."There are \{VmsEndpoints.GetFlightSeats(client, 0)
+                .stream().filter(fs -> fs.occupied == 1)
+                .count()} occupied flight seats");
         System.console().readLine();
 
         var bookings = VmsEndpoints.GetBookings(client);
@@ -86,11 +97,14 @@ public class RecoverVms
         // wait for batch to commit
         System.console().readLine();
 
-        ComponentProcess.StartVms("flight", true);
+        ComponentProcess.StartVms("flight", true, 1);
+        System.out.println(STR."Flight is back online");
 
         // wait for VMS to recover
         System.console().readLine();
-        System.out.println("flight is back online");
+        System.out.println(STR."There are \{VmsEndpoints.GetFlightSeats(client, 0)
+                .stream().filter(fs -> fs.occupied == 1)
+                .count()} occupied flight seats");
 
         // 5th batch
         System.out.println(STR."TEST: sending order_flights with TIDs of [31-41)");
@@ -99,22 +113,28 @@ public class RecoverVms
 
         // wait for batch to commit
         System.console().readLine();
+        System.out.println(STR."There are \{VmsEndpoints.GetFlightSeats(client, 0)
+                .stream().filter(fs -> fs.occupied == 1)
+                .count()} occupied flight seats");
+        System.console().readLine();
 
         var updatedBookings = VmsEndpoints.GetBookings(client);
-        var unpaidBookings = updatedBookings.stream().filter(b -> b.paid == 1).toList();
+        var unpaidBookings = updatedBookings.stream().filter(b -> b.paid == 0).toList();
 
         var updatedFlightSeats = VmsEndpoints.GetFlightSeats(client, 0);
         var occupiedFlightSeats = updatedFlightSeats.stream().filter(fs -> fs.occupied == 1).toList();
         System.out.println(STR."updatedFlightSeats.size = \{updatedFlightSeats.size()}");
 
-        var success = unpaidBookings.size() == 15;
+        var success = true;
         if (unpaidBookings.size() != 20)
         {
             System.out.println(STR."FAILURE (RecoverVms): unpaidBookings=\{unpaidBookings.size()} != 20");
+            success = false;
         }
         else if (occupiedFlightSeats.size() != 30)
         {
             System.out.println(STR."FAILURE (RecoverVms): occupiedFlightSeats=\{occupiedFlightSeats.size()} != 30");
+            success = false;
         }
         else
         {

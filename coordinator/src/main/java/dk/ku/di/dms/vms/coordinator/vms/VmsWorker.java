@@ -204,7 +204,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                                     VmsWorkerOptions options,
                                     IVmsSerdesProxy serdesProxy) throws IOException {
 
-        System.out.println(STR."VmsWorker has been built for \{consumerVms.identifier}");
         return new VmsWorker(me, consumerVms, coordinatorQueue,
                 channelFactory, options, serdesProxy);
     }
@@ -245,8 +244,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         } else {
             this.transactionEventQueue = new SingleDeque();
         }
-
-        System.out.println(STR."coordinator worker for \{consumerVms.identifier} is active: \{this.options.active()}");
         if(this.options.active()){
             this.queueMessage_ = this.messageQueue::offerLast;
         } else {
@@ -280,7 +277,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
     @SuppressWarnings("BusyWait")
     public void initHandshakeProtocol(){
-        System.out.println(STR."initHandshakeProtocol with \{consumerVms.identifier}");
+        // System.out.println(STR."initHandshakeProtocol with \{consumerVms.identifier}");
         int waitTime = 1000;
         LOGGER.log(INFO, "Leader: Attempting connection to "+this.consumerVms.identifier);
         while(true) {
@@ -335,7 +332,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
     // write presentation
     private void sendLeaderPresentationToVms(ByteBuffer writeBuffer) {
-        System.out.println(STR."sending leader presentation");
+        // System.out.println(STR."sending leader presentation");
         Presentation.writeServer(writeBuffer, this.me, true);
         writeBuffer.flip();
         this.acquireLock();
@@ -344,7 +341,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
     @Override
     public void run() {
-        System.out.println(STR."VmsWorker starting for \{this.consumerVms}");
+        // System.out.println(STR."VmsWorker starting for \{this.consumerVms}");
         if(this.options.initHandshake()) {
             this.initHandshakeProtocol();
         } else {
@@ -533,7 +530,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     }
 
     private void sendConsumerSet(String vmsConsumerSet) {
-        System.out.println(STR."send consumerSet \{vmsConsumerSet} to \{consumerVms.identifier}");
+        // System.out.println(STR."send consumerSet \{vmsConsumerSet} to \{consumerVms.identifier}");
         // the first or new information
         if(this.state == VMS_PRESENTATION_PROCESSED) {
             this.state = CONSUMER_SET_READY_FOR_SENDING;

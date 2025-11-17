@@ -56,6 +56,11 @@ public class UniqueHashBufferIndex extends ReadWriteIndex<IKey> implements ReadW
     }
 
     @Override
+    public RecordBufferContext RecordBufferContext() {
+        return recordBufferCtx;
+    }
+
+    @Override
     public void lock(){
         this.lock.lock();
     }
@@ -294,6 +299,7 @@ public class UniqueHashBufferIndex extends ReadWriteIndex<IKey> implements ReadW
 
     @Override
     public void flush() {
+        // System.out.println(STR."flushing recordBufferCtx");
         this.recordBufferCtx.force();
     }
 

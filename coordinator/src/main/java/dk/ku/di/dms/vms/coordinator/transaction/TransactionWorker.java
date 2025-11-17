@@ -272,7 +272,7 @@ public final class TransactionWorker extends StoppableRunnable {
             this.generatePendingTransactionInput(pendingVMSs, previousTidPerVms, transactionInput);
         } else {
             String precedenceMapStr = this.serdesProxy.serializeMap(previousTidPerVms);
-            // System.out.println(STR."Assigning tid=\{this.tid}");
+            System.out.println(STR."txWorker=\{id} assigning tid=\{this.tid}");
             TransactionEvent.PayloadRaw txEvent = TransactionEvent.of(this.tid, this.batchContext.batchOffset,
                     transactionInput.event.name, transactionInput.event.payload, precedenceMapStr);
 
@@ -283,7 +283,7 @@ public final class TransactionWorker extends StoppableRunnable {
 
     private void generatePendingTransactionInput(Set<String> pendingVMSs, Map<String, Long> previousTidPerVms, TransactionInput transactionInput)
     {
-        System.out.println(STR."generatePendingTransactionInput for \{transactionInput.name} with tid=\{this.tid}");
+        System.out.println(STR."txWorker=\{id} generatePendingTransactionInput for \{transactionInput.name} with tid=\{this.tid}");
         // this has to be emitted when batch info from previous worker in the ring arrives
         long lastBatchOffset = this.batchContext.batchOffset - this.numWorkers;
         PendingTransactionInput pendingInput = new PendingTransactionInput(

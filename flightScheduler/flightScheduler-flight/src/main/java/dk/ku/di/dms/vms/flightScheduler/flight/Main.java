@@ -21,22 +21,31 @@ public final class Main {
         Properties properties = ConfigUtils.loadProperties();
 
         if (args != null && args.length > 0) {
-            var recoverable = Boolean.parseBoolean(args[0]);
-            VMS = buildVms(properties, recoverable);
-        } else {
-            VMS = buildVms(properties, false);
+            for (var arg : args)
+            {
+                var argSplit = arg.split("=");
+                if (argSplit.length != 2) {
+                    System.out.println(STR."invalid arg}");
+                    continue;
+                }
+
+                var argName = argSplit[0];
+                var argValue = argSplit[1];
+                properties.setProperty(argName, argValue);
+            }
         }
+        VMS = buildVms(properties);
         VMS.start();
     }
 
-    private static VmsApplication buildVms(Properties properties, boolean recoverable) throws Exception {
+    private static VmsApplication buildVms(Properties properties) throws Exception {
         VmsApplicationOptions options = VmsApplicationOptions.build(
                 properties,
                 "0.0.0.0",
                 FLIGHT_VMS_PORT, new String[]{
                         "dk.ku.di.dms.vms.flightScheduler.flight",
                         "dk.ku.di.dms.vms.flightScheduler.common"
-                }, recoverable);
+                });
         return VmsApplication.build(options, (x,y) ->
                 new FlightHttpHandler(x, (IFlightRepository) y.apply("flight_seats"))); // apply on y.apply({VmsTable Name})
     }
@@ -75,12 +84,13 @@ public final class Main {
         {
             String[] split = uri.split("/");
             int flight_id = Integer.parseInt(split[split.length - 1]);
+
             long lastTid = VMS.lastTidFinished();
             this.transactionManager.beginTransaction(lastTid, 0, lastTid,true);
+
             var flightSeats = this.repository.getAll();
 
             return flightSeats.stream()
-                    .filter((fs -> fs.flight_id == flight_id))
                     .toList()
                     .toString();
         }

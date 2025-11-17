@@ -89,7 +89,7 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
                     fileChannel.write(buffer);
                 }
                 fileChannel.force(true);
-                System.out.println(STR."LoggingHandler Committing batch=\{bid} has been forced");
+                // System.out.println(STR."LoggingHandler Committing batch=\{bid} has been forced");
 
                 // remove committed events atomically
                 committedEvents.forEach(e -> {
@@ -297,10 +297,10 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
                 eventsSent.replace(entry.getKey(), updatedEventRaw);
 
                 // debugging
-                for (var updatedPrecedence : eventPrecedenceMap.entrySet())
-                {
-                    System.out.println(STR."Updated precedence \{updatedPrecedence.getKey()} for \{eventReadable.tid()} to \{updatedPrecedence.getValue()}");
-                }
+//                for (var updatedPrecedence : eventPrecedenceMap.entrySet())
+//                {
+//                    System.out.println(STR."Updated precedence \{updatedPrecedence.getKey()} for \{eventReadable.tid()} to \{updatedPrecedence.getValue()}");
+//                }
             }
             if (precedenceToUpdate.isEmpty()) return;
         }
@@ -319,10 +319,9 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
                     continue;
                 }
 
-                String eventName = new String(failedEvent.event(), StandardCharsets.UTF_8);
-                System.out.println(STR."Removing \{eventName} with tid \{failedEvent.tid()} of batch \{failedEvent.batch()}");
+                // String eventName = new String(failedEvent.event(), StandardCharsets.UTF_8);
+                // System.out.println(STR."Removing \{eventName} with tid \{failedEvent.tid()} of batch \{failedEvent.batch()}");
 
-                System.out.println("Fixing precedence");
                 fixPrecedence(failedEvent);
 
                 abortedEvents.add(failedEvent);
@@ -346,8 +345,8 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
                 System.out.println(STR."Can't find failed event in batch");
                 return null;
             }
-            var eventName = new String(failedEvent.event(), StandardCharsets.UTF_8);
-            System.out.println(STR."Removing \{eventName} with tid \{failedEvent.tid()} of batch \{failedEvent.batch()}");
+//            var eventName = new String(failedEvent.event(), StandardCharsets.UTF_8);
+//            System.out.println(STR."Removing \{eventName} with tid \{failedEvent.tid()} of batch \{failedEvent.batch()}");
 
             fixPrecedence(failedEvent);
             return failedEvent;
@@ -363,7 +362,12 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
     public void cutLog(long failedTid) {
         rwLock.writeLock().lock();
         try {
-            eventsSent.values().stream().filter(e -> e.tid() >= failedTid).forEach(e -> eventsSent.remove(e.tid()));
+            List<Long> toRemove = eventsSent.entrySet().stream()
+                    .filter(e -> e.getValue().tid() >= failedTid)
+                    .map(Map.Entry::getKey)
+                    .toList();
+
+            toRemove.forEach(eventsSent::remove);
         } finally {
             rwLock.writeLock().unlock();
         }

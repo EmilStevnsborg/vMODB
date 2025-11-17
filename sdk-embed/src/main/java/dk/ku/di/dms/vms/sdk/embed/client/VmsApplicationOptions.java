@@ -38,28 +38,20 @@ public final class VmsApplicationOptions {
 
     public static VmsApplicationOptions build(String host, int port, String[] packages) {
         Properties properties = ConfigUtils.loadProperties();
-        return build(properties, host, port, packages, false);
+        return build(properties, host, port, packages);
     }
 
-    public static VmsApplicationOptions build(String host, int port, String[] packages, boolean recoverable) {
-        Properties properties = ConfigUtils.loadProperties();
-        return build(properties, host, port, packages, recoverable);
-    }
+    public static VmsApplicationOptions build(Properties properties, String host,
+                                              int port, String[] packages) {
 
-    public static VmsApplicationOptions build(Properties properties, String host, int port, String[] packages) {
-        return build(properties, host, port, packages, false);
-    }
-
-    public static VmsApplicationOptions build(Properties properties, String host, int port, String[] packages, boolean recoverable) {
-
-        System.out.println("Properties: \n" + properties.toString());
+        boolean recoverable = Boolean.parseBoolean(properties.getProperty("recoverable"));
+        int numVmsWorkers = Integer.parseInt(properties.getProperty("num_vms_workers"));
 
         int networkBufferSize = Integer.parseInt(properties.getProperty("network_buffer_size"));
         int soBufferSize = Integer.parseInt(properties.getProperty("so_buffer_size"));
         int networkSendTimeout = Integer.parseInt(properties.getProperty("network_send_timeout"));
         int networkThreadPoolSize = Integer.parseInt(properties.getProperty("network_thread_pool_size"));
         int vmsThreadPoolSize = Integer.parseInt(properties.getProperty("vms_thread_pool_size"));
-        int numVmsWorkers = Integer.parseInt(properties.getProperty("num_vms_workers"));
 
         int maxSleep = 0;
         String maxSleepStr = properties.getProperty("max_sleep");

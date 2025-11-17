@@ -20,22 +20,31 @@ public final class Main {
         Properties properties = ConfigUtils.loadProperties();
 
         if (args != null && args.length > 0) {
-            var recoverable = Boolean.parseBoolean(args[0]);
-            VMS = buildVms(properties, recoverable);
-        } else {
-            VMS = buildVms(properties, false);
+            for (var arg : args)
+            {
+                var argSplit = arg.split("=");
+                if (argSplit.length != 2) {
+                    System.out.println(STR."invalid arg}");
+                    continue;
+                }
+
+                var argName = argSplit[0];
+                var argValue = argSplit[1];
+                properties.setProperty(argName, argValue);
+            }
         }
+        VMS = buildVms(properties);
         VMS.start();
     }
 
-    private static VmsApplication buildVms(Properties properties, boolean recoverable) throws Exception {
+    private static VmsApplication buildVms(Properties properties) throws Exception {
         VmsApplicationOptions options = VmsApplicationOptions.build(
                 properties,
                 "0.0.0.0",
                 BOOKING_VMS_PORT, new String[]{
                         "dk.ku.di.dms.vms.flightScheduler.booking",
                         "dk.ku.di.dms.vms.flightScheduler.common"
-                }, recoverable);
+                });
         return VmsApplication.build(options, (x,y) ->
                 new BookingHttpHandler(x, (IBookingRepository) y.apply("bookings"))); // apply on y.apply({VmsTable Name})
     }
@@ -71,15 +80,9 @@ public final class Main {
 
             long lastTid = VMS.lastTidFinished();
             this.transactionManager.beginTransaction(lastTid, 0, lastTid, true);
+
             var bookings = this.repository.getAll();
 
-            // return the (unpaid) booking ids
-            if (split[split.length-1].equals("unpaid")){
-                return bookings.stream()
-                        .filter((booking -> booking.paid == 0))
-                        .toList()
-                        .toString();
-            }
             return bookings.toString();
         }
     }
