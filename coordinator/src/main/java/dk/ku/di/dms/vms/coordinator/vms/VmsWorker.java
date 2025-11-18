@@ -689,8 +689,8 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     }
 
     private void sendBatchCommitInfo(BatchCommitInfo.Payload batchCommitInfo){
+        System.out.println(STR."SENDING BATCH COMMIT INFO \{batchCommitInfo}");
         // then send only the batch commit info
-        LOGGER.log(DEBUG, "Leader: Batch ("+batchCommitInfo.batch()+") commit info will be sent to " + this.consumerVms.identifier);
         try {
 //            System.out.println("Stall sending batch commit info to terminal VMS ....");
             ByteBuffer writeBuffer = this.retrieveByteBuffer();

@@ -177,7 +177,7 @@ public class StorageUtils {
         String basePath = currentDir + "/checkpoint/";
         String filePath = basePath + fileName + ".data";
         File file = new File(filePath);
-        System.out.println(STR."filePath: \{filePath}");
+        // System.out.println(STR."filePath: \{filePath}");
         LOGGER.log(DEBUG, "Attempt to create new file in directory: "+filePath);
         if(file.getParentFile().mkdirs()){
             LOGGER.log(DEBUG, "Parent directory ("+file.getParentFile()+") required being created.");

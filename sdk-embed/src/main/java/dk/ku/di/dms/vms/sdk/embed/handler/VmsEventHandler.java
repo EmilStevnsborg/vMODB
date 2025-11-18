@@ -423,7 +423,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     // for affected vms
     private void processAbort(TransactionAbort.Payload txAbort)
     {
-        System.out.println(STR."\{me.identifier} PROCESSES abort for \{txAbort.tid()}");
+        System.out.println(STR."\{me.identifier} STARTS PROCESSES abort for \{txAbort.tid()}");
         // pause the transactionScheduler safely
         pauseHandler.accept(true);
 
@@ -454,6 +454,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         // resume the transactionScheduler
         pauseHandler.accept(false);
+        System.out.println(STR."\{me.identifier} FINISHES PROCESSING abort for \{txAbort.tid()}");
     }
 
     // for vms that failed
@@ -498,10 +499,12 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         // resume the transactionScheduler
         pauseHandler.accept(false);
+
+        System.out.println(STR."\{me.identifier} FINISHES abort procedure for \{txResult.tid()}");
     }
 
     public void processOutputEvent(IVmsTransactionResult txResult) {
-        System.out.println(STR."new transaction result in \{me.identifier} for tid=\{txResult.tid()}");
+        // System.out.println(STR."new transaction result in \{me.identifier} for tid=\{txResult.tid()}");
 
         if (txResult.getOutboundEventResult().isAbort()) {
             abortTransaction(txResult);
@@ -535,8 +538,8 @@ public final class VmsEventHandler extends ModbHttpServer {
         if(!this.batchContextMap.containsKey(outputEvent.batch())) return;
         BatchContext thisBatch = this.batchContextMap.get(outputEvent.batch());
         if(thisBatch.numberOfTIDsBatch != batchMetadata.numberTIDsExecuted) {
-            System.out.println(STR."BATCH \{me.identifier} thisBatch.numberOfTIDsBatch=\{thisBatch.numberOfTIDsBatch}" +
-                               STR." != batchMetadata.numberTIDsExecuted=\{batchMetadata.numberTIDsExecuted}");
+//            System.out.println(STR."BATCH \{me.identifier} thisBatch.numberOfTIDsBatch=\{thisBatch.numberOfTIDsBatch}" +
+//                               STR." != batchMetadata.numberTIDsExecuted=\{batchMetadata.numberTIDsExecuted}");
             return;
         }
         thisBatch.setStatus(BatchContext.BATCH_COMPLETED);

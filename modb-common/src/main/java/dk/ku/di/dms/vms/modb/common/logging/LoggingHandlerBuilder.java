@@ -69,7 +69,7 @@ public final class LoggingHandlerBuilder {
         String basePath = currentDir + "/logs";
         String filePath = basePath + "/" + fileName;
         File file = new File(filePath);
-        System.out.println(STR."filePath: \{filePath}");
+        // System.out.println(STR."filePath: \{filePath}");
         return file;
     }
 

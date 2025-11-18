@@ -16,7 +16,7 @@ public class RecoverVmsConcurrency
 
         try {
             ComponentProcess.StartVMSes();
-            ComponentProcess.StartProxy(false, 2, 2, 3,
+            ComponentProcess.StartProxy(false, 1, 1, 1,
                     Integer.MAX_VALUE, 5);
         } catch (Exception e) {
             System.out.println("Failure starting components");
@@ -30,7 +30,7 @@ public class RecoverVmsConcurrency
         var customers = DataGenerator.GenerateCustomers(client, 40);
         var flightSeats = DataGenerator.GenerateFlightSeats(client, 0, 40);
 
-        // batch 1-3
+        // batch 1-3, should seal and commit at least two batches
         System.console().readLine();
         System.out.println(STR."TEST: sending order_flights with TIDs of [1-14)");
         for (var i = 0; i < 14; i++)

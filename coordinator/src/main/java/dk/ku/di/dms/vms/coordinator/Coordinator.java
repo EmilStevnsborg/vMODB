@@ -149,7 +149,7 @@ public final class Coordinator extends ModbHttpServer {
 
     private ILoggingHandler loggingHandler;
 
-    private Set<String> suspendedTransactions;
+    private Set<String> disallowedTransactions;
     private Set<String> offlineVMSes;
     private Map<Long, Set<TransactionEvent.Payload>> unhandledAbortedTransactions;
 
@@ -251,7 +251,7 @@ public final class Coordinator extends ModbHttpServer {
 
         var logIdentifier = "coordinator_out";
         this.loggingHandler = LoggingHandlerBuilder.build(logIdentifier, serdesProxy, this.options.getNetworkBufferSize(), truncate);
-        this.suspendedTransactions = new HashSet<>();
+        this.disallowedTransactions = new HashSet<>();
         this.offlineVMSes = new HashSet<>();
         unhandledAbortedTransactions = new HashMap<>();
 
@@ -945,10 +945,10 @@ public final class Coordinator extends ModbHttpServer {
             return false;
         }
 
-        // if transaction that input is associated with is suspended,
+        // if transaction that input is associated with is disallowed,
         // inform client that it couldn't be scheduled
-        if (suspendedTransactions.contains(dag.name)) {
-            System.out.println(STR."Denying \{dag.name}, because it's suspended");
+        if (disallowedTransactions.contains(dag.name)) {
+            System.out.println(STR."Denying \{dag.name}, because it's disallowed");
             return false;
         }
 
@@ -1052,8 +1052,12 @@ public final class Coordinator extends ModbHttpServer {
         // sending aborts
         multiCast(txAbort, failedVms);
 
+        // acknowledgement
+
         // update log
+        // I put failedTid in the log indicate it's an abort
         var failedEventRaw = loggingHandler.abort(failedTid);
+
         if (failedEventRaw == null) return;
 
         var failedEvent = TransactionEvent.read(failedEventRaw);
@@ -1069,11 +1073,17 @@ public final class Coordinator extends ModbHttpServer {
             unhandledAbortedTransactions.get(txAbort.batch()).add(failedEvent);
         }
 
+
         // resend events (after the abort is  reached)
         try {
             Thread.sleep(100);
         } catch (Exception e) {}
+
+        // explicitly indicating it's an abort
+//        resend(failedTid);
+
         resendTransactions(failedTid);
+
     }
 
 
@@ -1110,7 +1120,7 @@ public final class Coordinator extends ModbHttpServer {
                 .filter(d -> d.getNodes().contains(vmsCrash.vms()))
                 .toList();
 
-        suspendedTransactions.addAll(affectedDags.stream().map(d -> d.name).toList());
+        disallowedTransactions.addAll(affectedDags.stream().map(d -> d.name).toList());
 
         if (processingCrash) return;
         this.processingCrash = true;
@@ -1168,8 +1178,8 @@ public final class Coordinator extends ModbHttpServer {
 
         multiCast(recovery);
 
-        // compute suspended transactions
-        System.out.println(STR."updating the suspended transactions");
+        // compute disallowed transactions
+        System.out.println(STR."updating the disallowed transactions");
         var affectedDags = new HashSet<TransactionDAG>();
         for (var vms : offlineVMSes)
         {
@@ -1181,9 +1191,9 @@ public final class Coordinator extends ModbHttpServer {
             affectedDags.addAll(affectedDagsVms);
         }
 
-        suspendedTransactions = affectedDags.stream().map(d -> d.name).collect(Collectors.toSet());
+        disallowedTransactions = affectedDags.stream().map(d -> d.name).collect(Collectors.toSet());
 
-        System.out.println(STR."There are \{suspendedTransactions.size()} suspended transactions");
+        System.out.println(STR."There are \{disallowedTransactions.size()} disallowed transactions");
     }
 
     private void processBatchComplete(BatchComplete.Payload batchComplete) {
@@ -1238,7 +1248,7 @@ public final class Coordinator extends ModbHttpServer {
         if (unhandledAbortedTransactions.containsKey(batch)) {
             var abortedEvents = unhandledAbortedTransactions.get(batch);
             for (var event : abortedEvents) {
-                System.out.println(STR."coordinator fixing batch context for ABORTED event \{event.tid()}");
+                // System.out.println(STR."coordinator fixing batch context for ABORTED event \{event.tid()}");
                 fixBatchContext(batchContext, event);
             }
         }
