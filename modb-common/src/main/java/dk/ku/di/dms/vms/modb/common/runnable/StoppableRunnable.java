@@ -35,7 +35,7 @@ public abstract class StoppableRunnable implements Runnable {
     }
     public void pauseHandler(boolean pause) {}
 
-    public Long[] taskClearer(long failedTid) { return new Long[] {}; }
+    public Long[] taskClearer(long failedTid, long failedTidBatch) { System.out.println("Default task clearer");return new Long[] {}; }
     public void recover(long lastCommitBatch, long lastCommitTid) {}
 
     public void giveUpCpu(int sleepTime){

@@ -45,6 +45,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -145,7 +146,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
     private boolean abortingTransaction;
     private Consumer<Boolean> pauseHandler;
-    private Function<Long, Long[]> taskClearer;
+    private BiFunction<Long, Long, Long[]> taskClearer;
     private BiConsumer<Long, Long> recoveryHandler;
 
     private ILoggingHandler loggingHandler;
@@ -306,7 +307,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         this.pauseHandler = pauseHandler;
     }
 
-    public void AddSchedulerTaskClearer(Function<Long, Long[]> taskClearer){
+    public void AddSchedulerTaskClearer(BiFunction<Long, Long, Long[]> taskClearer){
         this.taskClearer = taskClearer;
     }
     public void AddSchedulerRecoveryHandler(BiConsumer<Long, Long> recoveryHandler){
@@ -329,6 +330,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             failedTidBatchMetadata.numberTIDsExecuted = (int) numberTIDsExecuted;
             failedTidBatchMetadata.maxTidExecuted = maxTidExecuted;
 
+            System.out.println(STR."\{me.identifier}-FIX TRACKING BATCH numberTIDsExecuted=\{numberTIDsExecuted} and maxTidExecuted=\{maxTidExecuted}");
         }
     }
 
@@ -339,7 +341,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         batchContext.abortedTIDs.add(tid);
         batchContext.numberOfTIDsBatch -= 1;
-        System.out.println(STR."\{me.identifier} updated numberOfTIDsBatch to \{batchContext.numberOfTIDsBatch}");
+        // System.out.println(STR."\{me.identifier} added \{tid} to abortedTIDs of batch context \{batchContext.batch}");
     }
 
     // crashed VMS tries to recover
@@ -372,7 +374,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     // this function only updates in memory structures
     private void abortUncommittedTransactions(AbortUncommittedTransactions.Payload abort)
     {
-        System.out.println(STR."\{me.identifier} aborts all uncommitted transactions");
+        // System.out.println(STR."\{me.identifier} aborts all uncommitted transactions");
         pauseHandler.accept(true);
         try {
 
@@ -385,7 +387,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             });
 
             // clear all tasks later than the latest committed
-            taskClearer.apply(maxTid+1);
+            taskClearer.apply(maxTid+1, batch+1);
 
             loggingHandler.cutLog(maxTid+1);
             restoreStableState(maxTid+1);
@@ -421,6 +423,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     // for affected vms
     private void processAbort(TransactionAbort.Payload txAbort)
     {
+        System.out.println(STR."\{me.identifier} PROCESSES abort for \{txAbort.tid()}");
         // pause the transactionScheduler safely
         pauseHandler.accept(true);
 
@@ -431,7 +434,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         restoreStableState(txAbort.tid());
 
         try {
-            var metadata = taskClearer.apply(txAbort.tid());
+            var metadata = taskClearer.apply(txAbort.tid(), txAbort.batch());
             var numTIDsExecuted = metadata[0];
             var maxTidExecuted = metadata[1];
             fixTrackingBatch(txAbort.batch(), numTIDsExecuted, maxTidExecuted);
@@ -456,7 +459,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     // for vms that failed
     private void abortTransaction(IVmsTransactionResult txResult)
     {
-        System.out.println(STR."Abort tId=\{txResult.tid()}");
+        System.out.println(STR."\{me.identifier} STARTS abort procedure for \{txResult.tid()}");
 
         // pause the transactionScheduler safely
         pauseHandler.accept(true);
@@ -474,7 +477,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         restoreStableState(abortMessage.tid());
 
         try {
-            var metadata = taskClearer.apply(abortMessage.tid());
+            var metadata = taskClearer.apply(abortMessage.tid(), abortMessage.batch());
             var numTIDsExecuted = metadata[0];
             var maxTidExecuted = metadata[1];
             fixTrackingBatch(abortMessage.batch(), numTIDsExecuted, maxTidExecuted);
@@ -483,11 +486,12 @@ public final class VmsEventHandler extends ModbHttpServer {
         }
 
         if (batchContextMap.containsKey(eventOutput.batch())) {
-            System.out.println(STR."\{me.identifier} fixing batch context WHEN aborting event \{eventOutput.tid()}");
+            // System.out.println(STR."\{me.identifier} fixing batch context WHEN aborting event \{eventOutput.tid()} of batch \{eventOutput.batch()}");
             var batchContext = batchContextMap.get(eventOutput.batch());
             fixBatchContext(batchContext, eventOutput.tid());
             batchContextMap.put(batchContext.batch, batchContext);
         } else {
+            // System.out.println(STR."\{me.identifier} DELAYING fixing batch context WHEN aborting event \{eventOutput.tid()} of batch \{eventOutput.batch()}");
             unhandledAbortedTransactions.putIfAbsent(eventOutput.batch(), new HashSet<>());
             unhandledAbortedTransactions.get(eventOutput.batch()).add(eventOutput.tid());
         }
@@ -497,10 +501,9 @@ public final class VmsEventHandler extends ModbHttpServer {
     }
 
     public void processOutputEvent(IVmsTransactionResult txResult) {
-        // System.out.println(STR."new transaction result in \{me.identifier} for tid=\{txResult.tid()}");
+        System.out.println(STR."new transaction result in \{me.identifier} for tid=\{txResult.tid()}");
 
         if (txResult.getOutboundEventResult().isAbort()) {
-            System.out.println(STR."tId=\{txResult.tid()} failed");
             abortTransaction(txResult);
             return;
         }
@@ -532,8 +535,8 @@ public final class VmsEventHandler extends ModbHttpServer {
         if(!this.batchContextMap.containsKey(outputEvent.batch())) return;
         BatchContext thisBatch = this.batchContextMap.get(outputEvent.batch());
         if(thisBatch.numberOfTIDsBatch != batchMetadata.numberTIDsExecuted) {
-//            System.out.println(STR."BATCH \{me.identifier} thisBatch.numberOfTIDsBatch=\{thisBatch.numberOfTIDsBatch}" +
-//                               STR." != batchMetadata.numberTIDsExecuted=\{batchMetadata.numberTIDsExecuted}");
+            System.out.println(STR."BATCH \{me.identifier} thisBatch.numberOfTIDsBatch=\{thisBatch.numberOfTIDsBatch}" +
+                               STR." != batchMetadata.numberTIDsExecuted=\{batchMetadata.numberTIDsExecuted}");
             return;
         }
         thisBatch.setStatus(BatchContext.BATCH_COMPLETED);
@@ -806,8 +809,33 @@ public final class VmsEventHandler extends ModbHttpServer {
                 int i = 0;
                 while (i < count) {
                     payload = TransactionEvent.read(readBuffer);
-                    if (vmsMetadata.queueToEventMap().containsKey(payload.event())) {
+                    if (vmsMetadata.queueToEventMap().containsKey(payload.event()))
+                    {
                         InboundEvent inboundEvent = buildInboundEvent(payload);
+
+                        var tid = inboundEvent.tid();
+                        var lastTid = inboundEvent.lastTid();
+
+                        var batchContext = batchContextMap.get(inboundEvent.batch());
+                        var unhandledAborted = unhandledAbortedTransactions.get(inboundEvent.batch());
+
+                        // System.out.println(STR."INBOUND \{inboundEvent.tid()}, \{me.identifier}");
+
+                        if (batchContext != null)
+                        {
+                            if (batchContext.abortedTIDs.contains(tid) || batchContext.abortedTIDs.contains(lastTid)) {
+                                System.out.println(STR."INBOUND tid=\{tid} or lastTid=\{lastTid} is already aborted in batch context, \{me.identifier}");
+                                continue;
+                            }
+                        }
+                        if (unhandledAborted != null)
+                        {
+                            if (unhandledAborted.contains(tid) || unhandledAborted.contains(lastTid)) {
+                                System.out.println(STR."INBOUND tid=\{tid} or lastTid=\{lastTid} is already aborted in unhandledAborted, \{me.identifier}");
+                                continue;
+                            }
+                        }
+
                         inboundEvents.add(inboundEvent);
                     }
                     i++;
@@ -1178,7 +1206,6 @@ public final class VmsEventHandler extends ModbHttpServer {
                         // events of this batch from VMSs may arrive before the batch commit info
                         // it means this VMS is a terminal node for the batch
                         BatchCommitInfo.Payload bPayload = BatchCommitInfo.read(this.readBuffer);
-                        System.out.println(STR."This, \{me.identifier}, received BATCH_COMMIT_INFO \{bPayload}");
                         this.processNewBatchInfo(bPayload);
                     }
                     case (BATCH_COMMIT_COMMAND) -> {
@@ -1281,10 +1308,34 @@ public final class VmsEventHandler extends ModbHttpServer {
                 // extract events batched
                 for (int i = 0; i < count; i++) {
                     payload = TransactionEvent.read(readBuffer);
-                    LOGGER.log(DEBUG, me.identifier+": Processed TID "+payload.tid());
-                    if (vmsMetadata.queueToEventMap().containsKey(payload.event())) {
-                        payloads.add(buildInboundEvent(payload));
-                        continue;
+                    if (vmsMetadata.queueToEventMap().containsKey(payload.event()))
+                    {
+                        InboundEvent inboundEvent = buildInboundEvent(payload);
+
+                        var tid = inboundEvent.tid();
+                        var lastTid = inboundEvent.lastTid();
+
+                        var batchContext = batchContextMap.get(inboundEvent.batch());
+                        var unhandledAborted = unhandledAbortedTransactions.get(inboundEvent.batch());
+
+                        // System.out.println(STR."INBOUND \{inboundEvent.tid()}, \{me.identifier}");
+
+                        if (batchContext != null)
+                        {
+                            if (batchContext.abortedTIDs.contains(tid) || batchContext.abortedTIDs.contains(lastTid)) {
+                                System.out.println(STR."INBOUND tid=\{tid} or lastTid=\{lastTid} is already aborted in batch context, \{me.identifier}");
+                                continue;
+                            }
+                        }
+                        if (unhandledAborted != null)
+                        {
+                            if (unhandledAborted.contains(tid) || unhandledAborted.contains(lastTid)) {
+                                System.out.println(STR."INBOUND tid=\{tid} or lastTid=\{lastTid} is already aborted in unhandledAborted, \{me.identifier}");
+                                continue;
+                            }
+                        }
+
+                        payloads.add(inboundEvent);
                     }
                     LOGGER.log(WARNING,me.identifier + ": queue not identified for event received from the leader \n"+payload);
                 }
@@ -1333,6 +1384,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                 }
             }
             batchContextMap.put(batch, batchContext);
+            // System.out.println(STR."\{me.identifier} has put batchContext for batch \{batch}");
 
             // if it has been completed but not moved to status, then should send
             if(trackingBatchMap.containsKey(batch))

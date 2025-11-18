@@ -1011,20 +1011,20 @@ public final class Coordinator extends ModbHttpServer {
                 continue;
             }
 
-            System.out.println(STR."Sending abort \{txAbort.tid()} to \{vms.identifier}");
+            // System.out.println(STR."Sending abort \{txAbort.tid()} to \{vms.identifier}");
             this.vmsWorkerContainerMap.get(vms.identifier).queueMessage(txAbort);
         }
     }
 
     private void fixBatchContext(BatchContext batchContext, TransactionEvent.Payload abortedEvent)
     {
-        System.out.println(STR."coordinator fix batch context for batch \{abortedEvent.batch()}");
+        // System.out.println(STR."coordinator fix batch context for batch \{abortedEvent.batch()}");
         var dag = transactionMap.get(abortedEvent.event());
         var affectedVMSes = dag.getNodes();
 
         batchContext.tidAborted(abortedEvent.tid(), affectedVMSes);
 
-        System.out.println(STR."coordinator updated numTIDsOverall to \{batchContext.numTIDsOverall}");
+        // System.out.println(STR."coordinator updated numTIDsOverall to \{batchContext.numTIDsOverall}");
     }
 
     private void resendTransactions(long failedTid)
@@ -1036,7 +1036,7 @@ public final class Coordinator extends ModbHttpServer {
 
             var consumerVMSes = eventToConsumersMap.get(event.event());
             for (var consumerVms : consumerVMSes) {
-                // System.out.println(STR."Resending \{event} to \{consumerVms}");
+                // System.out.println(STR."Coordinator resending \{event.tid()} to \{consumerVms} as part of aborting \{failedTid}");
                 vmsWorkerContainerMap.get(consumerVms).requeueTransactionEvent(eventRaw);
             }
         }
@@ -1045,7 +1045,7 @@ public final class Coordinator extends ModbHttpServer {
     // single abort
     private void abortTransactionInCoordinator(TransactionAbort.Payload txAbort, String failedVms)
     {
-        System.out.println("Coordinator abort transaction");
+        System.out.println(STR."coordinator processes abort for \{txAbort.tid()}");
 
         var failedTid = txAbort.tid();
 
@@ -1060,7 +1060,7 @@ public final class Coordinator extends ModbHttpServer {
 
         // delay fixing batch context if not there
         if (batchContextMap.containsKey(txAbort.batch())) {
-            System.out.println(STR."coordinator fixing batch context DURING abort for \{failedEvent.tid()}");
+            // System.out.println(STR."coordinator fixing batch context DURING abort for \{failedEvent.tid()}");
             var batchContext = batchContextMap.get(txAbort.batch());
             fixBatchContext(batchContext, failedEvent);
             batchContextMap.put(txAbort.batch(), batchContext);
@@ -1069,7 +1069,10 @@ public final class Coordinator extends ModbHttpServer {
             unhandledAbortedTransactions.get(txAbort.batch()).add(failedEvent);
         }
 
-        // resend events
+        // resend events (after the abort is  reached)
+        try {
+            Thread.sleep(100);
+        } catch (Exception e) {}
         resendTransactions(failedTid);
     }
 

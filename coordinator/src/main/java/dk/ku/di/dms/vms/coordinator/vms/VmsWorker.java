@@ -570,7 +570,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         @Override
         public void completed(Integer result, Integer startPos) {
             if(result == -1){
-                System.out.println(STR."VMS \{consumerVms.identifier} has disconnected from coordinator");
+                // System.out.println(STR."VMS \{consumerVms.identifier} has disconnected from coordinator");
                 LOGGER.log(WARNING, "Leader: " + consumerVms.identifier+" has disconnected!");
                 channel.close();
                 state = State.DISCONNECTED;

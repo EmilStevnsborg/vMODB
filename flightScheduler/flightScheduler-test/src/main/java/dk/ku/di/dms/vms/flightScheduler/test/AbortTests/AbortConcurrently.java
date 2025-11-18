@@ -47,13 +47,18 @@ public class AbortConcurrently
 
         // wait for flight orders to complete
         System.console().readLine();
-        System.out.println("TEST: sending pay_booking with TIDs of [21-31)");
 
-        // 3rd batch
         var bookings = VmsEndpoints.GetBookings(client);
         var poorCustomerBooking = bookings.stream().filter(b -> b.customer_id==poorCustomer.customer_id).findFirst().get();
         if (poorCustomerBooking == null) return false;
         bookings.remove(poorCustomerBooking);
+        var bookingToReimburse = bookings.get(18);
+
+        System.out.println(STR."TEST: got poor customer and booking to reimburse");
+
+        System.console().readLine();
+        System.out.println("TEST: sending pay_booking with TIDs of [21-31)");
+
         for (var i = 0; i < 10; i++)
             Transactions.PayBooking(client, bookings.get(i).booking_id, "VISA");
 
@@ -67,13 +72,8 @@ public class AbortConcurrently
 
         System.console().readLine();
 
-        System.out.println("TEST: sending FAILURE pay_booking with TID of [36]");
+        System.out.println("TEST: sending FAILURE pay_booking and reimburse_booking with TID of [36, 37]");
         Transactions.PayBooking(client, poorCustomerBooking.booking_id, "VISA");
-
-        //System.console().readLine();
-
-        System.out.println("TEST: sending FAILURE reimburse_booking with TID of [37]");
-        var bookingToReimburse = bookings.get(18);
         Transactions.ReimburseBooking(client, bookingToReimburse.booking_id);
 
         System.console().readLine();
@@ -108,7 +108,7 @@ public class AbortConcurrently
         else
         {
             System.out.println(STR."SUCCESS (AbortConcurrently): unpaidBookings.size()=\{unpaidBookings.size()} == 2 " +
-                               STR."FAILURE (AbortConcurrently): beforeNOTReimbursement.money=\{beforeNOTReimbursement.money} " +
+                               STR."beforeNOTReimbursement.money=\{beforeNOTReimbursement.money} " +
                                STR."!= afterNOTReimbursement.money=\{afterNOTReimbursement.money}");
         }
 
