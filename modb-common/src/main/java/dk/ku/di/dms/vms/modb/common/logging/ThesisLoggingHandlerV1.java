@@ -244,6 +244,20 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
     }
 
     // helper so lock is called before
+    private TransactionEvent.PayloadRaw findAndAbortFailedEvent(long failedTid) {
+        var eventRaw = eventsSent.get(failedTid);
+        TransactionEvent.PayloadRaw eventUpdated = null;
+        if (eventRaw != null) {
+            var event = TransactionEvent.read(eventRaw);
+            eventUpdated = TransactionEvent.of(
+                    event.tid(), event.batch(),
+                    event.event(), "",
+                    event.precedenceMap()
+            );
+            eventsSent.put(failedTid, eventUpdated);
+        }
+        return eventUpdated;
+    }
     private TransactionEvent.PayloadRaw findAndRemoveFailedEvent(long failedTid) {
         var event = eventsSent.get(failedTid);
         eventsSent.remove(failedTid);
@@ -305,28 +319,16 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
             if (precedenceToUpdate.isEmpty()) return;
         }
     }
-
-    @Override
-    public List<TransactionEvent.PayloadRaw> abort(List<Long> failedTIDs) {
-        rwLock.writeLock().lock();
-        List<TransactionEvent.PayloadRaw> abortedEvents = new ArrayList<>();
-
-        return abortedEvents;
-    }
     @Override
     public TransactionEvent.PayloadRaw abort(long failedTid) {
         // quick existence check under read-lock for better concurrency
         rwLock.writeLock().lock();
         try {
             // System.out.println(STR."Removing failed event: \{failedTid}");
-            TransactionEvent.PayloadRaw failedEvent = findAndRemoveFailedEvent(failedTid);
+            TransactionEvent.PayloadRaw failedEvent = findAndAbortFailedEvent(failedTid);
             if (failedEvent == null) {
                 return null;
             }
-//            var eventName = new String(failedEvent.event(), StandardCharsets.UTF_8);
-//            System.out.println(STR."Removing \{eventName} with tid \{failedEvent.tid()} of batch \{failedEvent.batch()}");
-
-            fixPrecedence(failedEvent);
             return failedEvent;
         } catch (Exception e) {
             e.printStackTrace();
@@ -352,6 +354,16 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
     }
 
     @Override
+    public List<TransactionEvent.PayloadRaw> readEventsFrom(long failedTid) {
+        rwLock.readLock().lock();
+        try {
+            return eventsSent.values().stream().filter(e -> e.tid() >= failedTid).toList();
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
+
+    @Override
     public List<TransactionEvent.PayloadRaw> getAffectedEvents(long failedTid) {
         rwLock.readLock().lock();
         try {
@@ -360,17 +372,6 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
             rwLock.readLock().unlock();
         }
     }
-
-    @Override
-    public int countEventsInBatch(long batch) {
-        rwLock.readLock().lock();
-        try {
-            return (int) eventsSent.values().stream().filter(e -> e.batch() == batch).count();
-        } finally {
-            rwLock.readLock().unlock();
-        }
-    }
-
 
     @Override
     public final void close(){

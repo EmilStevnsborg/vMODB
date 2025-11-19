@@ -12,8 +12,10 @@ import java.nio.charset.StandardCharsets;
 public final class TransactionEvent {
 
     // this payload
-    // message type | tid | batch | size | event name | size | payload | size | precedence map
-    private static final int FIXED_LENGTH = (2 * Long.BYTES) + (3 *  Integer.BYTES);
+    // message type | tid | batch | size | event name | size | payload | size | precedence map | aborted
+    private static final int FIXED_LENGTH = (2 * Long.BYTES) + (3 *  Integer.BYTES)
+//            + 1 * Integer.BYTES
+            ;
 
     public static void write(ByteBuffer buffer, PayloadRaw payload){
         buffer.put(Constants.EVENT);
@@ -45,17 +47,25 @@ public final class TransactionEvent {
 //        System.out.println(STR."TransactionEvent position after precedenceMap.length: \{buffer.position()}");
         buffer.put( payload.precedenceMap );
 //        System.out.println(STR."TransactionEvent position after precedenceMap: \{buffer.position()}");
+//        buffer.putInt(payload.aborted);
     }
 
     public static Payload read(ByteBuffer buffer){
         long tid = buffer.getLong();
+//        System.out.println(STR."TransactionEvent position READ tid \{tid}");
         long batch = buffer.getLong();
+//        System.out.println(STR."TransactionEvent position READ batch \{batch}");
         int eventSize = buffer.getInt();
+//        System.out.println(STR."TransactionEvent position READ eventSize \{eventSize}");
         String event = ByteUtils.extractStringFromByteBuffer( buffer, eventSize );
         int payloadSize = buffer.getInt();
+//        System.out.println(STR."TransactionEvent position READ payloadSize \{payloadSize}");
         String payload = ByteUtils.extractStringFromByteBuffer( buffer, payloadSize );
         int precedenceSize = buffer.getInt();
+//        System.out.println(STR."TransactionEvent position READ precedenceSize \{precedenceSize}");
         String precedenceMap = ByteUtils.extractStringFromByteBuffer( buffer, precedenceSize );
+//        int aborted = buffer.getInt();
+//        System.out.println(STR."TransactionEvent position READ aborted \{aborted}");
         return new Payload(tid, batch, event, payload, precedenceMap);
     }
 
@@ -80,6 +90,7 @@ public final class TransactionEvent {
             return "{"
                     + "\"tid\":\"" + tid + "\""
                     + ",\"batch\":\"" + batch + "\""
+//                    + ",\"aborted\":\"" + aborted + "\""
                     + "}";
         }
     }
@@ -95,6 +106,7 @@ public final class TransactionEvent {
                     + ",\"event\":\"" + event + "\""
                     + ",\"payload\":\"" + payload + "\""
                     + ",\"precedenceMap\":\"" + precedenceMap + "\""
+//                    + ",\"aborted\":\"" + aborted + "\""
                     + "}";
         }
     }

@@ -194,7 +194,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                     System.out.println(STR."\{me.identifier} process Recovery for consumer=\{consumerVms.identifier}");
                     processRecoveryInVms();
                 }
-                case AbortUncommittedTransactions.Payload abort ->
+                case AbortUncommittedTransactions.Payload abortUncommitted ->
                 {
                     // System.out.println(STR."\{me.identifier} clearing queue for consumer=\{consumerVms.identifier}");
                     transactionEventQueue.clear();

@@ -733,10 +733,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             try {
                 // get new buffer and send new batch
                 writeBuffer = this.retrieveByteBuffer();
-                for (var event : drained) {
-                    var eventName = new String(event.event(), StandardCharsets.UTF_8);
-                    // System.out.println(STR."coordinator sends event \{eventName} of tid=\{event.tid()} and bid=\{event.batch()} to \{consumerVms.identifier}");
-                }
                 remaining = BatchUtils.assembleBatchPayload(remaining, this.drained, writeBuffer);
 
                 LOGGER.log(DEBUG, "Leader: Submitting ["+(count - remaining)+"] events to "+consumerVms.identifier);

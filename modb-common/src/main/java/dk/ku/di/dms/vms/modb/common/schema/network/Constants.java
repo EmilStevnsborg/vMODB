@@ -16,7 +16,6 @@ public final class Constants {
 
     public static final byte CONSUMER_SET = 15;
     public static final byte VMS_RECONNECTION = 20;
-    public static final byte TX_WORKER_CRASH_HANDLED = 23;
 
     /**
      * Transaction-related Events
@@ -97,5 +96,7 @@ public final class Constants {
     public static final byte ABORT_UNCOMMITTED_TRANSACTIONS = 19;
 
     public static final byte VMS_CRASH = 21;
+    public static final byte CRASH_ACKNOWLEDGEMENT = 22;
+    public static final byte RECONNECTIONS_ACKNOWLEDGEMENT = 23;
 
 }

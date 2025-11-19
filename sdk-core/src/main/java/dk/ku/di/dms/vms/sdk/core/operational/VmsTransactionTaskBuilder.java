@@ -51,6 +51,7 @@ public final class VmsTransactionTaskBuilder {
         private volatile int status;
 
         private final List<Object> partitionKeys;
+        public final boolean aborted;
 
         private VmsTransactionTask(long tid, long lastTid, long batch,
                                    VmsTransactionSignature signature,
@@ -61,6 +62,18 @@ public final class VmsTransactionTaskBuilder {
             this.signature = signature;
             this.inputEvent = inputEvent;
             this.partitionKeys = getPartitionKeys(signature, inputEvent);
+            this.aborted = false;
+        }
+
+        private VmsTransactionTask(long tid, long lastTid, long batch,
+                                   VmsTransactionSignature signature) {
+            this.tid = tid;
+            this.lastTid = lastTid;
+            this.batch = batch;
+            this.signature = signature;
+            this.inputEvent = null;
+            this.partitionKeys = List.of();
+            this.aborted = true;
         }
 
         @SuppressWarnings("unchecked")
@@ -96,6 +109,12 @@ public final class VmsTransactionTaskBuilder {
             }
         }
 
+        private void abortedRun(){
+            transactionManager.beginTransaction(this.tid, -1, this.lastTid, true);
+            OutboundEventResult eventOutput = new OutboundEventResult(this.tid, this.batch, this.signature.outputQueue(), null);
+            schedulerCallback.success(this.signature.executionMode(), eventOutput);
+        }
+
         private void handleGenericError(Exception e, Object input) {
             System.out.println("VmsTransactionTaskBuilder handleGenericError");
             LOGGER.log(ERROR, "Error not related to invoking task "+this.toString()+"\n Input event: "+input+"\n"+ e);
@@ -111,10 +130,16 @@ public final class VmsTransactionTaskBuilder {
         @Override
         public void run() {
             this.signalRunning();
+            if (this.aborted) {
+                this.abortedRun();
+                return;
+            }
+
             if(this.signature.transactionType() == TransactionTypeEnum.R){
                 this.readOnlyRun();
                 return;
             }
+
             ITransactionContext txCtx = transactionManager.beginTransaction(this.tid, -1, this.lastTid, false);
             try {
                 Object output = this.signature.method().invoke(this.signature.vmsInstance(), this.inputEvent);
@@ -193,6 +218,11 @@ public final class VmsTransactionTaskBuilder {
                                     VmsTransactionSignature signature,
                                     Object input){
         return new VmsTransactionTask(tid, lastTid, batch, signature, input);
+    }
+
+    public VmsTransactionTask build(long tid, long lastTid, long batch,
+                                    VmsTransactionSignature signature){
+        return new VmsTransactionTask(tid, lastTid, batch, signature);
     }
 
     public VmsTransactionTask buildFinished(long tid){

@@ -207,7 +207,7 @@ public final class TransactionWorker extends StoppableRunnable {
 
             this.startingTidBatch = this.tid;
 
-            System.out.println(STR."coordinatorMessage in txWorker \{this.id}: \{coordinatorMessage}");
+            // System.out.println(STR."coordinatorMessage in txWorker \{this.id}: \{coordinatorMessage}");
             if (coordinatorMessage instanceof VmsCrash.Payload) {
                 inputQueue.clear();
                 coordinatorQueue.add(new TxWorkerProcessedCrash(this.id, ((VmsCrash.Payload) coordinatorMessage).vms()));
@@ -267,11 +267,11 @@ public final class TransactionWorker extends StoppableRunnable {
         this.batchContext.terminalVMSs.addAll( transactionDAG.terminalNodes );
 
         if(!pendingVMSs.isEmpty()) {
-            System.out.println(STR."!pendingVMSs.isEmpty() for tid \{this.tid}");
+            // System.out.println(STR."!pendingVMSs.isEmpty() for tid \{this.tid}");
             this.generatePendingTransactionInput(pendingVMSs, previousTidPerVms, transactionInput);
         } else {
             String precedenceMapStr = this.serdesProxy.serializeMap(previousTidPerVms);
-            System.out.println(STR."txWorker=\{id} assigning tid=\{this.tid}");
+            // System.out.println(STR."txWorker=\{id} assigning tid=\{this.tid}");
             TransactionEvent.PayloadRaw txEvent = TransactionEvent.of(this.tid, this.batchContext.batchOffset,
                     transactionInput.event.name, transactionInput.event.payload, precedenceMapStr);
 

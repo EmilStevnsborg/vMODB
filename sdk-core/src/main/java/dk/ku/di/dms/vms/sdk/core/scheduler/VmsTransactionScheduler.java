@@ -30,6 +30,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
     // must be concurrent since different threads are writing and reading from it concurrently
     private final Map<Long, VmsTransactionTask> transactionTaskMap;
+    private Set<Long> abortedTIDs;
 
     // map the last tid
     private final Map<Long, Long> lastTidToTidMap;
@@ -96,6 +97,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
         // operational (internal control of transactions and tasks)
         this.transactionTaskMap = new ConcurrentHashMap<>(1000000);
+        this.abortedTIDs = new HashSet<>();
         SchedulerCallback callback = new SchedulerCallback(eventHandler);
         this.vmsTransactionTaskBuilder = new VmsTransactionTaskBuilder(transactionalHandler, callback);
         this.transactionTaskMap.put( 0L, this.vmsTransactionTaskBuilder.buildFinished(0) );
@@ -262,13 +264,13 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             // transactions after failedTid
             if (entry.getKey() >= failedTid) {
                 lastTidToTidMapIterator.remove();
-            } else if (entry.getValue() >= failedTid) {
+            }
+            if (entry.getValue() == failedTid) {
                 lastTidToTidMapIterator.remove();
             }
         }
 
         // the task of the supposed failed transaction. May be null if aborted during recovery
-        var failedTask = transactionTaskMap.remove(failedTid);
         var transactionTaskMapIterator = transactionTaskMap.entrySet().iterator();
         while (transactionTaskMapIterator.hasNext()) {
             var entry = transactionTaskMapIterator.next();
@@ -277,7 +279,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             var taskTid = entry.getKey();
             VmsTransactionTask task = entry.getValue();
             var taskBatchId = task.batch;
-            if (taskTid > failedTid) {
+            if (taskTid >= failedTid) {
                 // System.out.println(STR."\{vmsIdentifier}-SCHEDULER removes task \{taskTid} with lastTid=\{task.lastTid} as part of abort for \{failedTid}");
                 transactionTaskMapIterator.remove();
             }
@@ -297,13 +299,14 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         lastTidFinished.set(floorEntry);
         var maxTidExecuted = lastTidFinished.get();
 
-        // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: sets lastTidFinished to \{lastTidFinished}");
+        // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: sets lastTidFinished to \{lastTidFinished} when clearing for \{failedTid}");
         return new Long[] {numTIDsExecuted, maxTidExecuted};
     }
 
     private void executeReadyTasks()
     {
         Long nextTid = this.lastTidToTidMap.get(this.lastTidFinished.get());
+
         // if nextTid == null then the scheduler must block until a new event arrive to progress
         if(nextTid == null) {
             // keep scheduler sleeping since next tid is unknown
@@ -426,30 +429,59 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         this.drained.clear();
     }
 
-    private void processNewEvent(InboundEvent inboundEvent) {
-//        System.out.println(STR."\{vmsIdentifier}-SCHEDULER: " +
-//                           STR."inboundEvent tid=\{inboundEvent.tid()} in \{vmsIdentifier} " +
-//                           STR."comes after lastTid=\{inboundEvent.lastTid()}");
-//                           STR."with current being lastTidFinished=\{lastTidFinished}");
+    private void processNewEvent(InboundEvent inboundEvent)
+    {
         if (this.transactionTaskMap.containsKey(inboundEvent.tid())) {
-            System.out.println(STR."inbound-\{vmsIdentifier}-SCHEDULER \{inboundEvent.tid()} has already been processed!");
+            System.out.println(STR."\{vmsIdentifier} inbound \{inboundEvent.tid()} is duplicate");
             return;
         }
 
-        this.transactionTaskMap.put(inboundEvent.tid(), this.vmsTransactionTaskBuilder.build(
-                inboundEvent.tid(),
-                inboundEvent.lastTid(),
-                inboundEvent.batch(),
-                this.transactionMetadataMap
-                        .get(inboundEvent.event())
-                        .signatures.getFirst().object(),
-                inboundEvent.input()
-        ));
+
+        var transactionIsAborted = inboundEvent.aborted() != 0;
+        var deprecated = abortedTIDs.contains(inboundEvent.tid()) && !transactionIsAborted;
+
+//        System.out.println(STR."\{vmsIdentifier} tid=\{inboundEvent.tid()} deprecated=\{deprecated}, " +
+//                           STR."transactionIsAborted=\{transactionIsAborted}, " +
+//                           STR."lastTid=\{inboundEvent.lastTid()} lastTidFinished=\{lastTidFinished}");
+
+        // deprecated event
+        if (deprecated) {
+            return;
+        }
+
+        if (transactionIsAborted) abortedTIDs.add(inboundEvent.tid());
+
+        // if the event is marked as aborted, create a pseudo task,
+        // that simply takes the inbound event and creates a
+        // pseudo output event
+
+        if (transactionIsAborted) {
+            System.out.println(STR."\{vmsIdentifier}-SCHEDULER created an empty task for already aborted \{inboundEvent.tid()}");
+            this.transactionTaskMap.put(inboundEvent.tid(), this.vmsTransactionTaskBuilder.build(
+                    inboundEvent.tid(),
+                    inboundEvent.lastTid(),
+                    inboundEvent.batch(),
+                    this.transactionMetadataMap
+                            .get(inboundEvent.event())
+                            .signatures.getFirst().object()
+            ));
+        }
+        else {
+            this.transactionTaskMap.put(inboundEvent.tid(), this.vmsTransactionTaskBuilder.build(
+                    inboundEvent.tid(),
+                    inboundEvent.lastTid(),
+                    inboundEvent.batch(),
+                    this.transactionMetadataMap
+                            .get(inboundEvent.event())
+                            .signatures.getFirst().object(),
+                    inboundEvent.input()
+            ));
+        }
         // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: put new task for tid=\{inboundEvent.tid()} with lastTid=\{inboundEvent.lastTid()}");
 
         // mark the last tid, so we can get the next to execute when appropriate
         if(this.lastTidToTidMap.containsKey(inboundEvent.lastTid())){
-            System.out.println(STR."\{vmsIdentifier}-SCHEDULER: containsKey for lastTid()=\{inboundEvent.lastTid()} of inboundEvent tid=\{inboundEvent.tid()}");
+            // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: containsKey for lastTid()=\{inboundEvent.lastTid()} of inboundEvent tid=\{inboundEvent.tid()}");
         } else {
             this.lastTidToTidMap.put(inboundEvent.lastTid(), inboundEvent.tid());
             // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: put \{inboundEvent.tid()} in map for \{inboundEvent.lastTid()}");

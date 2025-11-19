@@ -29,7 +29,8 @@ public final class BatchUtils {
         // until buffer capacity is reached or elements are all sent
         int count = 0;
         int idx = events.size() - remaining;
-        while(idx < events.size() && remainingBytes > events.get(idx).totalSize()){
+        while(idx < events.size() && remainingBytes >= events.get(idx).totalSize()){
+
             TransactionEvent.writeWithinBatch( writeBuffer, events.get(idx) );
             remainingBytes = remainingBytes - events.get(idx).totalSize();
             idx++;
