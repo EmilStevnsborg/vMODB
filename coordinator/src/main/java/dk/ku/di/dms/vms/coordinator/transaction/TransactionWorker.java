@@ -207,11 +207,11 @@ public final class TransactionWorker extends StoppableRunnable {
 
             this.startingTidBatch = this.tid;
 
-            // System.out.println(STR."coordinatorMessage in txWorker \{this.id}: \{coordinatorMessage}");
-            if (coordinatorMessage instanceof VmsCrash.Payload) {
-                inputQueue.clear();
-                coordinatorQueue.add(new TxWorkerProcessedCrash(this.id, ((VmsCrash.Payload) coordinatorMessage).vms()));
-            }
+//            System.out.println(STR."coordinatorMessage in txWorker \{this.id}: \{coordinatorMessage}");
+//            if (coordinatorMessage instanceof VmsCrash.Payload) {
+//                inputQueue.clear();
+//                coordinatorQueue.add(new TxWorkerProcessedCrash(this.id, ((VmsCrash.Payload) coordinatorMessage).vms()));
+//            }
         }
         LOGGER.log(INFO, "Finishing transaction worker # " + this.id);
     }
@@ -399,6 +399,9 @@ public final class TransactionWorker extends StoppableRunnable {
         // send batch precedence map for next worker in the ring
         this.precedenceMapOutputQueue.add(precedenceMap);
         this.batchContext.seal(this.tid - this.startingTidBatch, this.tid - 1, previousBatchPerVms, numberOfTIDsPerVms);
+
+        System.out.println(STR."txWorker \{this.id} sends batchContext \{batchContext}");
+
         this.coordinatorQueue.add(this.batchContext);
 
         // optimization: iterate over all vms in the last batch, filter those which last tid != this.tid

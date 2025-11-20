@@ -1,6 +1,7 @@
 package dk.ku.di.dms.vms.modb.common.schema.network.control;
 
 import dk.ku.di.dms.vms.modb.common.schema.network.Constants;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbortAck;
 import dk.ku.di.dms.vms.modb.common.utils.ByteUtils;
 
 import java.nio.ByteBuffer;
@@ -8,6 +9,13 @@ import java.nio.charset.StandardCharsets;
 
 public class CrashAck
 {
+    public static void write(ByteBuffer buffer, CrashAck.Payload payload) {
+        buffer.put(Constants.CRASH_ACKNOWLEDGEMENT);
+        buffer.putInt( payload.vmsCrashed.length() );
+        buffer.put( payload.vmsCrashed.getBytes(StandardCharsets.UTF_8) );
+        buffer.putInt( payload.vmsAcknowledged.length() );
+        buffer.put( payload.vmsAcknowledged.getBytes(StandardCharsets.UTF_8) );
+    }
     public static void write(ByteBuffer buffer, String vmsCrashed, String vmsAcknowledged)
     {
         buffer.put(Constants.CRASH_ACKNOWLEDGEMENT);

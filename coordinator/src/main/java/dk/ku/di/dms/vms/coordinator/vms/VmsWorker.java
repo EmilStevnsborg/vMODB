@@ -11,10 +11,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.control.*;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
-import dk.ku.di.dms.vms.modb.common.schema.network.transaction.AbortUncommittedTransactions;
-import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbort;
-import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbortInfo;
-import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.*;
 import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
 import dk.ku.di.dms.vms.modb.common.utils.BatchUtils;
 import dk.ku.di.dms.vms.web_common.NetworkUtils;
@@ -458,14 +455,14 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             case TransactionAbort.Payload o -> {
                 this.sendTransactionAbort(o);
             }
-            case Recovery.Payload o -> {
-                // just send the recovery message to the Vms
-                if (!consumerVms.identifier.equals(o.vms())) {
-                    sendRecovery(o);
-                }
+            case VmsCrash.Payload o -> {
+                sendVmsCrash(o);
             }
-            case AbortUncommittedTransactions.Payload abort -> {
-                sendAbortUncommittedTransactions(abort);
+            case VmsReconnect.Payload o -> {
+                sendVmsReconnect(o);
+            }
+            case ResetToCommittedState.Payload o -> {
+                sendResetToCommittedState();
             }
             case String o -> {
                 this.sendConsumerSet(o);
@@ -475,28 +472,30 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         }
     }
 
-    private void resendUncommittedTransactions()
-    {
-        System.out.println(STR."Vms recover events for \{consumerVms.identifier}");
-        coordinatorQueue.add(RecoverEvents.of(consumerVms.identifier, consumerVms.host, consumerVms.port));
-    }
-
-    private void sendAbortUncommittedTransactions(AbortUncommittedTransactions.Payload abort)
+    private void sendVmsCrash(VmsCrash.Payload vmsCrash)
     {
         // System.out.println(STR."VmsWorker sendAbortUncommittedTransactions message to \{consumerVms.identifier}");
         ByteBuffer writeBuffer = retrieveByteBuffer();
-        AbortUncommittedTransactions.write(writeBuffer, abort.bid());
+        VmsCrash.write(writeBuffer, vmsCrash.vms());
+        writeBuffer.flip();
+        this.acquireLock();
+        this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
+    }
+    private void sendVmsReconnect(VmsReconnect.Payload vmsReconnect)
+    {
+        // System.out.println(STR."VmsWorker sendAbortUncommittedTransactions message to \{consumerVms.identifier}");
+        ByteBuffer writeBuffer = retrieveByteBuffer();
+        VmsReconnect.write(writeBuffer, vmsReconnect.vms());
         writeBuffer.flip();
         this.acquireLock();
         this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
     }
 
-    // the workers of all affected VMSes will send this to their VMS
-    private void sendRecovery(Recovery.Payload recovery)
+    private void sendResetToCommittedState()
     {
-        // System.out.println(STR."coordinator worker for \{consumerVms.identifier} sends recovery message to VMS");
+        // System.out.println(STR."VmsWorker sendAbortUncommittedTransactions message to \{consumerVms.identifier}");
         ByteBuffer writeBuffer = retrieveByteBuffer();
-        Recovery.write(writeBuffer, recovery);
+        ResetToCommittedState.write(writeBuffer);
         writeBuffer.flip();
         this.acquireLock();
         this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
@@ -595,15 +594,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                             this.processVmsIdentifier();
                             state = VMS_PRESENTATION_PROCESSED;
 
-                            // events to resend will be in the queue
-                            if (consumerIsRecovering) {
-                                System.out.println(STR."Clearing transactionEventQueue in coordinator for \{consumerVms.identifier}");
-                                transactionEventQueue.clear();
-                                System.out.println(STR."Coordinator recover events for \{consumerVms.identifier}");
-                                coordinatorQueue.add(RecoverEvents.of(consumerVms.identifier, consumerVms.host, consumerVms.port));
-                                consumerIsRecovering = false;
-                            }
-
                         } else {
                             // in the future it can be an update of the vms schema or crash recovery
                             LOGGER.log(ERROR, "Leader: Presentation already received from VMS: " + consumerVms.identifier);
@@ -628,12 +618,18 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                         coordinatorQueue.add(response);
                     }
                     case TX_ABORT -> {
+                        // System.out.println(STR."coordinator worker for \{consumerVms.identifier} read abort");
                         TransactionAbortInfo.Payload response = TransactionAbortInfo.read(readBuffer);
+                        coordinatorQueue.add(response);
+                    }
+                    case TX_ABORT_ACK -> {
+                        // System.out.println(STR."coordinator worker for \{consumerVms.identifier} read ACK");
+                        TransactionAbortAck.Payload response = TransactionAbortAck.read(readBuffer);
                         coordinatorQueue.add(response);
                     }
                     case EVENT -> LOGGER.log(INFO, "Leader: New event received from: " + consumerVms.identifier); // TODO probably here is important
                     case BATCH_OF_EVENTS -> LOGGER.log(INFO, "Leader: New batch of events received from VMS"); // TODO or here
-                    default -> LOGGER.log(WARNING, "Leader: Unknown message received.");
+                    default -> System.out.println("Leader: Unknown message received.");
 
                 }
             } catch (BufferUnderflowException e){

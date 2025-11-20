@@ -98,5 +98,9 @@ public final class Constants {
     public static final byte VMS_CRASH = 21;
     public static final byte CRASH_ACKNOWLEDGEMENT = 22;
     public static final byte RECONNECTIONS_ACKNOWLEDGEMENT = 23;
+    public static final byte TX_ABORT_ACK = 24;
+
+    public static final byte RESET_TO_COMMITTED = 24;
+
 
 }

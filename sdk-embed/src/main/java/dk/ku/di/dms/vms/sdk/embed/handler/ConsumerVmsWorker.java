@@ -3,8 +3,7 @@ package dk.ku.di.dms.vms.sdk.embed.handler;
 import dk.ku.di.dms.vms.modb.common.memory.MemoryManager;
 import dk.ku.di.dms.vms.modb.common.runnable.StoppableRunnable;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.Presentation;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.RecoverEvents;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.Recovery;
+import dk.ku.di.dms.vms.modb.common.schema.network.control.ResetToCommittedState;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.AbortUncommittedTransactions;
@@ -15,7 +14,6 @@ import dk.ku.di.dms.vms.web_common.NetworkUtils;
 import dk.ku.di.dms.vms.web_common.channel.IChannel;
 import org.jctools.queues.MpscBlockingConsumerArrayQueue;
 
-import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
@@ -25,7 +23,6 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -71,7 +68,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     private final Supplier<IChannel> channelFactory;
     private IChannel channel;
     private boolean consumerIsRecovering;
-    private Consumer<Recovery.Payload> leaderQueueRecovery;
+    private Consumer<Object> leaderQueue;
     private Supplier<long[]> getLatestCommittedInfo;
 
     private final IVmsSerdesProxy serdesProxy;
@@ -101,12 +98,12 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                                   IdentifiableNode consumerVms,
                                   Queue<Object> vmsQueue,
                                   Supplier<IChannel> channelSupplier,
-                                  Consumer<Recovery.Payload> leaderQueueRecovery,
+                                  Consumer<Object> leaderQueue,
                                   VmsEventHandler.VmsHandlerOptions options,
                                   IVmsSerdesProxy serdesProxy) {
 
         return new ConsumerVmsWorker(me, consumerVms, vmsQueue,
-                channelSupplier, leaderQueueRecovery, options, serdesProxy);
+                channelSupplier, leaderQueue, options, serdesProxy);
     }
 
     private ConsumerVmsWorker(VmsNode me,
@@ -114,7 +111,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                              // messages to send the parent vms
                              Queue<Object> vmsQueue,
                              Supplier<IChannel> channelFactory,
-                             Consumer<Recovery.Payload> leaderQueueRecovery,
+                             Consumer<Object> leaderQueue,
                              VmsEventHandler.VmsHandlerOptions options,
                              IVmsSerdesProxy serdesProxy) {
         this.me = me;
@@ -122,7 +119,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         this.channelFactory = channelFactory;
         this.channel = this.channelFactory.get();
         this.consumerIsRecovering = false;
-        this.leaderQueueRecovery = leaderQueueRecovery;
+        this.leaderQueue = leaderQueue;
 
         this.serdesProxy = serdesProxy;
         this.options = options;
@@ -189,12 +186,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
             // System.out.println(STR."ConsumerVmsWorker polled a message \{pendingMessage}");
             switch (pendingMessage)
             {
-                case Recovery.Payload recovery ->
-                {
-                    System.out.println(STR."\{me.identifier} process Recovery for consumer=\{consumerVms.identifier}");
-                    processRecoveryInVms();
-                }
-                case AbortUncommittedTransactions.Payload abortUncommitted ->
+                case ResetToCommittedState.Payload reset ->
                 {
                     // System.out.println(STR."\{me.identifier} clearing queue for consumer=\{consumerVms.identifier}");
                     transactionEventQueue.clear();

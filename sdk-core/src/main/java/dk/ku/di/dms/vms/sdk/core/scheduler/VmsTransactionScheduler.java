@@ -30,7 +30,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
     // must be concurrent since different threads are writing and reading from it concurrently
     private final Map<Long, VmsTransactionTask> transactionTaskMap;
-    private Set<Long> abortedTIDs;
+    private Map<Long, Set<Long>> batchAbortedTIDs;
 
     // map the last tid
     private final Map<Long, Long> lastTidToTidMap;
@@ -67,6 +67,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                                                 Map<String, VmsTransactionMetadata> transactionMetadataMap,
                                                 ITransactionManager transactionalHandler,
                                                 Consumer<IVmsTransactionResult> eventHandler,
+                                                Map<Long, Set<Long>> vmsBatchAbortedTIDs,
                                                 int vmsThreadPoolSize){
         LOGGER.log(INFO, vmsIdentifier+ ": Building transaction scheduler with thread pool size of "+ vmsThreadPoolSize);
         return new VmsTransactionScheduler(
@@ -76,7 +77,8 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                 transactionInputQueue,
                 transactionMetadataMap,
                 transactionalHandler,
-                eventHandler);
+                eventHandler,
+                vmsBatchAbortedTIDs);
     }
 
     private VmsTransactionScheduler(String vmsIdentifier,
@@ -84,7 +86,8 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                                     BlockingQueue<InboundEvent> transactionInputQueue,
                                     Map<String, VmsTransactionMetadata> transactionMetadataMap,
                                     ITransactionManager transactionalHandler,
-                                    Consumer<IVmsTransactionResult> eventHandler){
+                                    Consumer<IVmsTransactionResult> eventHandler,
+                                    Map<Long, Set<Long>> vmsBatchAbortedTIDs){
         super();
 
         this.vmsIdentifier = vmsIdentifier;
@@ -97,8 +100,8 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
         // operational (internal control of transactions and tasks)
         this.transactionTaskMap = new ConcurrentHashMap<>(1000000);
-        this.abortedTIDs = new HashSet<>();
         SchedulerCallback callback = new SchedulerCallback(eventHandler);
+        this.batchAbortedTIDs = vmsBatchAbortedTIDs;
         this.vmsTransactionTaskBuilder = new VmsTransactionTaskBuilder(transactionalHandler, callback);
         this.transactionTaskMap.put( 0L, this.vmsTransactionTaskBuilder.buildFinished(0) );
         this.lastTidToTidMap = new HashMap<>(1000000);
@@ -229,10 +232,15 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         var RUNNING = 2;
         if (pause) {
             pause();
+
+            // wait for tasks to finish
             for (var task : transactionTaskMap.values()) {
                 // wait for running tasks to finish
                 while (task.status() == RUNNING) {}
             }
+
+            // also stop processing tasks
+            while(!drained.isEmpty()) {}
         } else {
             resume();
         }
@@ -253,6 +261,8 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         // System.out.println(STR."\{vmsIdentifier} clearing tasks at and later than \{failedTid}");
 
         // input queue may contain
+        // block the queue
+        // filter it
 
         long numTIDsExecuted = 0;
         var lastTidToTidMapIterator = lastTidToTidMap.entrySet().iterator();
@@ -280,7 +290,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             VmsTransactionTask task = entry.getValue();
             var taskBatchId = task.batch;
             if (taskTid >= failedTid) {
-                // System.out.println(STR."\{vmsIdentifier}-SCHEDULER removes task \{taskTid} with lastTid=\{task.lastTid} as part of abort for \{failedTid}");
+                System.out.println(STR."REMOVES task \{taskTid} with lastTid=\{task.lastTid} as part of abort for \{failedTid} in \{vmsIdentifier}");
                 transactionTaskMapIterator.remove();
             }
 
@@ -298,6 +308,10 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                 .orElse(0L);
         lastTidFinished.set(floorEntry);
         var maxTidExecuted = lastTidFinished.get();
+
+
+        // unblock the queue
+
 
         // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: sets lastTidFinished to \{lastTidFinished} when clearing for \{failedTid}");
         return new Long[] {numTIDsExecuted, maxTidExecuted};
@@ -317,8 +331,9 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             return;
         }
         VmsTransactionTask task = this.transactionTaskMap.get( nextTid );
-        // System.out.println(STR."\{vmsIdentifier}-SCHEDULER nextTID for \{this.lastTidFinished.get()} is \{nextTid}");
+        // System.out.println(STR."\{vmsIdentifier}-SCHEDULER nextTID for last\{this.lastTidFinished.get()} is \{nextTid}");
         if (task == null) {
+            // System.out.println(STR."task is null for \{nextTid}");
             return;
         }
         while(true) {
@@ -391,19 +406,19 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
     private boolean canSingleThreadTaskRun() {
         var runnable = !this.singleThreadTaskRunning && this.numParallelTasksRunning.get() == 0 && numPartitionedTasksRunning.get() == 0;
-        // System.out.println(STR."\{vmsIdentifier}-SCHEDULER canSingleThreadTaskRun=\{runnable}");
+//        System.out.println(STR."\{vmsIdentifier}-SCHEDULER canSingleThreadTaskRun=\{runnable}");
         return runnable;
     }
 
     private boolean canPartitionedTaskRun(){
         var runnable = !this.singleThreadTaskRunning && this.numParallelTasksRunning.get() == 0;
-        // System.out.println(STR."\{vmsIdentifier}-SCHEDULER canPartitionedTaskRun=\{runnable}");
+//        System.out.println(STR."\{vmsIdentifier}-SCHEDULER canPartitionedTaskRun=\{runnable}");
         return runnable;
     }
 
     private boolean canParallelTaskRun(){
         var runnable = !this.singleThreadTaskRunning && this.numPartitionedTasksRunning.get() == 0;
-        // System.out.println(STR."\{vmsIdentifier}-SCHEDULER canParallelTaskRun=\{runnable}");
+//        System.out.println(STR."\{vmsIdentifier}-SCHEDULER canParallelTaskRun=\{runnable}");
         return runnable;
     }
 
@@ -432,16 +447,22 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     private void processNewEvent(InboundEvent inboundEvent)
     {
         if (this.transactionTaskMap.containsKey(inboundEvent.tid())) {
-            System.out.println(STR."\{vmsIdentifier} inbound \{inboundEvent.tid()} is duplicate");
+            var task = transactionTaskMap.get(inboundEvent.tid());
+//            System.out.println(STR."\{vmsIdentifier} inbound \{inboundEvent.tid()} with lastTid=\{inboundEvent.tid()} " +
+//                               STR."is duplicate for task with lastTid=\{task.lastTid}");
+
             return;
         }
+        var abortedTIDs = batchAbortedTIDs.get(inboundEvent.batch());
 
+        // deprecated event
+        //   1. if it is aborted
+        //   2. if the lastTid is aborted
+        var deprecated = abortedTIDs != null &&
+                         (abortedTIDs.contains(inboundEvent.tid()) ||
+                         abortedTIDs.contains(inboundEvent.lastTid()));
 
-        var transactionIsAborted = inboundEvent.aborted() != 0;
-        var deprecated = abortedTIDs.contains(inboundEvent.tid()) && !transactionIsAborted;
-
-//        System.out.println(STR."\{vmsIdentifier} tid=\{inboundEvent.tid()} deprecated=\{deprecated}, " +
-//                           STR."transactionIsAborted=\{transactionIsAborted}, " +
+//        System.out.println(STR."\{vmsIdentifier} tid=\{inboundEvent.tid()} batch=\{inboundEvent.batch()} deprecated=\{deprecated}, " +
 //                           STR."lastTid=\{inboundEvent.lastTid()} lastTidFinished=\{lastTidFinished}");
 
         // deprecated event
@@ -449,34 +470,19 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             return;
         }
 
-        if (transactionIsAborted) abortedTIDs.add(inboundEvent.tid());
-
         // if the event is marked as aborted, create a pseudo task,
         // that simply takes the inbound event and creates a
         // pseudo output event
 
-        if (transactionIsAborted) {
-            System.out.println(STR."\{vmsIdentifier}-SCHEDULER created an empty task for already aborted \{inboundEvent.tid()}");
-            this.transactionTaskMap.put(inboundEvent.tid(), this.vmsTransactionTaskBuilder.build(
-                    inboundEvent.tid(),
-                    inboundEvent.lastTid(),
-                    inboundEvent.batch(),
-                    this.transactionMetadataMap
-                            .get(inboundEvent.event())
-                            .signatures.getFirst().object()
-            ));
-        }
-        else {
-            this.transactionTaskMap.put(inboundEvent.tid(), this.vmsTransactionTaskBuilder.build(
-                    inboundEvent.tid(),
-                    inboundEvent.lastTid(),
-                    inboundEvent.batch(),
-                    this.transactionMetadataMap
-                            .get(inboundEvent.event())
-                            .signatures.getFirst().object(),
-                    inboundEvent.input()
-            ));
-        }
+        this.transactionTaskMap.put(inboundEvent.tid(), this.vmsTransactionTaskBuilder.build(
+                inboundEvent.tid(),
+                inboundEvent.lastTid(),
+                inboundEvent.batch(),
+                this.transactionMetadataMap
+                        .get(inboundEvent.event())
+                        .signatures.getFirst().object(),
+                inboundEvent.input()
+        ));
         // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: put new task for tid=\{inboundEvent.tid()} with lastTid=\{inboundEvent.lastTid()}");
 
         // mark the last tid, so we can get the next to execute when appropriate

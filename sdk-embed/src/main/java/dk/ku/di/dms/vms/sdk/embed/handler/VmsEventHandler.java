@@ -5,18 +5,12 @@ import dk.ku.di.dms.vms.modb.common.logging.LoggingHandlerBuilder;
 import dk.ku.di.dms.vms.modb.common.logging.LongPairStore;
 import dk.ku.di.dms.vms.modb.common.memory.MemoryManager;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.*;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.ConsumerSet;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.Presentation;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.RecoverEvents;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.Recovery;
+import dk.ku.di.dms.vms.modb.common.schema.network.control.*;
 import dk.ku.di.dms.vms.modb.common.schema.network.meta.NetworkAddress;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
-import dk.ku.di.dms.vms.modb.common.schema.network.transaction.AbortUncommittedTransactions;
-import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbort;
-import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbortInfo;
-import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.*;
 import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
 import dk.ku.di.dms.vms.modb.common.transaction.ITransactionManager;
 import dk.ku.di.dms.vms.sdk.core.metadata.VmsRuntimeMetadata;
@@ -154,7 +148,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     private final BlockingQueue<Object> vmsQueue;
 
     private LongPairStore commitInfo;
-    private Set<Long> abortedTIDs;
+    public Map<Long, Set<Long>> batchAbortedTIDs;
 
     public static VmsEventHandler build(// to identify which vms this is
                                         VmsNode me,
@@ -269,7 +263,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         this.vmsQueue = new LinkedBlockingQueue<>();
         this.commitInfo = new LongPairStore("commit_info", !recoveryEnabled);
-        this.abortedTIDs = new HashSet<>();
+        this.batchAbortedTIDs = new HashMap<>();
     }
 
     @Override
@@ -360,8 +354,13 @@ public final class VmsEventHandler extends ModbHttpServer {
         pauseHandler.accept(false);
     }
 
+    private void processVmsCrash(VmsCrash.Payload vmsCrash)
+    {
+
+    }
+
     // this function only updates in memory structures
-    private void abortUncommittedTransactions(AbortUncommittedTransactions.Payload abortUncommitted)
+    private void resetToCommittedState()
     {
         // System.out.println(STR."\{me.identifier} aborts all uncommitted transactions");
         pauseHandler.accept(true);
@@ -370,8 +369,9 @@ public final class VmsEventHandler extends ModbHttpServer {
         var batch = latestCommitInfo[0];
         var maxTid = latestCommitInfo[1];
 
+        // clear transaction event queues
         consumerVmsContainerMap.values().forEach(worker -> {
-            worker.queueMessage(abortUncommitted);
+            worker.queueMessage(ResetToCommittedState.of());
         });
 
         // input queue clear??? (an event can't be in the queue unless it was processed upstream??)
@@ -390,55 +390,88 @@ public final class VmsEventHandler extends ModbHttpServer {
         pauseHandler.accept(false);
     }
 
-    // The consumerWorker of the crashed vms must reconnect
-    //      1. it needs to help recover it
-    private void processRecovery(Recovery.Payload recovery)
+    private void processCrash(VmsCrash.Payload vmsCrash)
     {
-        var crashedVms = vmsMetadataMap.get(recovery.vms());
+        var crashedVmsWorkerContainer = consumerVmsContainerMap.remove(vmsCrash.vms());
+        crashedVmsWorkerContainer.stop();
+
+        // abort uncommitted events
+        resetToCommittedState();
+
+        var crashAck = CrashAck.of(vmsCrash.vms(), me.identifier);
+        leaderWorker.queueMessage(crashAck);
+    }
+
+    // vms is back online, this vms is a producer and must reconnect
+    private void processVmsReconnection(VmsReconnect.Payload reconnection)
+    {
+        var restartedVms = reconnection.vms();
         // safeguard
-         if (!consumerVmsContainerMap.containsKey(crashedVms))
+         if (!consumerVmsContainerMap.containsKey(restartedVms))
         {
             // System.out.println(STR."Crashed Vms \{crashedVms} is not a consumer");
             return;
         }
 
-        System.out.println(STR."\{me.identifier} initiates recovery of consumer \{crashedVms}");
-        var crashedVmsWorkerContainer = consumerVmsContainerMap.remove(crashedVms);
-        crashedVmsWorkerContainer.stop();
+        System.out.println(STR."\{me.identifier} initiates reconnection to consumer \{restartedVms}");
 
-        initConsumerVmsWorker(crashedVms, consumerToEventsMap.get(crashedVms.identifier));
+         // init new worker
+        var restartedVmsNode = vmsMetadataMap.get(restartedVms);
+        initConsumerVmsWorker(restartedVmsNode, consumerToEventsMap.get(restartedVms));
+
+        var reconnectionACK = ReconnectionAck.of(restartedVms, me.identifier);
+        leaderWorker.queueMessage(reconnectionACK);
     }
 
 
-    private void applyAbortLocally(long tid, long bid)
+    private void applyAbortLocally(long tid, long bid, boolean initiatedAbort)
     {
         // System.out.println(STR."\{me.identifier} APPLIES abort for \{tid}");
         pauseHandler.accept(true);
 
-//        // remove all events form queue
-//        // can this be done safely?
-//        vmsInternalChannels.transactionInputQueue().clear();
+        batchAbortedTIDs.putIfAbsent(bid, new HashSet());
+        batchAbortedTIDs.get(bid).add(tid);
 
-        abortedTIDs.add(tid);
+        if (batchContextMap.containsKey(bid)) {
+            var batchContext = batchContextMap.get(bid);
 
-        // send abort message
-        var abortMessage = TransactionAbortInfo.of(bid, tid, me.identifier);
-        this.leaderWorker.queueMessage(abortMessage);
-
-        loggingHandler.cutLog(tid);
-
-        restoreStableState(tid);
-
-        // input queue clear??? (an event can't be in the queue unless it was processed upstream??)
-        // if A->B->C, and 10 aborts in C, then 30 may be in the queue, 30 will still be sent by B?
-        vmsInternalChannels.transactionInputQueue().clear();
+            if (!batchContext.abortedTIDs.contains(tid)) {
+                batchContext.numberOfTIDsBatch -= 1;
+                batchContext.abortedTIDs.add(tid);
+                batchContextMap.put(bid, batchContext);
+            }
+        }
 
         // clear tasks
         var metadata = taskClearer.apply(tid, bid);
 
+        // including removing tid
+        loggingHandler.cutLog(tid);
+
+        // including removing tid
+        restoreStableState(tid);
+
+        // input queue clear??? (an event can't be in the queue unless it was processed upstream??)
+        // if A->B->C, and 10 aborts in C, then 30 may be in the queue, 30 will still be sent by B?
+        // look at pauseHandler
+
         var numTIDsExecuted = metadata[0];
         var maxTidExecuted = metadata[1];
         fixTrackingBatch(bid, numTIDsExecuted, maxTidExecuted);
+
+
+        // Had to move this, because the scheduler is not paused properly, which means I will clear the tasks
+        // after processing the events resent by the coordinator
+        if (initiatedAbort) {
+            // send abort message
+            var abortMessage = TransactionAbortInfo.of(bid, tid, me.identifier);
+            this.leaderWorker.queueMessage(abortMessage);
+        } else {
+            // send abort acknowledgement
+            var abortMessage = TransactionAbortAck.of(bid, tid, me.identifier);
+            this.leaderWorker.queueMessage(abortMessage);
+            // System.out.println(STR."\{me.identifier} ACKs abort of \{tid} to leader");
+        }
 
         pauseHandler.accept(false);
     }
@@ -450,15 +483,17 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         var tid = txAbort.tid();
         var bid = txAbort.batch();
-        if (abortedTIDs.contains(tid)) {
+        var abortedTIDs = batchAbortedTIDs.get(bid);
+        if (abortedTIDs != null && abortedTIDs.contains(tid))
+        {
              var abortMessage = TransactionAbortInfo.of(bid, tid, me.identifier);
              this.leaderWorker.queueMessage(abortMessage);
              return;
         }
 
-        System.out.println(STR."\{me.identifier} RECEIVED abort \{tid}");
+        System.out.println(STR."\{me.identifier} PROCESSES abort of \{tid}");
 
-        applyAbortLocally(tid, bid);
+        applyAbortLocally(tid, bid, false);
     }
 
     // for vms that failed
@@ -470,8 +505,9 @@ public final class VmsEventHandler extends ModbHttpServer {
         var tid = eventOutput.tid();
         var bid = eventOutput.batch();
 
-        var abortMessage = TransactionAbortInfo.of(bid, tid, me.identifier);
-        this.leaderWorker.queueMessage(abortMessage);
+        System.out.println(STR."\{me.identifier} INITIATES abort of \{tid}");
+
+        applyAbortLocally(tid, bid, true);
     }
 
     public void processOutputEvent(IVmsTransactionResult txResult) {
@@ -513,6 +549,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 //                               STR." != batchMetadata.numberTIDsExecuted=\{batchMetadata.numberTIDsExecuted}");
             return;
         }
+        System.out.println(STR."\{me.identifier} setting BATCH_COMPLETED");
         thisBatch.setStatus(BatchContext.BATCH_COMPLETED);
         // if terminal, must send batch complete
         if (thisBatch.terminal) {
@@ -615,16 +652,11 @@ public final class VmsEventHandler extends ModbHttpServer {
         }
 
         // has not aborted
-        var isAborted = outputEvent.output() == null ? 1 : 0;
-        String payloadpayload = isAborted == 1 ? "" : this.serdesProxy.serialize(outputEvent.output(), clazz);
+        String payloadpayload = this.serdesProxy.serialize(outputEvent.output(), clazz);
         TransactionEvent.PayloadRaw payload =
                 TransactionEvent.of(outputEvent.tid(), outputEvent.batch(),
                                     outputEvent.outputQueue(), payloadpayload,
                                     precedenceMap);
-
-        if (isAborted == 1) {
-            System.out.println(STR."\{me.identifier} produced an output for an aborted transaction");
-        }
 
         loggingHandler.log(payload);
 
@@ -1194,14 +1226,16 @@ public final class VmsEventHandler extends ModbHttpServer {
                         TransactionAbort.Payload txAbortPayload = TransactionAbort.read(this.readBuffer);
                         processAbort(txAbortPayload);
                     }
-                    case (RECOVERY) -> {
-                        // System.out.println(STR."Received recovery message from leader");
-                        Recovery.Payload recovery = Recovery.read(this.readBuffer);
-                        processRecovery(recovery);
+                    case (VMS_CRASH) -> {
+                        VmsCrash.Payload vmsCrash = VmsCrash.read(this.readBuffer);
+                        processVmsCrash(vmsCrash);
                     }
-                    case (ABORT_UNCOMMITTED_TRANSACTIONS) -> {
-                        AbortUncommittedTransactions.Payload abort = AbortUncommittedTransactions.read(this.readBuffer);
-                        abortUncommittedTransactions(abort);
+                    case (VMS_RECONNECTION) -> {
+                        VmsReconnect.Payload vmsReconnect = VmsReconnect.read(this.readBuffer);
+                        processVmsReconnection(vmsReconnect);
+                    }
+                    case (RESET_TO_COMMITTED) -> {
+                        resetToCommittedState();
                     }
                     case (CONSUMER_SET) -> {
                         try {
@@ -1319,6 +1353,19 @@ public final class VmsEventHandler extends ModbHttpServer {
         {
             BatchContext batchContext = BatchContext.build(batchCommitInfo);
             var batch = batchCommitInfo.batch();
+
+            // check if batch context needs updating
+            // are the aborted TIDs registered
+            var abortedTIDs = batchAbortedTIDs.get(batch);
+            if (abortedTIDs != null) {
+                for (var abortedTID : abortedTIDs) {
+                    if (!batchContext.abortedTIDs.contains(abortedTID)) {
+                        batchContext.numberOfTIDsBatch -= 1;
+                        batchContext.abortedTIDs.add(abortedTID);
+                    }
+                }
+            }
+
             batchContextMap.put(batch, batchContext);
             // System.out.println(STR."\{me.identifier} has put batchContext for batch \{batch}");
 

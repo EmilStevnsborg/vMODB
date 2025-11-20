@@ -310,7 +310,7 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
                 // atomically replace the event in the map
                 eventsSent.replace(entry.getKey(), updatedEventRaw);
 
-                // debugging
+//                // debugging
 //                for (var updatedPrecedence : eventPrecedenceMap.entrySet())
 //                {
 //                    System.out.println(STR."Updated precedence \{updatedPrecedence.getKey()} for \{eventReadable.tid()} to \{updatedPrecedence.getValue()}");
@@ -325,10 +325,12 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
         rwLock.writeLock().lock();
         try {
             // System.out.println(STR."Removing failed event: \{failedTid}");
-            TransactionEvent.PayloadRaw failedEvent = findAndAbortFailedEvent(failedTid);
+            TransactionEvent.PayloadRaw failedEvent = findAndRemoveFailedEvent(failedTid);
             if (failedEvent == null) {
                 return null;
             }
+
+            fixPrecedence(failedEvent);
             return failedEvent;
         } catch (Exception e) {
             e.printStackTrace();

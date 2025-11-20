@@ -8,6 +8,13 @@ import java.nio.charset.StandardCharsets;
 
 public class ReconnectionAck
 {
+    public static void write(ByteBuffer buffer, ReconnectionAck.Payload payload) {
+        buffer.put(Constants.CRASH_ACKNOWLEDGEMENT);
+        buffer.putInt( payload.vmsRestarted.length() );
+        buffer.put( payload.vmsRestarted.getBytes(StandardCharsets.UTF_8) );
+        buffer.putInt( payload.vmsAcknowledged.length() );
+        buffer.put( payload.vmsAcknowledged.getBytes(StandardCharsets.UTF_8) );
+    }
 
     public static void write(ByteBuffer buffer, String vmsRestarted, String vmsAcknowledged)
     {

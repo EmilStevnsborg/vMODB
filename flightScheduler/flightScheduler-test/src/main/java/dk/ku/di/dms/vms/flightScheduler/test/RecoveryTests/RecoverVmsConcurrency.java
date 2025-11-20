@@ -16,7 +16,7 @@ public class RecoverVmsConcurrency
 
         try {
             ComponentProcess.StartVMSes();
-            ComponentProcess.StartProxy(false, 1, 1, 1,
+            ComponentProcess.StartProxy(false, 1, 1, 3,
                     Integer.MAX_VALUE, 5);
         } catch (Exception e) {
             System.out.println("Failure starting components");

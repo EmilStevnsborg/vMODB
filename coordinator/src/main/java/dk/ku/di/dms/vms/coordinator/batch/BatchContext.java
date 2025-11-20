@@ -67,4 +67,13 @@ public final class BatchContext {
         }
     }
 
+    @Override
+    public String toString() {
+        return "{"
+                + "\"batch\":\"" + batchOffset + "\""
+                + ",\"numberOfTIDsPerVms\":\"" + numberOfTIDsPerVms + "\""
+                + ",\"previousBatchPerVms\":\"" + previousBatchPerVms + "\""
+                + "}";
+    }
+
 }

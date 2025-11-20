@@ -23,17 +23,11 @@ import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitAck;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitCommand;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitInfo;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchComplete;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.Presentation;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.RecoverEvents;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.Recovery;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.VmsCrash;
+import dk.ku.di.dms.vms.modb.common.schema.network.control.*;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
-import dk.ku.di.dms.vms.modb.common.schema.network.transaction.AbortUncommittedTransactions;
-import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbort;
-import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbortInfo;
-import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.*;
 import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
 import dk.ku.di.dms.vms.modb.common.serdes.VmsSerdesProxyBuilder;
 import dk.ku.di.dms.vms.web_common.HttpUtils;
@@ -151,7 +145,9 @@ public final class Coordinator extends ModbHttpServer {
 
     private Set<String> disallowedTransactions;
     private Set<String> offlineVMSes;
+    private Map<Long, Set<TransactionEvent.Payload>> batchAbortedTxInputs;
     private Map<Long, Set<String>> ongoingAbortMissingVmsAck;
+    private Set<Long> pendingAborts;
     private Map<String, Set<String>> ongoingCrashMissingVmsAck;
     private Map<String, Set<String>> ongoingReconnectionMissingVmsAck;
 
@@ -256,6 +252,10 @@ public final class Coordinator extends ModbHttpServer {
         this.disallowedTransactions = new HashSet<>();
         this.offlineVMSes = new HashSet<>();
         this.ongoingAbortMissingVmsAck = new HashMap<>();
+        this.batchAbortedTxInputs = new HashMap<>();
+        this.pendingAborts = new HashSet<>();
+        this.ongoingCrashMissingVmsAck = new HashMap<>();
+        this.ongoingReconnectionMissingVmsAck = new HashMap<>();
 
         try {
             if (options.getNetworkThreadPoolSize() > 0) {
@@ -373,12 +373,12 @@ public final class Coordinator extends ModbHttpServer {
                 var latestCommitInfo = loggingHandler.latestCommit();
                 var batchOffset = latestCommitInfo[0];
                 var tid = latestCommitInfo[1];
-                var message = new AbortUncommittedTransactions.Payload(batchOffset+1);
+                var resetToCommittedStateMessage = ResetToCommittedState.of();
 
+                // NEED ACKs
                 for (var vms: vmsMetadataMap.values())
                 {
-                    System.out.println("AbortUncommittedTransactions for workers");
-                    this.vmsWorkerContainerMap.get(vms.identifier).queueMessage(message);
+                    this.vmsWorkerContainerMap.get(vms.identifier).queueMessage(resetToCommittedStateMessage);
                 }
 
                 System.out.println(STR."Coordinator start latest tid and bid are \{tid} and \{batchOffset}");
@@ -506,6 +506,7 @@ public final class Coordinator extends ModbHttpServer {
 
         var starterPrecedenceMap = startingTid == 1 ? buildStarterPrecedenceMap() : buildStarterPrecedenceMap(true);
 
+        // each worker should have different starting TIDs and BIDs
         firstPrecedenceInputQueue.add(starterPrecedenceMap);
 
         int idx = 1;
@@ -856,10 +857,14 @@ public final class Coordinator extends ModbHttpServer {
                 System.out.println("VMS_RECONNECTION");
                 buffer.position(1);
                 var node = IdentifiableNode.read(buffer); // this can potentially be hacked
-                var restartedVms = vmsMetadataMap.get(node.identifier);
 
-                // reconnect and recover
-                processReconnectionInCoordinator(restartedVms);
+                boolean active = consumerToEventsMap.get(node.identifier).size() > 0;
+                try {
+                    initVmsWorker(node, active);
+                    // rest of reconnection happens in vmsIdentifier
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
                 return;
             }
 
@@ -982,44 +987,104 @@ public final class Coordinator extends ModbHttpServer {
                 System.out.println(STR."txWorker id=\{txWorkerProcessedCrash.id} processed crash");
             }
             case VmsNode vmsNode -> this.processVmsIdentifier(vmsNode);
+            case TransactionAbortAck.Payload txAbortAck ->
+            {
+                var abortedTid = txAbortAck.tid();
+                var vmsAcknowledgedAbort = txAbortAck.vms();
+
+                ongoingAbortMissingVmsAck.get(abortedTid).remove(vmsAcknowledgedAbort);
+
+                var missingACKs = ongoingAbortMissingVmsAck.get(abortedTid);
+                // System.out.println(STR."received ACK from \{vmsAcknowledgedAbort} for \{abortedTid}, missing fron [\{String.join(", ", missingACKs)}] in abort of \{abortedTid}");
+
+                // all VMSes have received abort
+                if (missingACKs.size() == 0)
+                {
+                    // incorporate with pending aborts
+                    // don't resend transactions to be aborted (for optimization, not consistency)
+                    resendTransactions(abortedTid);
+                    ongoingAbortMissingVmsAck.remove(abortedTid);
+                }
+            }
+            // sent only by VMSes initiating abort
             case TransactionAbortInfo.Payload txAbortInfo ->
                 {
-                    //
                     var abortedTid = txAbortInfo.tid();
-                    if (!ongoingAbortMissingVmsAck.isEmpty() && !ongoingAbortMissingVmsAck.containsKey(abortedTid)) {
-                        System.out.println(STR."Re-queueing the abort protocol for \{txAbortInfo.tid()}");
-                        coordinatorQueue.add(txAbortInfo);
-                    }
 
-                    if (ongoingAbortMissingVmsAck.containsKey(abortedTid))
+                    // currently one abort is being processed
+                    if (!ongoingAbortMissingVmsAck.isEmpty())
                     {
-                        // only process one
-                        if (!ongoingAbortMissingVmsAck.get(abortedTid).contains(txAbortInfo.vms())) {
-                            System.out.println(STR."coordinator received duplicate abort ack from \{txAbortInfo.vms()} for \{txAbortInfo.tid()}");
-                            return;
+                        // someone tried to initiate abort of ongoing abort
+                        if (ongoingAbortMissingVmsAck.containsKey(abortedTid))
+                        {
+                            // just remove them
+                            // what if they started the abort also
+                            // and they received an ACK
+                            ongoingAbortMissingVmsAck.get(abortedTid).remove(txAbortInfo.vms());
                         }
-                        // System.out.println(STR."coordinator received abort ack from \{txAbortInfo.vms()} for \{txAbortInfo.tid()}");
-
-                        // vms has acknowledged the abort message
-                        ongoingAbortMissingVmsAck.get(abortedTid).remove(txAbortInfo.vms());
+                        // this is another abort
+                        else
+                        {
+                            // store this new abort as pending and requeue
+                            pendingAborts.add(txAbortInfo.tid());
+                            coordinatorQueue.add(txAbortInfo);
+                        }
                     }
+
+                    // There are no ongoing abort processes already
                     else
                     {
                         // initiate abort
                         var txAbort = TransactionAbort.of(txAbortInfo.batch(), abortedTid);
                         this.abortTransactionInCoordinator(txAbort, txAbortInfo.vms());
+
+                        // all VMSes have received abort
+                        var missingACKs = ongoingAbortMissingVmsAck.get(abortedTid);
+                        // System.out.println(STR."coordinator SENDS abort of \{abortedTid} to [\{String.join(", ", missingACKs)}]");
+                        if (missingACKs.size() == 0)
+                        {
+                            // incorporate with pending aborts
+                            // don't resend transactions to be aborted (for optimization, not consistency)
+                            resendTransactions(abortedTid);
+                            ongoingAbortMissingVmsAck.remove(abortedTid);
+                        }
                     }
 
-                    // all ACKs have been received
-                    var missingACKs = ongoingAbortMissingVmsAck.get(abortedTid);
-                    System.out.println(STR."coordinator is missing acks from [\{String.join(", ", missingACKs)}] in abort of \{abortedTid}");
-                    if (missingACKs.size() == 0)
-                    {
-                        resendTransactions(abortedTid);
-                        ongoingAbortMissingVmsAck.remove(abortedTid);
-                    }
                 }
             case BatchComplete.Payload batchComplete -> this.processBatchComplete(batchComplete);
+            case ReconnectionAck.Payload reconACK -> {
+                var restartedVms = reconACK.vmsRestarted();
+                var vmsAcknowledged = reconACK.vmsAcknowledged();
+                ongoingCrashMissingVmsAck.get(restartedVms).remove(vmsAcknowledged);
+
+                var missingACKs = ongoingReconnectionMissingVmsAck.get(restartedVms);
+
+                // reconnection has been handled
+                if (missingACKs.size() == 0) {
+                    System.out.println(STR."removing \{restartedVms} from OFFLINE vmses");
+                    ongoingReconnectionMissingVmsAck.remove(restartedVms);
+                    offlineVMSes.remove(restartedVms);
+                }
+            }
+            case CrashAck.Payload crashACK -> {
+                var crashedVms = crashACK.vmsCrashed();
+                var vmsAcknowledged = crashACK.vmsAcknowledged();
+                ongoingCrashMissingVmsAck.get(crashedVms).remove(vmsAcknowledged);
+
+                var missingACKs = ongoingCrashMissingVmsAck.get(crashedVms);
+
+                // crash has been handled
+                if (missingACKs.size() == 0) {
+                    System.out.println(STR."crash of \{crashedVms} processed");
+                    ongoingCrashMissingVmsAck.remove(crashedVms);
+
+                    // if there are no more crashes happening, safely continue
+                    if (ongoingCrashMissingVmsAck.isEmpty()) {
+                        System.out.println(STR."processing crash set to false");
+                        processingCrash = false;
+                    }
+                }
+            }
             case VmsCrash.Payload vmsCrash ->
             {
                 this.processCrashInCoordinator(vmsCrash);
@@ -1037,8 +1102,8 @@ public final class Coordinator extends ModbHttpServer {
 
     private void resendTransactions(long failedTid)
     {
-        System.out.println(STR."Coordinator resending transactions from \{failedTid}");
-        var affectedEvents = loggingHandler.readEventsFrom(failedTid);
+        System.out.println(STR."Coordinator resending transactions from after \{failedTid}");
+        var affectedEvents = loggingHandler.getAffectedEvents(failedTid);
         for (var eventRaw: affectedEvents)
         {
             var event = TransactionEvent.read(eventRaw);
@@ -1051,78 +1116,125 @@ public final class Coordinator extends ModbHttpServer {
         }
     }
 
+    private void fixBatchContext(BatchContext batchContext, TransactionEvent.Payload abortedTransactionInputEvent)
+    {
+        var dag = transactionMap.get(abortedTransactionInputEvent.event());
+        var dagVMSes = dag.getNodes();
+
+        batchContext.tidAborted(abortedTransactionInputEvent.tid(), dagVMSes);
+    }
     // single abort
     private void abortTransactionInCoordinator(TransactionAbort.Payload txAbort, String failedVms)
     {
-        System.out.println(STR."coordinator processes abort for \{txAbort.tid()}");
+        System.out.println(STR."coordinator processes abort for \{txAbort.tid()} INITIATED by \{failedVms}");
 
         var failedTid = txAbort.tid();
+        var failedTidBatch = txAbort.batch();
 
+        // multicast abort messages
         // 1. use VMSes already part of the ongoing abort
         var affectedVMSes = this.vmsMetadataMap.values()
                 .stream()
                 .map(vmsNode -> vmsNode.identifier)
+                .filter(vms -> !vms.equals(failedVms)) // remove VMS that initiated from ACK requirement
                 .collect(Collectors.toSet());
-
-        ongoingAbortMissingVmsAck.put(failedTid, affectedVMSes);
-
-        // update log
-        // I put failedTid in the log indicate it's an abort
-        loggingHandler.abort(failedTid);
-
-        // multicast abort messages
         for (var vms : affectedVMSes) {
             // don't need to send to the vms that aborted
             this.vmsWorkerContainerMap.get(vms).queueMessage(txAbort);
         }
 
+        // update log
+        var failedTxInputEventRaw = loggingHandler.abort(failedTid);
+        var failedTxInputEvent = TransactionEvent.read(failedTxInputEventRaw);
+
+        // registering abort
+        batchAbortedTxInputs.putIfAbsent(failedTidBatch, new HashSet<>());
+        batchAbortedTxInputs.get(failedTidBatch).add(failedTxInputEvent);
+
+        // updating the batch context if it exists
+        if (batchContextMap.containsKey(failedTidBatch))
+        {
+            var batchContext = batchContextMap.get(failedTidBatch);
+            fixBatchContext(batchContext, failedTxInputEvent);
+        }
+
+        // missing ACKs
+        ongoingAbortMissingVmsAck.put(failedTid, affectedVMSes);
+
     }
 
+    private Set<String> computeProducerVMSes(String consumerVms)
+    {
+        var producerVMSes = new HashSet<String>();
+        var consumerSetMap = constructVmsConsumerSet();
+        for (var entry : consumerSetMap.entrySet()) {
+            var vms = entry.getKey();
+            var vmsConsumersStr = entry.getValue();
+            if (vmsConsumersStr == null || vmsConsumersStr.trim().isEmpty()) {
+                continue;
+            }
+
+            var vmsConsumersMap= serdesProxy.deserializeConsumerSet(vmsConsumersStr);
+            var vmsConsumers = vmsConsumersMap
+                    .values()
+                    .stream()
+                    .flatMap(nodes -> nodes.stream())
+                    .map(node -> node.identifier);
+
+            var vmsIsProducer = vmsConsumers.anyMatch(consumer -> consumer.equals(consumerVms));
+
+            // add to producer VMSes if it's a producer and is not offline
+            if (vmsIsProducer) producerVMSes.add(vms);
+        }
+        return producerVMSes;
+    }
 
     //////////////////////////////////////////////////////////
     //////////////////////// RECOVERY ////////////////////////
     //////////////////////////////////////////////////////////
 
 
+    private void processReconnectionInCoordinator(String restartedVms)
+    {
+
+        System.out.println(STR."reconnection of crashed vms \{restartedVms} verified, initiate reconnection of producers");
+        var consumerSet = constructVmsConsumerSet().get(restartedVms);
+        vmsWorkerContainerMap.get(restartedVms).queueMessage(consumerSet);
+
+        var producerVMSes = computeProducerVMSes(restartedVms);
+        var aliveProducers = producerVMSes.stream()
+                .filter(producer -> !offlineVMSes.contains(producer))
+                .collect(Collectors.toSet());
+
+        ongoingReconnectionMissingVmsAck.put(restartedVms, aliveProducers);
+
+        var reconnectionMessage = VmsReconnect.of(restartedVms);
+        for (var producer : aliveProducers) {
+            vmsWorkerContainerMap.get(producer).queueMessage(reconnectionMessage);
+        }
+    }
+
     private void processCrashInCoordinator(VmsCrash.Payload vmsCrash)
     {
-        // stop processing new transactions i.e.
-        // no more will be added to the txWorker queues
+        var crashedVms = vmsCrash.vms();
+        if (offlineVMSes.contains(crashedVms)) return;
+        this.offlineVMSes.add(crashedVms);
 
-        if (offlineVMSes.contains(vmsCrash.vms())) return;
-        this.offlineVMSes.add(vmsCrash.vms());
+        processingCrash = true;
+        coordinatorQueue.clear();
+        clearTransactionInputs();
 
         // kill the vmsWorker
-        var crashedVmsWorkerContainer = vmsWorkerContainerMap.remove(vmsCrash.vms());
+        var crashedVmsWorkerContainer = vmsWorkerContainerMap.remove(crashedVms);
         crashedVmsWorkerContainer.stop();
 
         // find the DAGs that use the crashed VMS
         var dags = transactionMap.values();
         var affectedDags = dags.stream()
-                .filter(d -> d.getNodes().contains(vmsCrash.vms()))
+                .filter(d -> d.getNodes().contains(crashedVms))
                 .toList();
 
         disallowedTransactions.addAll(affectedDags.stream().map(d -> d.name).toList());
-
-        this.processingCrash = true;
-
-        var producerVMSes = new HashSet<>();
-        var consumerSetMap = constructVmsConsumerSet();
-        for (var entry : consumerSetMap.entrySet()) {
-            var vms = entry.getKey();
-            var vmsConsumersStr = entry.getValue();
-            var vmsConsumers = serdesProxy.deserializeConsumerSet(vmsConsumersStr)
-                    .values()
-                    .stream()
-                    .flatMap(nodes -> nodes.stream())
-                    .map(node -> node.identifier);
-
-            var vmsIsProducer = vmsConsumers.anyMatch(consumer -> consumer.equals(vmsCrash.vms()));
-            if (vmsIsProducer) producerVMSes.add(vms);
-        }
-
-
-
 
         // dont abort uncommitted twice
         destroyTransactionWorkers();
@@ -1138,57 +1250,21 @@ public final class Coordinator extends ModbHttpServer {
             bid = 0;
         }
 
-        var abortMessage = new AbortUncommittedTransactions.Payload(bid+1);
-        for (var vms : vmsWorkerContainerMap.keySet()) {
-            vmsWorkerContainerMap.get(vms).queueMessage(abortMessage);
+        // the VMSes online at the time of crash
+        // there is only a worker if the VMS is alive.
+        var crashParticipants = vmsWorkerContainerMap.keySet();
+        ongoingCrashMissingVmsAck.put(crashedVms, crashParticipants);
+        for (var vms : crashParticipants) {
+            vmsWorkerContainerMap.get(vms).queueMessage(vmsCrash);
         }
 
+
+        // UPDATE METADATA
         final long finalBid = bid;
         batchContextMap.keySet().removeIf(batch -> batch > finalBid);
         batchOffsetPendingCommit = bid + 1;
 
-        // batch contexts in queue
-        coordinatorQueue.removeIf(message -> message instanceof BatchContext);
-
         setUpTransactionWorkers(tid+1, bid+1);
-        clearTransactionInputs();
-    }
-
-    private void processReconnectionInCoordinator(IdentifiableNode restartedVms)
-    {
-        var vms = restartedVms.identifier;
-        var vmsNode = vmsMetadataMap.get(vms);
-        boolean active = consumerToEventsMap.get(vms).size() > 0;
-        try {
-            initVmsWorker(vmsNode, active);
-        } catch (Exception e) {
-            // could not initialize worker
-            e.printStackTrace();
-        }
-    }
-
-    // A VmsWorker has queued the recovery message
-    private void processRecoveryInCoordinator(Recovery.Payload recovery)
-    {
-        System.out.println(STR."processing the recovery of reconnected \{recovery.vms()} in coordinator");
-        offlineVMSes.remove(recovery.vms());
-
-        // compute disallowed transactions
-        System.out.println(STR."updating the disallowed transactions");
-        var affectedDags = new HashSet<TransactionDAG>();
-        for (var vms : offlineVMSes)
-        {
-            var dags = transactionMap.values();
-            var affectedDagsVms = dags.stream()
-                    .filter(d -> d.getNodes().contains(vms))
-                    .toList();
-
-            affectedDags.addAll(affectedDagsVms);
-        }
-
-        disallowedTransactions = affectedDags.stream().map(d -> d.name).collect(Collectors.toSet());
-
-        System.out.println(STR."There are \{disallowedTransactions.size()} disallowed transactions");
     }
 
     private void processBatchComplete(BatchComplete.Payload batchComplete) {
@@ -1238,8 +1314,17 @@ public final class Coordinator extends ModbHttpServer {
     // seal batch and send batch complete to all terminals...
     private void processNewBatchContext(BatchContext batchContext)
     {
-
         var batch = batchContext.batchOffset;
+
+        //
+        var abortedTxInputs = batchAbortedTxInputs.get(batch);
+        if (abortedTxInputs != null) {
+            for (var input : abortedTxInputs)
+            {
+                fixBatchContext(batchContext, input);
+            }
+        }
+
         this.batchContextMap.put(batch, batchContext);
 
         // after storing batch context, send to vms workers
@@ -1255,14 +1340,12 @@ public final class Coordinator extends ModbHttpServer {
     private void processVmsIdentifier(VmsNode vmsIdentifier_) {
         LOGGER.log(INFO,"Leader: Received a VMS_IDENTIFIER from: "+ vmsIdentifier_.identifier);
 
-        var vmsId = vmsIdentifier_.identifier;
-        if (vmsMetadataMap.containsKey(vmsId) && offlineVMSes.contains(vmsId))
+        // second part of reconnection
+        // sending out the
+        var vmsIdentifier = vmsIdentifier_.identifier;
+        if (vmsMetadataMap.containsKey(vmsIdentifier) && offlineVMSes.contains(vmsIdentifier))
         {
-            System.out.println(STR."reconnection of crashed vms \{vmsId} verified, initiate recovery");
-            var consumerSet = constructVmsConsumerSet().get(vmsId);
-            vmsWorkerContainerMap.get(vmsId).queueMessage(consumerSet);
-            var recoveryMessage = Recovery.of(vmsId);
-            processRecoveryInCoordinator(recoveryMessage);
+            processReconnectionInCoordinator(vmsIdentifier);
             return;
         }
 
@@ -1280,7 +1363,6 @@ public final class Coordinator extends ModbHttpServer {
 
         // new VMS may join, requiring updating the consumer set
         var consumerSetMap = constructVmsConsumerSet();
-
         for (var vms : consumerSetMap.keySet()) {
 
             if (!coordinatorIsRecovering)
