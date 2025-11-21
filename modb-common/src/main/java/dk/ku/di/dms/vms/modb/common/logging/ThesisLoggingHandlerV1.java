@@ -136,7 +136,7 @@ public class ThesisLoggingHandlerV1 implements ILoggingHandler
     }
 
     @Override
-    public Map<String, long[]> getLatestAppearanceOfEventTypes(List<String> eventTypes) throws IOException
+    public Map<String, long[]> getLatestAppearanceOfEventTypes(Set<String> eventTypes) throws IOException
     {
         Map<String, long[]> latestAppearances = new HashMap<>();
 

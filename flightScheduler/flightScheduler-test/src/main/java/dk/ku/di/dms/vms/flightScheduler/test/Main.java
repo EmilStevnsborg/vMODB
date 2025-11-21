@@ -18,9 +18,9 @@ public final class Main
     {
         try {
 //            AbortMidBatch.Run(client);
-//            AbortConcurrently.Run(client);
+            AbortConcurrently.Run(client);
 //            RecoverVms.Run(client);
-            RecoverCoordinator.Run(client);
+//            RecoverCoordinator.Run(client);
 //            RecoverVmsConcurrency.Run(client);
 //            AbortStressTest.Run(client);
         } catch (Exception e) {

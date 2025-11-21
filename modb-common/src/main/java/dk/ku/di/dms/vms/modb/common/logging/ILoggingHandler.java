@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 
@@ -23,7 +24,7 @@ public interface ILoggingHandler {
     default List<TransactionEvent.PayloadRaw> readEventsFrom(long failedTid) { return List.of(); }
 
     default List<TransactionEvent.PayloadRaw> getAffectedEvents(long failedTid) { return List.of(); }
-    default Map<String, long[]> getLatestAppearanceOfEventTypes(List<String> eventTypes) throws IOException { return Map.of(); }
+    default Map<String, long[]> getLatestAppearanceOfEventTypes(Set<String> eventTypes) throws IOException { return Map.of(); }
 
     default SegmentMetadata loadSegment(ByteBuffer byteBuffer, long filePosition) throws IOException { return null; }
 

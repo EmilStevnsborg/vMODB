@@ -426,21 +426,21 @@ public final class Coordinator extends ModbHttpServer {
         Map<String, TransactionWorker.PrecedenceInfo> precedenceMap = new HashMap<>();
 
         // all event types. These are transaction inputs
-        List<String> eventTypes = consumerToEventsMap.values().stream()
-                .flatMap(Collection::stream)
-                .collect(Collectors.toSet())
-                .stream().toList();
+        Set<String> inputEvents = eventToConsumersMap.keySet();
+
+
+        // System.out.println(STR."Building starter precedence map, eventTypes count: \{inputEvents.size()}");
 
         // the tid and bid a given event type was seen at most recently
         Map<String, long[]> eventTypeLatestAppearance = new HashMap<>();
-        for (var eventType : eventTypes) {
+        for (var eventType : inputEvents) {
             eventTypeLatestAppearance.put(eventType, new long[] {0, 0});
         }
 
         // populate eventTypeLatestAppearance from logs
         if (loadFromLogs) {
             try {
-                var loggedAppearances = loggingHandler.getLatestAppearanceOfEventTypes(eventTypes);
+                var loggedAppearances = loggingHandler.getLatestAppearanceOfEventTypes(inputEvents);
                 for (var entry : loggedAppearances.entrySet()) {
 //                    System.out.println(STR."LATEST APPEARANCE FOR \{entry.getKey()} is tid=\{entry.getValue()[0]} and bid=\{entry.getValue()[1]}");
                     eventTypeLatestAppearance.put(entry.getKey(), entry.getValue());
@@ -451,14 +451,21 @@ public final class Coordinator extends ModbHttpServer {
         }
 
         // get the dag for each eventType
-        for (var eventType : eventTypes)
+        for (var eventType : inputEvents)
         {
-            var dag = transactionMap.get(eventType);
+            System.out.println(STR."Checking nodes in dag with input event: \{eventType}");
+
+            // only one???
+            var dagsWithEventTypeAsInput = transactionMap.values().stream().filter(d-> d.inputEvents.containsKey(eventType)).toList();
+            var dag = dagsWithEventTypeAsInput.stream().findFirst().get();
+
             if (dag == null) {
+                System.out.println(STR."dag is null for: \{eventType}");
                 continue;
             };
 
             var nodes = dag.getNodes();
+            System.out.println(STR."\{nodes.size()} nodes in dag with input event: \{eventType}");
 
             for (var node : nodes)
             {
@@ -469,8 +476,9 @@ public final class Coordinator extends ModbHttpServer {
                 long[] latestInfo = eventTypeLatestAppearance.get(eventType);
                 long lastTid = latestInfo[0];
                 long lastBatch = latestInfo[1];
-//                System.out.println(STR."latest tid and bid for \{node} in dag with eventType \{eventType} are \{lastTid} and \{lastBatch}");
-                var precedenceInfoVms = new TransactionWorker.PrecedenceInfo(lastTid, lastBatch, -1);
+                // System.out.println(STR."latest tid and bid for \{node} in dag with eventType \{eventType} are \{lastTid} and \{lastBatch}");
+                var precedenceInfoVms = new TransactionWorker.PrecedenceInfo(lastTid, lastBatch, 0);
+                // System.out.println(STR."precedenceInfoVms for vms \{node}: \{precedenceInfoVms}");
 
                 if (!precedenceMap.containsKey(node)) {
                     precedenceMap.put(node, precedenceInfoVms);
@@ -1164,7 +1172,11 @@ public final class Coordinator extends ModbHttpServer {
 
     private void fixBatchContext(BatchContext batchContext, TransactionEvent.Payload abortedTransactionInputEvent)
     {
-        var dag = transactionMap.get(abortedTransactionInputEvent.event());
+        // only one dag with this input event???
+        var inputEventName = abortedTransactionInputEvent.event();
+        var dag = transactionMap.values().stream()
+                .filter(d -> d.inputEvents.containsKey(inputEventName))
+                .findFirst().get();
         var dagVMSes = dag.getNodes();
 
         batchContext.tidAborted(abortedTransactionInputEvent.tid(), dagVMSes);

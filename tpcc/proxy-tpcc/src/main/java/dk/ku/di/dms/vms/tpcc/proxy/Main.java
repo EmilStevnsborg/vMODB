@@ -32,8 +32,52 @@ public final class Main {
             var argValue = argSplit[1];
             properties.setProperty(argName, argValue);
         }
-        menu(properties);
+        // menu(properties);
+        predefinedExperiment(properties);
     }
+
+    private static void predefinedExperiment(Properties properties) throws NoSuchFieldException, IllegalAccessException {
+        Coordinator coordinator = null;
+        Map<String, UniqueHashBufferIndex> tables = null;
+        List<Iterator<NewOrderWareIn>> input;
+        StorageUtils.EntityMetadata metadata = StorageUtils.loadEntityMetadata();
+
+        // create workloads
+        int numWarehouses = 4;
+        boolean multiWarehouseTransaction = false;
+        int numTransactionsPerWarehouse = 100;
+        WorkloadUtils.createWorkload(numWarehouses, numTransactionsPerWarehouse, multiWarehouseTransaction);
+
+        // 1-second batch window
+        int batchWindow = Integer.parseInt( properties.getProperty("batch_window_ms") );;
+
+        // runtime (infinity)
+        int runtime = Integer.MAX_VALUE;
+
+        // warmup 2000 ms
+        int warmup = 2000;
+
+        input = WorkloadUtils.mapWorkloadInputFiles(numWarehouses);
+
+        // load coordinator
+        if(coordinator == null){
+            coordinator = ExperimentUtils.loadCoordinator(properties);
+            // wait for all starter VMSes to connect
+            int numConnected;
+            do {
+                numConnected = coordinator.getConnectedVMSs().size();
+            } while (numConnected < 3);
+        }
+
+        // wait for coordinator to start
+        System.console().readLine();
+
+        // start experiment
+        var expStats = ExperimentUtils.runExperiment(coordinator, input, runtime, warmup);
+//        ExperimentUtils.writeResultsToFile(numWarehouses, expStats, runtime, warmup,
+//                coordinator.getOptions().getNumTransactionWorkers(), coordinator.getOptions().getBatchWindow(), coordinator.getOptions().getMaxTransactionsPerBatch());
+    }
+
 
     private static void menu(Properties properties) throws NoSuchFieldException, IllegalAccessException {
         Coordinator coordinator = null;
@@ -83,7 +127,7 @@ public final class Main {
                     int batchWindow = Integer.parseInt( properties.getProperty("batch_window_ms") );
                     int runTime;
                     while(true) {
-                        System.out.print("Enter duration (ms): [press 0 for 10s] ");
+                        System.out.print("Enter duration in ms: [press 0 for 10000ms (10s)] ");
                         runTime = Integer.parseInt(scanner.nextLine());
                         if (runTime == 0) runTime = 10000;
                         if(runTime < (batchWindow*2)){

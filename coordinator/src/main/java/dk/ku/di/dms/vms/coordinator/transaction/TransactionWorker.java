@@ -276,11 +276,11 @@ public final class TransactionWorker extends StoppableRunnable {
         this.batchContext.terminalVMSs.addAll( transactionDAG.terminalNodes );
 
         if(!pendingVMSs.isEmpty()) {
-            // System.out.println(STR."!pendingVMSs.isEmpty() for tid \{this.tid}");
+            System.out.println(STR."!pendingVMSs.isEmpty() for tid \{this.tid}");
             this.generatePendingTransactionInput(pendingVMSs, previousTidPerVms, transactionInput);
         } else {
             String precedenceMapStr = this.serdesProxy.serializeMap(previousTidPerVms);
-            // System.out.println(STR."txWorker=\{id} assigning tid=\{this.tid}");
+            System.out.println(STR."txWorker=\{id} assigning tid=\{this.tid}");
             TransactionEvent.PayloadRaw txEvent = TransactionEvent.of(this.tid, this.batchContext.batchOffset,
                     transactionInput.event.name, transactionInput.event.payload, precedenceMapStr);
 
@@ -329,7 +329,6 @@ public final class TransactionWorker extends StoppableRunnable {
     }
 
     private void processPendingInput() {
-        // System.out.println("processPendingInput");
         // comes in order always
         Map<String, PrecedenceInfo> precedenceMap = this.precedenceMapInputQueue.peek();
         if(precedenceMap == null){ return; }
@@ -349,6 +348,7 @@ public final class TransactionWorker extends StoppableRunnable {
 
             for (VmsTracking vms_ : vmsList) {
                 PrecedenceInfo precedenceInfo = precedenceMap.get(vms_.identifier);
+                System.out.println(STR."txWorker-\{this.id} \{vms_.identifier} precedencInfo \{precedenceInfo}");
                 if(pendingInput.pendingVMSs.contains(vms_.identifier)) {
                     pendingInput.previousTidPerVms.put(vms_.identifier, precedenceInfo.lastTid);
                 }
