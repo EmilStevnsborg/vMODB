@@ -96,11 +96,12 @@ public final class Constants {
     public static final byte ABORT_UNCOMMITTED_TRANSACTIONS = 19;
 
     public static final byte VMS_CRASH = 21;
-    public static final byte CRASH_ACKNOWLEDGEMENT = 22;
-    public static final byte RECONNECTIONS_ACKNOWLEDGEMENT = 23;
+    public static final byte CRASH_ACK = 22;
+    public static final byte RECONNECTION_ACK = 23;
     public static final byte TX_ABORT_ACK = 24;
 
-    public static final byte RESET_TO_COMMITTED = 24;
+    public static final byte RESET_TO_COMMITTED = 25;
+    public static final byte RESET_TO_COMMITTED_ACK = 26;
 
 
 }

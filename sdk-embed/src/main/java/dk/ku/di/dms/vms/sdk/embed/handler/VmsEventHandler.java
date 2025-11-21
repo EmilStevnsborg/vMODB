@@ -354,11 +354,6 @@ public final class VmsEventHandler extends ModbHttpServer {
         pauseHandler.accept(false);
     }
 
-    private void processVmsCrash(VmsCrash.Payload vmsCrash)
-    {
-
-    }
-
     // this function only updates in memory structures
     private void resetToCommittedState()
     {
@@ -376,7 +371,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         // input queue clear??? (an event can't be in the queue unless it was processed upstream??)
         // if A->B->C, and 10 aborts in C, then 30 may be in the queue, 30 will still be sent by B?
-        vmsInternalChannels.transactionInputQueue().clear();
+//        vmsInternalChannels.transactionInputQueue().clear();
 
         // clear all tasks at the maxTID or later
         taskClearer.apply(maxTid+1, batch+1);
@@ -390,10 +385,12 @@ public final class VmsEventHandler extends ModbHttpServer {
         pauseHandler.accept(false);
     }
 
-    private void processCrash(VmsCrash.Payload vmsCrash)
+    private void processVmsCrash(VmsCrash.Payload vmsCrash)
     {
+        System.out.println(STR."\{me.identifier} started processing crash of \{vmsCrash}");
         var crashedVmsWorkerContainer = consumerVmsContainerMap.remove(vmsCrash.vms());
-        crashedVmsWorkerContainer.stop();
+        if (crashedVmsWorkerContainer != null)
+            crashedVmsWorkerContainer.stop();
 
         // abort uncommitted events
         resetToCommittedState();
@@ -406,13 +403,6 @@ public final class VmsEventHandler extends ModbHttpServer {
     private void processVmsReconnection(VmsReconnect.Payload reconnection)
     {
         var restartedVms = reconnection.vms();
-        // safeguard
-         if (!consumerVmsContainerMap.containsKey(restartedVms))
-        {
-            // System.out.println(STR."Crashed Vms \{crashedVms} is not a consumer");
-            return;
-        }
-
         System.out.println(STR."\{me.identifier} initiates reconnection to consumer \{restartedVms}");
 
          // init new worker
@@ -957,7 +947,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
             // what if a vms is both producer to and consumer from this vms?
             if(consumerVmsContainerMap.containsKey(producerVms)){
-                LOGGER.log(DEBUG, STR."\{me.identifier} already contains a connection to \{producerVms.identifier} as a consumer");
+                System.out.println(STR."\{me.identifier} already contains a connection to \{producerVms.identifier} as a consumer");
             }
 
             // just to keep track whether this
@@ -1236,6 +1226,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                     }
                     case (RESET_TO_COMMITTED) -> {
                         resetToCommittedState();
+                        leaderWorker.queueMessage(ResetToCommittedAck.of(me.identifier));
                     }
                     case (CONSUMER_SET) -> {
                         try {

@@ -2,6 +2,7 @@ package dk.ku.di.dms.vms.flightScheduler.test;
 
 import dk.ku.di.dms.vms.flightScheduler.test.AbortTests.AbortConcurrently;
 import dk.ku.di.dms.vms.flightScheduler.test.AbortTests.AbortMidBatch;
+import dk.ku.di.dms.vms.flightScheduler.test.AbortTests.AbortStressTest;
 import dk.ku.di.dms.vms.flightScheduler.test.RecoveryTests.RecoverCoordinator;
 import dk.ku.di.dms.vms.flightScheduler.test.RecoveryTests.RecoverVms;
 import dk.ku.di.dms.vms.flightScheduler.test.RecoveryTests.RecoverVmsConcurrency;
@@ -18,9 +19,10 @@ public final class Main
         try {
 //            AbortMidBatch.Run(client);
 //            AbortConcurrently.Run(client);
-            RecoverVms.Run(client);
-//            RecoverCoordinator.Run(client);
+//            RecoverVms.Run(client);
+            RecoverCoordinator.Run(client);
 //            RecoverVmsConcurrency.Run(client);
+//            AbortStressTest.Run(client);
         } catch (Exception e) {
             e.printStackTrace();
         } finally {

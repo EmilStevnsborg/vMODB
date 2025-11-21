@@ -13,6 +13,15 @@ import java.util.List;
 
 public class DataGenerator
 {
+    public static List<Customer> CreateCustomers(int numCustomers, int statingId)
+    {
+        var customers = new ArrayList<Customer>();
+        for (int i = statingId; i < numCustomers+statingId; i++) {
+            var customer = new Customer(i, 100, STR."user_\{i}");
+            customers.add(customer);
+        }
+        return customers;
+    }
     public static List<Customer> GenerateCustomers(HttpClient client, int numCustomers)
     {
         var customers = new ArrayList<Customer>();

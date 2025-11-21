@@ -154,7 +154,16 @@ public final class TransactionWorker extends StoppableRunnable {
         this.transactionMap = transactionMap;
         this.vmsPerTransactionMap = vmsPerTransactionMap;
         this.vmsTrackingMap = vmsTrackingMap;
+
+
         this.vmsWorkerContainerMap = vmsWorkerContainerMap;
+
+        System.out.println(STR."txWorker-\{id} vmsWorkers");
+        for (var entry : vmsWorkerContainerMap.entrySet())
+        {
+            System.out.println(STR."txWorker-\{id} vmsWorker: \{entry.getKey()} of \{entry.getValue()}");
+        }
+
         this.serdesProxy = serdesProxy;
 
         this.pendingInputMap = new TreeMap<>();
@@ -275,6 +284,7 @@ public final class TransactionWorker extends StoppableRunnable {
             TransactionEvent.PayloadRaw txEvent = TransactionEvent.of(this.tid, this.batchContext.batchOffset,
                     transactionInput.event.name, transactionInput.event.payload, precedenceMapStr);
 
+            // System.out.println(STR."txWorker-\{this.id} queues \{transactionInput.event.name} to \{inputVms.identifier}");
             this.vmsWorkerContainerMap.get(inputVms.identifier).queueTransactionEvent(txEvent);
         }
         this.tid++;

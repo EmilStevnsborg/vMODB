@@ -10,7 +10,7 @@ import java.nio.charset.StandardCharsets;
 public class CrashAck
 {
     public static void write(ByteBuffer buffer, CrashAck.Payload payload) {
-        buffer.put(Constants.CRASH_ACKNOWLEDGEMENT);
+        buffer.put(Constants.CRASH_ACK);
         buffer.putInt( payload.vmsCrashed.length() );
         buffer.put( payload.vmsCrashed.getBytes(StandardCharsets.UTF_8) );
         buffer.putInt( payload.vmsAcknowledged.length() );
@@ -18,7 +18,7 @@ public class CrashAck
     }
     public static void write(ByteBuffer buffer, String vmsCrashed, String vmsAcknowledged)
     {
-        buffer.put(Constants.CRASH_ACKNOWLEDGEMENT);
+        buffer.put(Constants.CRASH_ACK);
         buffer.putInt( vmsCrashed.length() );
         buffer.put( vmsCrashed.getBytes(StandardCharsets.UTF_8) );
         buffer.putInt( vmsAcknowledged.length() );

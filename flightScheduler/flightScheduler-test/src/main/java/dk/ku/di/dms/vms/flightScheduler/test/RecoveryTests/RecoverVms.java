@@ -36,28 +36,16 @@ public class RecoverVms
         var customers = DataGenerator.GenerateCustomers(client, 40);
         var flightSeats = DataGenerator.GenerateFlightSeats(client, 0, 40);
 
-        // 1st batch
+        // 1st and 2nd batch
         System.console().readLine();
-        System.out.println(STR."TEST: sending order_flights with TIDs of [1-11)");
-        for (var i = 0; i < 10; i++)
+        System.out.println(STR."TEST: sending order_flights with TIDs of [1-21)");
+        for (var i = 0; i < 20; i++)
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
 
         System.console().readLine();
         System.out.println(STR."There are \{VmsEndpoints.GetFlightSeats(client, 0)
                                             .stream().filter(fs -> fs.occupied == 1)
                                             .count()} occupied flight seats");
-        System.console().readLine();
-
-        // 2nd batch
-        System.out.println(STR."TEST: sending order_flights with TIDs of [11-21)");
-        for (var i = 10; i < 20; i++)
-            Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
-
-        // wait for flight orders to commit
-        System.console().readLine();
-        System.out.println(STR."There are \{VmsEndpoints.GetFlightSeats(client, 0)
-                .stream().filter(fs -> fs.occupied == 1)
-                .count()} occupied flight seats");
         System.console().readLine();
 
         var bookings = VmsEndpoints.GetBookings(client);
@@ -82,13 +70,14 @@ public class RecoverVms
 
         System.console().readLine();
 
+        // supposed to seal 3rd batch but is instead start of 3rd after reset
         System.out.println(STR."TEST: sending pay_booking with TID of [21]");
         Transactions.PayBooking(client, bookings.get(4).booking_id, "VISA"); // finish batch
 
         System.console().readLine();
 
-        // 4th batch
-        System.out.println(STR."TEST: sending pay_booking with TIDs of [22-31)");
+        // reset 3rd batch
+        System.out.println(STR."TEST: sending order_flights that gets denied, but then sending pay_booking with TIDs of [22-31)");
         for (var i = 25; i < 30; i++)
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
         for (var i = 5; i < 14; i++)
@@ -106,7 +95,7 @@ public class RecoverVms
                 .stream().filter(fs -> fs.occupied == 1)
                 .count()} occupied flight seats");
 
-        // 5th batch
+        // 4th batch
         System.out.println(STR."TEST: sending order_flights with TIDs of [31-41)");
         for (var i = 30; i < 40; i++)
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));

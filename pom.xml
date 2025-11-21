@@ -30,6 +30,7 @@
 <!--     applications -->
 <!--    <module>marketplace</module>-->
     <module>tpcc</module>
+    <module>tpcc/experiments-tpcc</module>
     <module>flightScheduler</module>
 <!--      <module>hotelReservation</module>-->
 

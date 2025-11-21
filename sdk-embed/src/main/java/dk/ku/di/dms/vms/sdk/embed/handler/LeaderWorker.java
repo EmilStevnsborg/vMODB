@@ -5,6 +5,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitAck;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchComplete;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.CrashAck;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.ReconnectionAck;
+import dk.ku.di.dms.vms.modb.common.schema.network.control.ResetToCommittedAck;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbort;
@@ -104,6 +105,7 @@ final class LeaderWorker extends StoppableRunnable {
             case TransactionAbortAck.Payload o -> sendTransactionAbortAck(o);
             case CrashAck.Payload o -> sendCrashAck(o);
             case ReconnectionAck.Payload o -> sendReconnectionAck(o);
+            case ResetToCommittedAck.Payload o -> sendResetToCommittedAck(o);
             case TransactionEvent.PayloadRaw o -> this.sendEvent(o);
             default -> System.out.println(this.vmsNode.identifier +
                     ": Leader worker do not recognize message type: " + message.getClass().getName());
@@ -175,11 +177,16 @@ final class LeaderWorker extends StoppableRunnable {
         this.write(payload);
     }
     private void sendCrashAck(CrashAck.Payload payload) {
+        System.out.println(STR."sendCrashAck from \{vmsNode.identifier}");
         CrashAck.write( this.writeBuffer,  payload);
         this.write(payload);
     }
     private void sendReconnectionAck(ReconnectionAck.Payload payload) {
         ReconnectionAck.write( this.writeBuffer, payload);
+        this.write(payload);
+    }
+    private void sendResetToCommittedAck(ResetToCommittedAck.Payload payload) {
+        ResetToCommittedAck.write( this.writeBuffer, payload);
         this.write(payload);
     }
 

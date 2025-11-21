@@ -627,6 +627,18 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                         TransactionAbortAck.Payload response = TransactionAbortAck.read(readBuffer);
                         coordinatorQueue.add(response);
                     }
+                    case CRASH_ACK -> {
+                        CrashAck.Payload response = CrashAck.read(readBuffer);
+                        coordinatorQueue.add(response);
+                    }
+                    case RECONNECTION_ACK -> {
+                        ReconnectionAck.Payload response = ReconnectionAck.read(readBuffer);
+                        coordinatorQueue.add(response);
+                    }
+                    case RESET_TO_COMMITTED_ACK -> {
+                        ResetToCommittedAck.Payload response = ResetToCommittedAck.read(readBuffer);
+                        coordinatorQueue.add(response);
+                    }
                     case EVENT -> LOGGER.log(INFO, "Leader: New event received from: " + consumerVms.identifier); // TODO probably here is important
                     case BATCH_OF_EVENTS -> LOGGER.log(INFO, "Leader: New batch of events received from VMS"); // TODO or here
                     default -> System.out.println("Leader: Unknown message received.");

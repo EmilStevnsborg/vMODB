@@ -290,7 +290,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             VmsTransactionTask task = entry.getValue();
             var taskBatchId = task.batch;
             if (taskTid >= failedTid) {
-                System.out.println(STR."REMOVES task \{taskTid} with lastTid=\{task.lastTid} as part of abort for \{failedTid} in \{vmsIdentifier}");
+                // System.out.println(STR."REMOVES task \{taskTid} with lastTid=\{task.lastTid} as part of abort for \{failedTid} in \{vmsIdentifier}");
                 transactionTaskMapIterator.remove();
             }
 

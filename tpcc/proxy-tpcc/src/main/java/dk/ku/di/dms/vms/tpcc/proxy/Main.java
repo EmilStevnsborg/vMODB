@@ -17,13 +17,25 @@ import java.util.*;
 
 public final class Main {
 
-    private static final Properties PROPERTIES = ConfigUtils.loadProperties();
+    public static void main(String[] args) throws NoSuchFieldException, IllegalAccessException
+    {
+        Properties properties = ConfigUtils.loadProperties();
+        for (var arg : args)
+        {
+            var argSplit = arg.split("=");
+            if (argSplit.length != 2) {
+                System.out.println(STR."invalid arg}");
+                continue;
+            }
 
-    public static void main(String[] ignoredArgs) throws NoSuchFieldException, IllegalAccessException {
-        menu();
+            var argName = argSplit[0];
+            var argValue = argSplit[1];
+            properties.setProperty(argName, argValue);
+        }
+        menu(properties);
     }
 
-    private static void menu() throws NoSuchFieldException, IllegalAccessException {
+    private static void menu(Properties properties) throws NoSuchFieldException, IllegalAccessException {
         Coordinator coordinator = null;
         int numWare = 0;
         Map<String, UniqueHashBufferIndex> tables = null;
@@ -68,7 +80,7 @@ public final class Main {
                     break;
                 case "4":
                     System.out.println("Option 4: \"Submit workload\" selected.");
-                    int batchWindow = Integer.parseInt( PROPERTIES.getProperty("batch_window_ms") );
+                    int batchWindow = Integer.parseInt( properties.getProperty("batch_window_ms") );
                     int runTime;
                     while(true) {
                         System.out.print("Enter duration (ms): [press 0 for 10s] ");
@@ -112,7 +124,7 @@ public final class Main {
 
                     // load coordinator
                     if(coordinator == null){
-                        coordinator = ExperimentUtils.loadCoordinator(PROPERTIES);
+                        coordinator = ExperimentUtils.loadCoordinator(properties);
                         // wait for all starter VMSes to connect
                         int numConnected;
                         do {
@@ -136,7 +148,7 @@ public final class Main {
                     }
                     // cleanup service states
                     for(var vms : TPCcConstants.VMS_TO_PORT_MAP.entrySet()){
-                        String host = PROPERTIES.getProperty(vms.getKey() + "_host");
+                        String host = properties.getProperty(vms.getKey() + "_host");
                         try(var client = new MinimalHttpClient(host, vms.getValue())){
                             if(client.sendRequest("PATCH", "", "reset") != 200){
                                 System.out.println("Error on resetting "+vms+" state!");
