@@ -10,9 +10,22 @@ import java.io.Serializable;
 
 @VmsTable(name="flight_seats")
 @IdClass(FlightSeat.FlightSeatId.class)
-public final class FlightSeat implements IEntity<FlightSeat.FlightSeatId> {
+public final class FlightSeat implements IEntity<Integer> {
 
-    public FlightSeat(int flight_id, String seat_number)
+    // using two ids causes some problems
+    public static class FlightSeatId implements Serializable {
+        public int flight_id;
+        public int seat_number;
+
+        @SuppressWarnings("unused")
+        public FlightSeatId(){}
+
+        public FlightSeatId(int flight_id, int seat_number) {
+            this.flight_id = flight_id;
+            this.seat_number = seat_number;
+        }
+    }
+    public FlightSeat(int flight_id, int seat_number)
     {
         this.flight_id = flight_id;
         this.seat_number = seat_number;
@@ -21,29 +34,11 @@ public final class FlightSeat implements IEntity<FlightSeat.FlightSeatId> {
     @SuppressWarnings("unused")
     public FlightSeat(){}
 
-    // Id
-    public static class FlightSeatId implements Serializable {
-        public int flight_id;
-        public String seat_number;
-
-        @SuppressWarnings("unused")
-        public FlightSeatId(){}
-
-        public FlightSeatId(int flight_id, String seat_number) {
-            this.flight_id = flight_id;
-            this.seat_number = seat_number;
-        }
-
-        @Override
-        public String toString() {
-            return "[flight_id=" + flight_id + ", seat_number=" + seat_number + "]";
-        }
-    }
-
-    @Id
+    // Can't have two ids?
+    @Column
     public int flight_id;
     @Id
-    public String seat_number;
+    public int seat_number;
     @Column
     public int occupied;
 
@@ -55,7 +50,7 @@ public final class FlightSeat implements IEntity<FlightSeat.FlightSeatId> {
     public String toString() {
         return "{\n"
                 + "  \"flight_id\":" + flight_id + ",\n"
-                + "  \"seat_number\":\"" + seat_number + "\",\n"
+                + "  \"seat_number\":" + seat_number + ",\n"
                 + "  \"occupied\":\"" + occupied + "\"\n"
                 + "}";
     }

@@ -33,7 +33,7 @@ public class FlightService
     public BookSeat orderingFlight(OrderFlight orderFlight)
     {
         var flightSeatId = new FlightSeat.FlightSeatId(orderFlight.flight_id, orderFlight.seat_number);
-        FlightSeat flightSeat = this.flightRepository.lookupByKey(flightSeatId);
+        FlightSeat flightSeat = this.flightRepository.lookupByKey(orderFlight.seat_number);
 
         // throw exception to trigger abort
         if (flightSeat.occupied == 1)

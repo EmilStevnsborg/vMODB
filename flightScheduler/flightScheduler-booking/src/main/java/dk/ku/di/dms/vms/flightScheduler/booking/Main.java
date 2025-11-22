@@ -81,7 +81,7 @@ public final class Main {
             long lastTid = VMS.lastTidFinished();
             this.transactionManager.beginTransaction(lastTid, 0, lastTid, true);
 
-            var bookings = this.repository.getAll();
+            var bookings = this.repository.getAllCommitted();
 
             return bookings.toString();
         }

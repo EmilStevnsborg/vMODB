@@ -145,20 +145,9 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
         @Override
         public void success(ExecutionModeEnum executionMode, OutboundEventResult outboundEventResult) {
-            // System.out.println(STR."Scheduler: success on task for \{outboundEventResult.tid()} in \{vmsIdentifier}");
             VmsTransactionTask task = transactionTaskMap.get(outboundEventResult.tid());
-            if (task == null) {
-                // task has been cleared
-                return;
-            }
-
             task.signalFinished();
             updateLastFinishedTid(outboundEventResult.tid());
-
-            if (isPaused()) {
-                // dont signal
-            }
-
             this.eventHandler.accept(outboundEventResult);
             this.updateSchedulerTaskStats(executionMode, task);
         }
@@ -215,6 +204,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
      * so the next single thread tasks can be executed
      */
     private void updateLastFinishedTid(final long tid){
+        System.out.println(STR."\{vmsIdentifier} update lasFinishedTid to \{tid} instead of \{this.lastTidFinished.get()}");
         if(this.lastTidFinished.get() > tid) return;
         this.lastTidFinished.updateAndGet(currTid -> Math.max(currTid, tid));
     }
@@ -320,30 +310,31 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     private void executeReadyTasks()
     {
         Long nextTid = this.lastTidToTidMap.get(this.lastTidFinished.get());
+        System.out.println(STR."nextTid=\{nextTid} in \{vmsIdentifier}");
 
         // if nextTid == null then the scheduler must block until a new event arrive to progress
         if(nextTid == null) {
             // keep scheduler sleeping since next tid is unknown
             if (!mustWaitForInputEvent) {
-                // System.out.println(STR."\{vmsIdentifier}-SCHEDULER mustWaitForInputEvent=true");
+                System.out.println(STR."\{vmsIdentifier}-SCHEDULER mustWaitForInputEvent=true");
                 this.mustWaitForInputEvent = true;
             }
             return;
         }
         VmsTransactionTask task = this.transactionTaskMap.get( nextTid );
-        // System.out.println(STR."\{vmsIdentifier}-SCHEDULER nextTID for last\{this.lastTidFinished.get()} is \{nextTid}");
         if (task == null) {
             // System.out.println(STR."task is null for \{nextTid}");
             return;
         }
+        // System.out.println(STR."\{vmsIdentifier}-SCHEDULER nextTID for lastTid=\{this.lastTidFinished.get()} is \{nextTid}");
         while(true) {
             if(task.isScheduled()){
-                // System.out.println(STR."task \{task} with lastTidFinished=\{lastTidFinished} in \{vmsIdentifier} isScheduled");
+                System.out.println(STR."task \{task} with lastTidFinished=\{lastTidFinished} in \{vmsIdentifier} isScheduled");
                 return;
             }
             // must check because partitioned task interleave and may finish before a lower TID
             if(task.isFinished()){
-                // System.out.println(STR."task \{task} with lastTidFinished=\{lastTidFinished} in \{vmsIdentifier} isFinished");
+                System.out.println(STR."task \{task} with lastTidFinished=\{lastTidFinished} in \{vmsIdentifier} isFinished");
                 this.updateLastFinishedTid(nextTid);
                 return;
             }
@@ -396,7 +387,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     }
 
     private void submitSingleThreadTaskForExecution(VmsTransactionTask task) {
-        // System.out.println(STR."submitSingleThreadTaskForExecution task.tid=\{task.tid()} isPaused=\{isPaused()}");
+        System.out.println(STR."submitSingleThreadTaskForExecution task.tid=\{task.tid()} isPaused=\{isPaused()}");
         this.singleThreadTaskRunning = true;
         task.signalReady();
         // can the scheduler itself run it? if so, avoid a context switch cost
@@ -406,7 +397,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
     private boolean canSingleThreadTaskRun() {
         var runnable = !this.singleThreadTaskRunning && this.numParallelTasksRunning.get() == 0 && numPartitionedTasksRunning.get() == 0;
-//        System.out.println(STR."\{vmsIdentifier}-SCHEDULER canSingleThreadTaskRun=\{runnable}");
+        // System.out.println(STR."\{vmsIdentifier}-SCHEDULER canSingleThreadTaskRun=\{runnable}");
         return runnable;
     }
 
@@ -427,6 +418,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     private void checkForNewEvents() throws InterruptedException {
         InboundEvent inboundEvent;
         if(this.mustWaitForInputEvent) {
+            // blocking (causes execution problems in tests)
             inboundEvent = this.transactionInputQueue.take();
             // disable block
             this.mustWaitForInputEvent = false;
@@ -462,8 +454,8 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                          (abortedTIDs.contains(inboundEvent.tid()) ||
                          abortedTIDs.contains(inboundEvent.lastTid()));
 
-//        System.out.println(STR."\{vmsIdentifier} tid=\{inboundEvent.tid()} batch=\{inboundEvent.batch()} deprecated=\{deprecated}, " +
-//                           STR."lastTid=\{inboundEvent.lastTid()} lastTidFinished=\{lastTidFinished}");
+        System.out.println(STR."\{vmsIdentifier} tid=\{inboundEvent.tid()} batch=\{inboundEvent.batch()} deprecated=\{deprecated}, " +
+                           STR."lastTid=\{inboundEvent.lastTid()} lastTidFinished=\{lastTidFinished}");
 
         // deprecated event
         if (deprecated) {
@@ -487,10 +479,10 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
         // mark the last tid, so we can get the next to execute when appropriate
         if(this.lastTidToTidMap.containsKey(inboundEvent.lastTid())){
-            // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: containsKey for lastTid()=\{inboundEvent.lastTid()} of inboundEvent tid=\{inboundEvent.tid()}");
+            System.out.println(STR."\{vmsIdentifier}-SCHEDULER: containsKey for lastTid()=\{inboundEvent.lastTid()} of inboundEvent tid=\{inboundEvent.tid()}");
         } else {
             this.lastTidToTidMap.put(inboundEvent.lastTid(), inboundEvent.tid());
-            // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: put \{inboundEvent.tid()} in map for \{inboundEvent.lastTid()}");
+            System.out.println(STR."\{vmsIdentifier}-SCHEDULER: put \{inboundEvent.tid()} in map for \{inboundEvent.lastTid()}");
         }
     }
 

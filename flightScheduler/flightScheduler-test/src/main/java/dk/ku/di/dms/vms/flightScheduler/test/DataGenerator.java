@@ -35,12 +35,9 @@ public class DataGenerator
     public static List<FlightSeat> GenerateFlightSeats(HttpClient client, int flight_id, int numSeats)
     {
         var flightSeats = new ArrayList<FlightSeat>();
-        var letters = List.of("A", "B", "C", "D");
         for (int i = 0; i < numSeats; i++) {
-            var letter = letters.get(i % letters.size());
-            int number = i / letters.size();
-            var seat_number = letter + number;
-            var seat = new FlightSeat(flight_id, seat_number);
+            int number = i;
+            var seat = new FlightSeat(flight_id, number);
             flightSeats.add(seat);
             SendFlightSeat(client, seat);
         }

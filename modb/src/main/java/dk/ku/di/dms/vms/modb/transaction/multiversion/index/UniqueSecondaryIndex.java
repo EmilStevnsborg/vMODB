@@ -6,6 +6,7 @@ import dk.ku.di.dms.vms.modb.transaction.TransactionContext;
 import dk.ku.di.dms.vms.modb.transaction.internal.Entry;
 import dk.ku.di.dms.vms.modb.transaction.multiversion.TransactionWrite;
 import dk.ku.di.dms.vms.modb.transaction.multiversion.WriteType;
+import jdk.jshell.spi.ExecutionControl;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -129,6 +130,11 @@ public final class UniqueSecondaryIndex implements IMultiVersionIndex {
     @Override
     public Iterator<Object[]> iterator(TransactionContext txCtx, IKey[] keys) {
         return new KeyMultiVersionIterator(txCtx, keys);
+    }
+
+    @Override
+    public Iterator<Object[]> iteratorCommitted() {
+        return null;
     }
 
     @Override

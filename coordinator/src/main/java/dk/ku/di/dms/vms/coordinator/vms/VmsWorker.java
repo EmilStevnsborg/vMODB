@@ -377,9 +377,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         // exit this loop
         while (this.isRunning())
         {
-            this.processPendingNetworkTasks();
-            if (this.state == DISCONNECTED) continue;
-
             try {
                 this.transactionEventQueue.drain(this.drained, this.options.networkBufferSize());
                 if(this.drained.isEmpty()){
@@ -697,8 +694,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     }
 
     private void sendBatchCommitInfo(BatchCommitInfo.Payload batchCommitInfo){
-        System.out.println(STR."SENDING BATCH COMMIT INFO \{batchCommitInfo}");
-        // then send only the batch commit info
+//        System.out.println(STR."SENDING BATCH COMMIT INFO \{batchCommitInfo} to \{consumerVms.identifier}");
         try {
 //            System.out.println("Stall sending batch commit info to terminal VMS ....");
             ByteBuffer writeBuffer = this.retrieveByteBuffer();
@@ -735,6 +731,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
      */
     private void sendBatchOfEvents(){
         int remaining = this.drained.size();
+        // System.out.println(STR."coordinator sending \{remaining} events to \{consumerVms.identifier}");
         int count = remaining;
         ByteBuffer writeBuffer;
         while(remaining > 0) {
@@ -743,7 +740,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 writeBuffer = this.retrieveByteBuffer();
                 remaining = BatchUtils.assembleBatchPayload(remaining, this.drained, writeBuffer);
 
-                LOGGER.log(DEBUG, "Leader: Submitting ["+(count - remaining)+"] events to "+consumerVms.identifier);
                 count = remaining;
                 writeBuffer.flip();
 

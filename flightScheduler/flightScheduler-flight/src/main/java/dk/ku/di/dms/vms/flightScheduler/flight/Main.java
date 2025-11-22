@@ -88,7 +88,7 @@ public final class Main {
             long lastTid = VMS.lastTidFinished();
             this.transactionManager.beginTransaction(lastTid, 0, lastTid,true);
 
-            var flightSeats = this.repository.getAll();
+            var flightSeats = this.repository.getAllCommitted();
 
             return flightSeats.stream()
                     .toList()

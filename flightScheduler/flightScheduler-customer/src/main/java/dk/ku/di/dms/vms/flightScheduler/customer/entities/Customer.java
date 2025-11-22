@@ -16,7 +16,7 @@ public final class Customer implements IEntity<Integer> {
     @Column
     public String name;
     @Column
-    public String seat_number;
+    public int seat_number;
 
     public Customer(int customer_id, int money, String name)
     {
@@ -28,7 +28,7 @@ public final class Customer implements IEntity<Integer> {
     @SuppressWarnings("unused")
     public Customer(){}
 
-    public void addSeat(String seat_number)
+    public void addSeat(int seat_number)
     {
         this.seat_number = seat_number;
     }

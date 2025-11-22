@@ -186,6 +186,20 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
     }
 
     @Override
+    public List<Object[]> getAllCommitted(Table table){
+        List<Object[]> res = new ArrayList<>();
+
+        // of latest committed info (will skip everything in memory essentially
+
+        Iterator<Object[]> iterator = table.primaryKeyIndex().iteratorCommitted();
+        while(iterator.hasNext()){
+            var object = iterator.next();
+            res.add(object);
+        }
+        return res;
+    }
+
+    @Override
     public void insertAll(Table table, List<Object[]> objects){
         // get tid, do all the checks, etc
         TransactionContext txCtx = this.txCtxMap.get(Thread.currentThread().threadId());

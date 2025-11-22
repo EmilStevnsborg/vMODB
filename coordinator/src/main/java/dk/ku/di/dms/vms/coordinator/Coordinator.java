@@ -453,7 +453,7 @@ public final class Coordinator extends ModbHttpServer {
         // get the dag for each eventType
         for (var eventType : inputEvents)
         {
-            System.out.println(STR."Checking nodes in dag with input event: \{eventType}");
+            // System.out.println(STR."Checking nodes in dag with input event: \{eventType}");
 
             // only one???
             var dagsWithEventTypeAsInput = transactionMap.values().stream().filter(d-> d.inputEvents.containsKey(eventType)).toList();
@@ -465,7 +465,7 @@ public final class Coordinator extends ModbHttpServer {
             };
 
             var nodes = dag.getNodes();
-            System.out.println(STR."\{nodes.size()} nodes in dag with input event: \{eventType}");
+            // System.out.println(STR."\{nodes.size()} nodes in dag with input event: \{eventType}");
 
             for (var node : nodes)
             {
@@ -504,7 +504,7 @@ public final class Coordinator extends ModbHttpServer {
     }
     private void setUpTransactionWorkers(long startingTid, long startingBatchOffset) {
         int numWorkers = this.options.getNumTransactionWorkers();
-        System.out.println(STR."start setup \{numWorkers} transaction workers");
+        System.out.println(STR."start setUpTransactionWorkers; \{numWorkers} workers");
 
         var firstPrecedenceInputQueue = new ConcurrentLinkedDeque<Map<String, TransactionWorker.PrecedenceInfo>>();
         var precedenceMapInputQueue = firstPrecedenceInputQueue;
@@ -574,7 +574,7 @@ public final class Coordinator extends ModbHttpServer {
             q.clear();
         }
         transactionWorkers.clear();
-        System.out.println(STR."finished destroyTransactionWorkers");
+        // System.out.println(STR."finished destroyTransactionWorkers");
     }
 
 
@@ -867,7 +867,7 @@ public final class Coordinator extends ModbHttpServer {
                 buffer.position(1);
                 var node = IdentifiableNode.read(buffer); // this can potentially be hacked
 
-                System.out.println(STR."the coordinator was PINGED by \{node.identifier}");
+                // System.out.println(STR."the coordinator was PINGED by \{node.identifier}");
 
                 boolean active = consumerToEventsMap.get(node.identifier).size() > 0;
                 try {
@@ -976,6 +976,7 @@ public final class Coordinator extends ModbHttpServer {
             return false;
         }
 
+        // System.out.println(STR."accepting \{dag.name}");
         this.transactionInputConsumer.accept(transactionInput);
         return true;
     }
@@ -1017,8 +1018,8 @@ public final class Coordinator extends ModbHttpServer {
                 // all VMSes have received abort
                 if (missingACKs.size() == 0)
                 {
-                    // incorporate with pending aborts
-                    // don't resend transactions to be aborted (for optimization, not consistency)
+                    System.out.println(STR."all ACKs for reconnection to \{vmsAcknowledgedAbort} processed");
+
                     resendTransactions(abortedTid);
                     ongoingAbortMissingVmsAck.remove(abortedTid);
                 }
@@ -1076,18 +1077,19 @@ public final class Coordinator extends ModbHttpServer {
             case ReconnectionAck.Payload reconACK -> {
                 var restartedVms = reconACK.vmsRestarted();
                 var vmsAcknowledged = reconACK.vmsAcknowledged();
-                System.out.println(STR."ACK from \{vmsAcknowledged} for reconnection to \{restartedVms} processed");
+//                System.out.println(STR."ACK from \{vmsAcknowledged} for reconnection to \{restartedVms} processed");
 
                 if (!ongoingReconnectionMissingVmsAck.containsKey(restartedVms)) return;
 
                 ongoingReconnectionMissingVmsAck.get(restartedVms).remove(vmsAcknowledged);
 
                 var missingACKs = ongoingReconnectionMissingVmsAck.get(restartedVms);
-                System.out.println(STR."Reconnection ACKs missing from [\{String.join(", ", missingACKs)}] " +
-                                   STR."for reconnection of \{restartedVms}");
+//                System.out.println(STR."Reconnection ACKs missing from [\{String.join(", ", missingACKs)}] " +
+//                                   STR."for reconnection of \{restartedVms}");
 
                 // reconnection has been handled
                 if (missingACKs.size() == 0) {
+                    System.out.println(STR."all ACKs for reconnection to \{restartedVms} processed");
                     ongoingReconnectionMissingVmsAck.remove(restartedVms);
                     offlineVMSes.remove(restartedVms);
 
@@ -1103,15 +1105,16 @@ public final class Coordinator extends ModbHttpServer {
             case CrashAck.Payload crashACK -> {
                 var crashedVms = crashACK.vmsCrashed();
                 var vmsAcknowledged = crashACK.vmsAcknowledged();
-                System.out.println(STR."ACK from \{vmsAcknowledged} for crash of \{crashedVms} processed");
+                 // System.out.println(STR."ACK from \{vmsAcknowledged} for crash of \{crashedVms} processed");
 
                 ongoingCrashMissingVmsAck.get(crashedVms).remove(vmsAcknowledged);
 
                 var missingACKs = ongoingCrashMissingVmsAck.get(crashedVms);
-                System.out.println(STR."Crash ACKs missing from [\{String.join(", ", missingACKs)}] for crash of \{crashedVms}");
+                // System.out.println(STR."Crash ACKs missing from [\{String.join(", ", missingACKs)}] for crash of \{crashedVms}");
 
                 // crash has been handled
                 if (missingACKs.size() == 0) {
+                    System.out.println(STR."all ACKs for crash handling of \{crashedVms} processed");
                     ongoingCrashMissingVmsAck.remove(crashedVms);
 
                     // if there are no more crashes happening, safely continue
@@ -1265,8 +1268,8 @@ public final class Coordinator extends ModbHttpServer {
                 .filter(producer -> !offlineVMSes.contains(producer))
                 .collect(Collectors.toSet());
 
-        System.out.println(STR."putting \{restartedVms} as ongoing reconnection missing ACKs " +
-                           STR." from [\{String.join(", ", aliveProducers)}]");
+//        System.out.println(STR."putting \{restartedVms} as ongoing reconnection missing ACKs " +
+//                           STR." from [\{String.join(", ", aliveProducers)}]");
 
         ongoingReconnectionMissingVmsAck.put(restartedVms, aliveProducers);
 
@@ -1302,10 +1305,10 @@ public final class Coordinator extends ModbHttpServer {
         var affectedTransactions = affectedDags.stream().map(d -> d.name).toList();
         disallowedTransactions.addAll(affectedTransactions);
 
-        System.out.println(STR."coordinator disallows vms: \{crashedVms}");
-        for (var tx : affectedTransactions) {
-            System.out.println(STR."coordinator disallows: \{tx}");
-        }
+//        System.out.println(STR."coordinator disallows vms: \{crashedVms}");
+//        for (var tx : affectedTransactions) {
+//            System.out.println(STR."coordinator disallows: \{tx}");
+//        }
 
         destroyTransactionWorkers();
         long tid;
@@ -1346,7 +1349,7 @@ public final class Coordinator extends ModbHttpServer {
         BatchContext batchContext = this.batchContextMap.get( batchComplete.batch() );
         // only if it is not a duplicate vote
         batchContext.missingVotes.remove( batchComplete.vms() );
-        // System.out.println(STR."Coordinator batch complete from \{batchComplete.vms()} and missingVotes=\{batchContext.missingVotes.size()}");
+        System.out.println(STR."Coordinator batch complete from \{batchComplete.vms()} and missingVotes=\{batchContext.missingVotes.size()}");
         if(batchContext.missingVotes.isEmpty()){
             LOGGER.log(INFO,"Leader: Received all missing votes of batch "+ batchContext.batchOffset + " with "+batchContext.numTIDsOverall+" transactions");
             this.updateBatchOffsetPendingCommit(batchContext);
@@ -1400,11 +1403,12 @@ public final class Coordinator extends ModbHttpServer {
         this.batchContextMap.put(batch, batchContext);
 
         // after storing batch context, send to vms workers
-        for(var entry : batchContext.terminalVMSs) {
-            this.vmsWorkerContainerMap.get(entry).queueMessage(
+        for (var vms : batchContext.terminalVMSs) {
+            System.out.println(STR."sending BATCH COMMIT INFO for batch \{batch} to \{vms}");
+            this.vmsWorkerContainerMap.get(vms).queueMessage(
                     BatchCommitInfo.of(batchContext.batchOffset,
-                            batchContext.previousBatchPerVms.get(entry),
-                            batchContext.numberOfTIDsPerVms.get(entry),
+                            batchContext.previousBatchPerVms.get(vms),
+                            batchContext.numberOfTIDsPerVms.get(vms),
                             batchContext.abortedTIDs));
         }
     }
@@ -1417,7 +1421,7 @@ public final class Coordinator extends ModbHttpServer {
         var vmsIdentifier = vmsIdentifier_.identifier;
         if (vmsMetadataMap.containsKey(vmsIdentifier) && offlineVMSes.contains(vmsIdentifier))
         {
-            System.out.println(STR."\{vmsIdentifier} introduced itself again to the coordinator");
+            // System.out.println(STR."\{vmsIdentifier} introduced itself to the coordinator");
             processReconnectionInCoordinator(vmsIdentifier);
             return;
         }

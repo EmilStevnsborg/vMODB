@@ -50,13 +50,6 @@ public final class MultiVmsContainer implements IVmsContainer {
     }
 
     @Override
-    public void processRecoveryInVms() {
-        for(ConsumerVmsWorker consumerVmsWorker : this.consumerVmsWorkers) {
-            consumerVmsWorker.processRecoveryInVms();
-        }
-    }
-
-    @Override
     public String identifier(){
         return this.node.identifier;
     }

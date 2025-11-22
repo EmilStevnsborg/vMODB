@@ -7,9 +7,9 @@ public class OrderFlight
 {
     public int customer_id;
     public int flight_id;
-    public String seat_number;
+    public int seat_number;
     public OrderFlight(){}
-    public OrderFlight(int customer_id, int flight_id, String seat_number)
+    public OrderFlight(int customer_id, int flight_id, int seat_number)
     {
         this.customer_id = customer_id;
         this.flight_id = flight_id;
@@ -22,7 +22,7 @@ public class OrderFlight
         return "{\n"
                 + "  \"customer_id\":" + customer_id + ",\n"
                 + "  \"flight_id\":" + flight_id + ",\n"
-                + "  \"seat_number\":\"" + seat_number + "\"\n"
+                + "  \"seat_number\":" + seat_number + "\n"
                 + "}";
     }
 }

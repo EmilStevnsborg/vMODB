@@ -148,6 +148,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
 
     @Override
     public void run() {
+        // System.out.println(STR."run worker for \{consumerVms.identifier} in \{me.identifier}");
         LOGGER.log(INFO, this.me.identifier+ ": Starting worker for consumer VMS: "+this.consumerVms.identifier);
         if(!this.connect()) {
             LOGGER.log(WARNING, this.me.identifier+ ": Finishing prematurely worker for consumer VMS "+this.consumerVms.identifier+" because connection failed");
@@ -160,9 +161,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     private void eventLoopNoLogging() {
         while (this.isRunning())
         {
-            processPendingMessages();
-            if (this.state == DISCONNECTED) continue;
-
             int pollTimeout = 1;
             try {
                 transactionEventQueue.drain(this.drained::add, this.options.networkBufferSize());
@@ -200,6 +198,8 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     private boolean reconnect() {
         var connected = connect();
         if (!connected) {
+            System.out.println(STR."\{me.identifier} NOT reconnected to \{this.consumerVms.identifier}");
+            System.out.println(STR."\{me.identifier} NOT reconnected to \{this.consumerVms.identifier}");
             return false;
         }
         else {
@@ -246,24 +246,10 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         return true;
     }
 
-    // called from the VmsEventHandler
-    @Override
-    public void processRecoveryInVms()
-    {
-        if (consumerIsRecovering) return;
-
-        consumerIsRecovering = true;
-
-        reconnect();
-        System.out.println(STR."Clearing transactionEventQueue in \{me.identifier} for \{consumerVms.identifier}");
-        transactionEventQueue.clear();
-        drained.clear();
-        consumerIsRecovering = false;
-    }
-
     // TODO sending batch of events (look for format)
     private void sendBatchOfEventsNonBlocking() {
         int remaining = this.drained.size();
+        // System.out.println(STR."worker for \{consumerVms.identifier} in \{me.identifier} will send \{remaining} events");
         int count = remaining;
         ByteBuffer writeBuffer = null;
         while(remaining > 0){
@@ -391,7 +377,8 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         if(!this.transactionEventQueue.offer(eventPayload)){
             System.out.println(me.identifier +": cannot add event in the input queue");
         }
-//        System.out.println(STR."transactionEventQueue size = \{transactionEventQueue.size()}");
+//        System.out.println(STR."transactionEventQueue size = \{transactionEventQueue.size()} in worker " +
+//                           STR."for \{consumerVms.identifier} for \{me.identifier} after queing \{eventPayload.tid()}");
     }
 
     @Override

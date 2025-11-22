@@ -12,6 +12,10 @@ import java.net.http.HttpClient;
 import java.util.ArrayList;
 import java.util.List;
 
+
+
+// ISSUE: There is a problem
+
 public class RecoverVms
 {
     public static boolean Run(HttpClient client) throws IOException {
@@ -43,13 +47,8 @@ public class RecoverVms
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
 
         System.console().readLine();
-        System.out.println(STR."There are \{VmsEndpoints.GetFlightSeats(client, 0)
-                                            .stream().filter(fs -> fs.occupied == 1)
-                                            .count()} occupied flight seats");
-        System.console().readLine();
 
         var bookings = VmsEndpoints.GetBookings(client);
-        System.out.println(STR."There are \{bookings.size()} registered bookings");
         System.console().readLine();
 
         // 3rd batch (abort flight orders)
@@ -89,22 +88,13 @@ public class RecoverVms
         ComponentProcess.StartVms("flight", true, 1);
         System.out.println(STR."Flight is back online");
 
-        // wait for VMS to recover
-        System.console().readLine();
-        System.out.println(STR."There are \{VmsEndpoints.GetFlightSeats(client, 0)
-                .stream().filter(fs -> fs.occupied == 1)
-                .count()} occupied flight seats");
-
         // 4th batch
+        System.console().readLine();
         System.out.println(STR."TEST: sending order_flights with TIDs of [31-41)");
         for (var i = 30; i < 40; i++)
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
 
         // wait for batch to commit
-        System.console().readLine();
-        System.out.println(STR."There are \{VmsEndpoints.GetFlightSeats(client, 0)
-                .stream().filter(fs -> fs.occupied == 1)
-                .count()} occupied flight seats");
         System.console().readLine();
 
         var updatedBookings = VmsEndpoints.GetBookings(client);
@@ -115,6 +105,8 @@ public class RecoverVms
         System.out.println(STR."updatedFlightSeats.size = \{updatedFlightSeats.size()}");
 
         var success = true;
+
+        // 20 flight seats were ordered, 10 bookings were paid, 10 flight seats were ordered
         if (unpaidBookings.size() != 20)
         {
             System.out.println(STR."FAILURE (RecoverVms): unpaidBookings=\{unpaidBookings.size()} != 20");
@@ -127,7 +119,7 @@ public class RecoverVms
         }
         else
         {
-            System.out.println(STR."SUCCESS (RecoverVms): unpaidBookings=\{unpaidBookings.size()} == 15, " +
+            System.out.println(STR."SUCCESS (RecoverVms): unpaidBookings=\{unpaidBookings.size()} == 20, " +
                                STR."occupiedFlightSeats=\{occupiedFlightSeats.size()} == 30");
         }
 

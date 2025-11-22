@@ -88,7 +88,7 @@ public final class Main {
 
             long lastTid = VMS.lastTidFinished();
             this.transactionManager.beginTransaction(lastTid, 0, lastTid, true);
-            var payments = this.paymentRepository.getAll();
+            var payments = this.paymentRepository.getAllCommitted();
             return payments.toString();
         }
     }

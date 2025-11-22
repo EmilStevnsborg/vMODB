@@ -124,6 +124,17 @@ public abstract class AbstractProxyRepository<PK extends Serializable, T extends
         }
         return resultList;
     }
+    @Override
+    public final List<T> getAllCommitted(){
+        List<Object[]> records = this.operationalAPI.getAllCommitted(this.table);
+        List<T> resultList = new ArrayList<>(records.size());
+        for (var record : records){
+            var recordParsed = this.parseObjectIntoEntity(record);
+            resultList.add(recordParsed);
+        }
+        System.out.println(STR."Getting all committed records of \{this.table.name}, there are \{resultList.size()}");
+        return resultList;
+    }
 
     @Override
     public final boolean exists(PK key){

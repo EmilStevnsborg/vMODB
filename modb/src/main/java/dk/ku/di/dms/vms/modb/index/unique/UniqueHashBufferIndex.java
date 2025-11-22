@@ -221,6 +221,7 @@ public class UniqueHashBufferIndex extends ReadWriteIndex<IKey> implements ReadW
     }
 
     private long findRecordAddress(IKey key){
+        // System.out.println(STR."find record address for key \{key}");
         int attemptsToFind = OPEN_ADDRESSING_ATTEMPTS;
         int aux = 1;
         long pos = this.getPosition(key.hashCode());

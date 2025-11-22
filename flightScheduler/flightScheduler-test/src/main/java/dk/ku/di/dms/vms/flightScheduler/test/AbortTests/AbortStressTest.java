@@ -35,7 +35,6 @@ public class AbortStressTest
         // customer ids for unregistered customers
         var unregisteredCustomerIds = DataGenerator.CreateCustomers(50, 50);
 
-        System.out.println(STR."TEST: there are \{customers.size()} registered customers, and \{unregisteredCustomerIds.size()} unregistered customers");
         System.console().readLine();
         System.out.println(STR."TEST: submit 100 order flights, where every other of them fail");
         for (var i = 0; i < 100; i++)

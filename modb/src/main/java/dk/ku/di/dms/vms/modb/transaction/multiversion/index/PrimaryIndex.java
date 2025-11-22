@@ -556,6 +556,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
                 if(operation == null) {
                     var record = underlyingIndex().record(this.keys[this.idx]);
                     if(record != null){
+                        System.out.println(STR."record for key \{this.keys[this.idx]} is null");
                         this.next = record;
                         this.idx++;
                         return true;
@@ -604,6 +605,44 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         return new PrimaryIndexIterator(txCtx);
     }
 
+    @Override
+    public Iterator<Object[]> iteratorCommitted() {
+        return new PrimaryIndexIteratorCommitted();
+    }
+
+    private final class PrimaryIndexIteratorCommitted implements Iterator<Object[]> {
+        private final Iterator<IKey> keyIterator;
+        private Object[] currRecord;
+
+        public PrimaryIndexIteratorCommitted(){
+            this.keyIterator = rawIndex.iterator();
+        }
+
+        @Override
+        public boolean hasNext() {
+            while (keyIterator.hasNext()) {
+                IKey key = keyIterator.next();
+                this.currRecord = rawIndex.lookupByKey(key);
+                // System.out.println(STR."looking up in rawIndex for \{key} record \{currRecord}");
+                if (this.currRecord == null) {
+                    if (this.keyIterator.hasNext()) {
+                        continue;
+                    } else {
+                        return false;
+                    }
+                }
+                return true;
+
+            }
+            return false;
+        }
+
+        @Override
+        public Object[] next() {
+            return this.currRecord;
+        }
+    }
+
     private final class PrimaryIndexIterator implements Iterator<Object[]> {
 
         private final TransactionContext txCtx;
@@ -615,7 +654,6 @@ public final class PrimaryIndex implements IMultiVersionIndex {
             Set<IKey> allKeys = new HashSet<>();
             rawIndex.iterator().forEachRemaining(allKeys::add);
             var keysInMemory = updatesPerKeyMap.keySet();
-            // System.out.println(STR."allKeys size \{allKeys.size()}");
             allKeys.addAll(keysInMemory);
             this.keyIterator = allKeys.iterator();
         }
@@ -627,10 +665,13 @@ public final class PrimaryIndex implements IMultiVersionIndex {
                 // Prefer updatesPerKeyMap if present
                 OperationSetOfKey operationSetOfKey = updatesPerKeyMap.get(key);
                 if (operationSetOfKey != null) {
+                    // System.out.println(STR."operationSetOfKey exists for key \{key}");
                     Entry<Long, TransactionWrite> entry = operationSetOfKey.getHigherEntryUpToKey(this.txCtx.tid);
                     if (entry == null) {
+                        // System.out.println(STR."operationSetOfKey exists for key \{key}, but no records exist in memory");
                         this.currRecord = rawIndex.lookupByKey(key);
                         if (this.currRecord == null) {
+                            // System.out.println(STR."operationSetOfKey exists for key \{key}, but no records exist in memory and in persistent storage either");
                             if (this.keyIterator.hasNext()) {
                                 continue;
                             } else {
@@ -652,7 +693,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
                 // new
                 else {
                     this.currRecord = rawIndex.lookupByKey(key);
-                    // System.out.println(STR."looking up in rawIndex for \{key} record \{currRecord}");
+                    System.out.println(STR."looking up record for \{key} in persistent storage: \{currRecord}");
                     if (this.currRecord == null) {
                         if (this.keyIterator.hasNext()) {
                             continue;

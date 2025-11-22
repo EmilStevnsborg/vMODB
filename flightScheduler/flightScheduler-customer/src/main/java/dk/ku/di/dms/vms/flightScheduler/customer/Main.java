@@ -87,7 +87,7 @@ public final class Main {
 
             this.transactionManager.beginTransaction(0, 0, lastTid, true);
             if (split[split.length - 1].equals("customer")) {
-                var customers = this.repository.getAll();
+                var customers = this.repository.getAllCommitted();
                 return customers.toString();
             }
             else {

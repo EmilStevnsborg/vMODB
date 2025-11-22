@@ -177,7 +177,7 @@ final class LeaderWorker extends StoppableRunnable {
         this.write(payload);
     }
     private void sendCrashAck(CrashAck.Payload payload) {
-        System.out.println(STR."sendCrashAck from \{vmsNode.identifier}");
+        // System.out.println(STR."sendCrashAck from \{vmsNode.identifier}");
         CrashAck.write( this.writeBuffer,  payload);
         this.write(payload);
     }

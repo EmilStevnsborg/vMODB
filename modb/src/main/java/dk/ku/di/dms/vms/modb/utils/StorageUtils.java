@@ -127,7 +127,7 @@ public class StorageUtils {
     private static MemorySegment mapFileIntoMemorySegment(String fileName) {
         File file = buildFile(fileName);
         try {
-            StandardOpenOption[] options = buildFileOpenOptions(false);
+            StandardOpenOption[] options = buildFileOpenOptions(true);
             FileChannel fc = FileChannel.open(Path.of(file.toURI()), options);
             LOGGER.log(DEBUG, "Attempt to open file in directory completed successfully: "+file.getAbsolutePath());
             return mapFileChannelIntoMemorySegment(fc, file.length());// also works: fc.size()

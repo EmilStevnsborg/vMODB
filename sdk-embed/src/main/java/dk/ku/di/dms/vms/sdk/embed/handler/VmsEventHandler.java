@@ -388,10 +388,21 @@ public final class VmsEventHandler extends ModbHttpServer {
     private void processVmsCrash(VmsCrash.Payload vmsCrash)
     {
         System.out.println(STR."\{me.identifier} started processing crash of \{vmsCrash}");
-        var crashedVmsWorkerContainer = consumerVmsContainerMap.remove(vmsCrash.vms());
-        if (crashedVmsWorkerContainer != null)
+        var vmsNode = vmsMetadataMap.get(vmsCrash.vms());
+        var crashedVmsWorkerContainer = consumerVmsContainerMap.remove(vmsNode);
+        if (crashedVmsWorkerContainer != null) {
             crashedVmsWorkerContainer.stop();
 
+            for (var entry : eventToConsumersMap.entrySet()) {
+                var eventConsumerWorkers = entry.getValue();
+                var sizeBefore = eventConsumerWorkers.size();
+                eventConsumerWorkers.remove(crashedVmsWorkerContainer);
+
+//                System.out.println(STR."\{me.identifier} removes \{crashedVmsWorkerContainer.identifier()} " +
+//                        STR."from eventConsumerWorkers, size before=\{sizeBefore}" +
+//                        STR."from eventConsumerWorkers, size after=\{eventConsumerWorkers.size()}");
+            }
+        }
         // abort uncommitted events
         resetToCommittedState();
 
@@ -501,7 +512,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     }
 
     public void processOutputEvent(IVmsTransactionResult txResult) {
-        // System.out.println(STR."new transaction result in \{me.identifier} for tid=\{txResult.tid()}");
+        System.out.println(STR."new transaction result in \{me.identifier} for tid=\{txResult.tid()}");
 
         if (txResult.getOutboundEventResult().isAbort()) {
             abortTransaction(txResult);
@@ -529,17 +540,20 @@ public final class VmsEventHandler extends ModbHttpServer {
      * but can only send the batch commit once
      */
     private void updateBatchStats(OutboundEventResult outputEvent) {
-//        System.out.println("VmsEventHandler.updateBatchStats");
+        System.out.println(STR."\{me.identifier} updateBatchStats");
         BatchMetadata batchMetadata = this.updateBatchMetadataAtomically(outputEvent);
         // not arrived yet
-        if(!this.batchContextMap.containsKey(outputEvent.batch())) return;
+        if(!this.batchContextMap.containsKey(outputEvent.batch())) {
+            System.out.println(STR."\{me.identifier} does not have context for batch \{outputEvent.batch()}");
+            return;
+        };
         BatchContext thisBatch = this.batchContextMap.get(outputEvent.batch());
         if(thisBatch.numberOfTIDsBatch != batchMetadata.numberTIDsExecuted) {
-//            System.out.println(STR."BATCH \{me.identifier} thisBatch.numberOfTIDsBatch=\{thisBatch.numberOfTIDsBatch}" +
-//                               STR." != batchMetadata.numberTIDsExecuted=\{batchMetadata.numberTIDsExecuted}");
+            System.out.println(STR."BATCH \{me.identifier} thisBatch.numberOfTIDsBatch=\{thisBatch.numberOfTIDsBatch}" +
+                               STR." != batchMetadata.numberTIDsExecuted=\{batchMetadata.numberTIDsExecuted}");
             return;
         }
-        System.out.println(STR."\{me.identifier} setting BATCH_COMPLETED");
+        System.out.println(STR."\{me.identifier} setting BATCH_COMPLETED for batch \{outputEvent.batch()}");
         thisBatch.setStatus(BatchContext.BATCH_COMPLETED);
         // if terminal, must send batch complete
         if (thisBatch.terminal) {
@@ -892,7 +906,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                     }
                     readCompletionHandler.parse(new HttpReadCompletionHandler.RequestTracking());
                 } else {
-                    LOGGER.log(WARNING, STR."a node is trying to connect to \{me.identifier} without a presentation message");
+                    System.out.println(STR."a node is trying to connect to \{me.identifier} without a presentation message");
                     this.buffer.clear();
                     MemoryManager.releaseTemporaryDirectBuffer(this.buffer);
                     try { this.channel.close(); } catch (IOException ignored) { }
@@ -956,7 +970,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             } else {
                 producerConnectionMetadataMap.put(producerVms.hashCode(), connMetadata);
                 // setup event receiving from this vms
-                LOGGER.log(DEBUG, STR."\{producerVms.identifier} is now connected to \{me.identifier} as a producer");
+                System.out.println(STR."\{producerVms.identifier} is now connected to \{me.identifier} as a producer");
             }
 
             this.channel.read(this.buffer, 0, new VmsReadCompletionHandler(producerVms, connMetadata, this.buffer));
@@ -1343,6 +1357,9 @@ public final class VmsEventHandler extends ModbHttpServer {
         private void processNewBatchInfo(BatchCommitInfo.Payload batchCommitInfo)
         {
             BatchContext batchContext = BatchContext.build(batchCommitInfo);
+
+            System.out.println(STR."\{me.identifier} received BATCH COMMIT INFO \{batchCommitInfo}");
+
             var batch = batchCommitInfo.batch();
 
             // check if batch context needs updating

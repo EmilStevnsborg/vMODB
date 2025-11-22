@@ -5,7 +5,7 @@ public class Customer
     public int customer_id;
     public int money;
     public String name;
-    public String seat_number;
+    public int seat_number;
 
     public Customer(int customer_id, int money, String name) {
         this.customer_id = customer_id;
