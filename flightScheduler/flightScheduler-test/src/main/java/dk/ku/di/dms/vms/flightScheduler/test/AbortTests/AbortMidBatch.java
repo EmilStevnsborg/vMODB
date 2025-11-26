@@ -44,6 +44,9 @@ public class AbortMidBatch
         for (var i = 0; i < customers.size(); i++)
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
 
+        System.console().readLine();
+        System.out.println(STR."TEST: customer's size: \{customers.size()}");
+
         // wait for first orders
         System.console().readLine();
 

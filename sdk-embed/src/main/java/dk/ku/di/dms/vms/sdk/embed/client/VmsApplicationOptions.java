@@ -12,6 +12,7 @@ public final class VmsApplicationOptions {
     private final int port;
 
     private final String[] packages;
+    private final boolean recoverable;
 
     private final int networkBufferSize;
 
@@ -40,16 +41,17 @@ public final class VmsApplicationOptions {
         return build(properties, host, port, packages);
     }
 
-    public static VmsApplicationOptions build(Properties properties, String host, int port, String[] packages) {
+    public static VmsApplicationOptions build(Properties properties, String host,
+                                              int port, String[] packages) {
 
-        System.out.println("Properties: \n" + properties.toString());
+        boolean recoverable = Boolean.parseBoolean(properties.getProperty("recoverable"));
+        int numVmsWorkers = Integer.parseInt(properties.getProperty("num_vms_workers"));
 
         int networkBufferSize = Integer.parseInt(properties.getProperty("network_buffer_size"));
         int soBufferSize = Integer.parseInt(properties.getProperty("so_buffer_size"));
         int networkSendTimeout = Integer.parseInt(properties.getProperty("network_send_timeout"));
         int networkThreadPoolSize = Integer.parseInt(properties.getProperty("network_thread_pool_size"));
         int vmsThreadPoolSize = Integer.parseInt(properties.getProperty("vms_thread_pool_size"));
-        int numVmsWorkers = Integer.parseInt(properties.getProperty("num_vms_workers"));
 
         int maxSleep = 0;
         String maxSleepStr = properties.getProperty("max_sleep");
@@ -72,6 +74,7 @@ public final class VmsApplicationOptions {
                 host,
                 port,
                 packages,
+                recoverable,
                 networkBufferSize == 0 ? MemoryUtils.DEFAULT_PAGE_SIZE : networkBufferSize,
                 networkThreadPoolSize,
                 numVmsWorkers,
@@ -85,13 +88,14 @@ public final class VmsApplicationOptions {
                 maxSleep);
     }
 
-    private VmsApplicationOptions(String host, int port, String[] packages,
+    private VmsApplicationOptions(String host, int port, String[] packages, boolean recoverable,
                                   int networkBufferSize, int networkThreadPoolSize, int numVmsWorkers,
                                   int vmsThreadPoolSize, int networkSendTimeout, int soBufferSize,
                                   boolean logging, boolean checkpointing, boolean truncating, int maxRecords, int maxSleep) {
         this.host = host;
         this.port = port;
         this.packages = packages;
+        this.recoverable = recoverable;
         this.networkBufferSize = networkBufferSize;
         this.networkThreadPoolSize = networkThreadPoolSize;
         this.numVmsWorkers = numVmsWorkers;
@@ -127,6 +131,9 @@ public final class VmsApplicationOptions {
 
     public int port() {
         return this.port;
+    }
+    public boolean recoveryEnabled() {
+        return this.recoverable;
     }
 
     public int vmsThreadPoolSize() {

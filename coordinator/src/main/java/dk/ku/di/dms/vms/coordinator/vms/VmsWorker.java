@@ -7,12 +7,13 @@ import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitAck;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitCommand;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitInfo;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchComplete;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.ConsumerSet;
-import dk.ku.di.dms.vms.modb.common.schema.network.control.Presentation;
+import dk.ku.di.dms.vms.modb.common.schema.network.control.*;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbort;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbortAck;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbortInfo;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 import dk.ku.di.dms.vms.modb.common.serdes.IVmsSerdesProxy;
 import dk.ku.di.dms.vms.modb.common.utils.BatchUtils;
@@ -495,8 +496,12 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         @Override
         public void completed(Integer result, Integer startPos) {
             if(result == -1){
+                // System.out.println(STR."VMS \{consumerVms.identifier} has disconnected from coordinator");
                 LOGGER.log(WARNING, "Leader: " + consumerVms.identifier+" has disconnected!");
                 channel.close();
+
+                var vmsCrash = VmsCrash.of(consumerVms.identifier);
+                coordinatorQueue.add(vmsCrash);
                 return;
             }
             if(startPos == 0){
@@ -514,6 +519,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                             state = VMS_PRESENTATION_RECEIVED;// for the first time
                             this.processVmsIdentifier();
                             state = VMS_PRESENTATION_PROCESSED;
+
                         } else {
                             // in the future it can be an update of the vms schema or crash recovery
                             LOGGER.log(ERROR, "Leader: Presentation already received from VMS: " + consumerVms.identifier);
@@ -521,6 +527,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                     }
                     // from all terminal VMSs involved in the last batch
                     case BATCH_COMPLETE -> {
+//                        System.out.println("VmsWorker.VmsReadCompletionHandler.type.BATCH_COMPLETE");
                         // don't actually need the host and port in the payload since we have the attachment to this read operation...
                         BatchComplete.Payload response = BatchComplete.read(readBuffer);
                         LOGGER.log(DEBUG, "Leader: Batch (" + response.batch() + ") complete received from: " + consumerVms.identifier);
@@ -537,16 +544,34 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                         coordinatorQueue.add(response);
                     }
                     case TX_ABORT -> {
-                        // get information of what
-                        TransactionAbort.Payload response = TransactionAbort.read(readBuffer);
+                        // System.out.println(STR."coordinator worker for \{consumerVms.identifier} read abort");
+                        TransactionAbortInfo.Payload response = TransactionAbortInfo.read(readBuffer);
                         coordinatorQueue.add(response);
                     }
-                    case EVENT -> LOGGER.log(INFO, "Leader: New event received from: " + consumerVms.identifier);
-                    case BATCH_OF_EVENTS -> LOGGER.log(INFO, "Leader: New batch of events received from VMS");
-                    default -> LOGGER.log(WARNING, "Leader: Unknown message received.");
+                    case TX_ABORT_ACK -> {
+                        // System.out.println(STR."coordinator worker for \{consumerVms.identifier} read ACK");
+                        TransactionAbortAck.Payload response = TransactionAbortAck.read(readBuffer);
+                        coordinatorQueue.add(response);
+                    }
+                    case CRASH_ACK -> {
+                        CrashAck.Payload response = CrashAck.read(readBuffer);
+                        coordinatorQueue.add(response);
+                    }
+                    case RECONNECTION_ACK -> {
+                        ReconnectionAck.Payload response = ReconnectionAck.read(readBuffer);
+                        coordinatorQueue.add(response);
+                    }
+                    case RESET_TO_COMMITTED_ACK -> {
+                        ResetToCommittedAck.Payload response = ResetToCommittedAck.read(readBuffer);
+                        coordinatorQueue.add(response);
+                    }
+                    case EVENT -> LOGGER.log(INFO, "Leader: New event received from: " + consumerVms.identifier); // TODO probably here is important
+                    case BATCH_OF_EVENTS -> LOGGER.log(INFO, "Leader: New batch of events received from VMS"); // TODO or here
+                    default -> System.out.println("Leader: Unknown message received.");
 
                 }
             } catch (BufferUnderflowException e){
+//                System.out.println("VmsWorker.VmsReadCompletionHandler.BufferUnderflowException");
                 LOGGER.log(WARNING, "Leader: Buffer underflow captured. Will read more with the hope the full data is delivered.");
                 e.printStackTrace(System.out);
                 readBuffer.position(startPos);

@@ -278,6 +278,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     }
     private void fixTrackingBatch(long batch, long numberTIDsExecuted, long maxTidExecuted)
     {
+        System.out.println(STR."fixing tracking batch \{batch} in \{me.identifier}");
         var trackedBatchKeys = trackingBatchMap.keySet();
         for(var trackedBatchKey : trackedBatchKeys) {
             if (trackedBatchKey < batch) continue;
@@ -397,7 +398,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
     private void applyAbortLocally(long tid, long bid, boolean initiatedAbort)
     {
-        // System.out.println(STR."\{me.identifier} APPLIES abort for \{tid}");
+        System.out.println(STR."\{me.identifier} APPLIES abort for \{tid}");
         pauseHandler.accept(true);
 
         batchAbortedTIDs.putIfAbsent(bid, new HashSet());
@@ -482,7 +483,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     }
 
     public void processOutputEvent(IVmsTransactionResult txResult) {
-        System.out.println(STR."new transaction result in \{me.identifier} for tid=\{txResult.tid()}");
+        // System.out.println(STR."new transaction result in \{me.identifier} for tid=\{txResult.tid()}");
 
         if (txResult.getOutboundEventResult().isAbort()) {
             abortTransaction(txResult);
@@ -1306,22 +1307,54 @@ public final class VmsEventHandler extends ModbHttpServer {
             }
         }
 
-        private void processNewBatchInfo(BatchCommitInfo.Payload batchCommitInfo){
+        private void processNewBatchInfo(BatchCommitInfo.Payload batchCommitInfo)
+        {
             BatchContext batchContext = BatchContext.build(batchCommitInfo);
-            batchContextMap.put(batchCommitInfo.batch(), batchContext);
+
+            // System.out.println(STR."\{me.identifier} received BATCH COMMIT INFO \{batchCommitInfo}");
+
+            var batch = batchCommitInfo.batch();
+
+            // check if batch context needs updating
+            // are the aborted TIDs registered
+            var abortedTIDs = batchAbortedTIDs.get(batch);
+            if (abortedTIDs != null) {
+                for (var abortedTID : abortedTIDs) {
+                    if (!batchContext.abortedTIDs.contains(abortedTID)) {
+                        batchContext.numberOfTIDsBatch -= 1;
+                        batchContext.abortedTIDs.add(abortedTID);
+                    }
+                }
+            }
+
+            batchContextMap.put(batch, batchContext);
+            // System.out.println(STR."\{me.identifier} has put batchContext for batch \{batch}");
+
             // if it has been completed but not moved to status, then should send
-            if(trackingBatchMap.containsKey(batchCommitInfo.batch())
-                    && trackingBatchMap.get(batchCommitInfo.batch()).numberTIDsExecuted == batchCommitInfo.numberOfTIDsBatch()){
+            if(trackingBatchMap.containsKey(batch))
+            {
+                var trackedBatch = trackingBatchMap.get(batchCommitInfo.batch());
+                System.out.println(STR."\{me.identifier} has processed \{trackedBatch.numberTIDsExecuted} for batch \{batch}");
+
+                if (trackedBatch.numberTIDsExecuted != batchCommitInfo.numberOfTIDsBatch())
+                    return;
+
                 LOGGER.log(INFO,me.identifier+": Requesting leader worker to send batch ("+batchCommitInfo.batch()+") complete (LATE)");
                 leaderWorker.queueMessage(BatchComplete.of(batchCommitInfo.batch(), me.identifier));
+                return;
             }
+
+            // System.out.println(STR."\{me.identifier} has not tracked any events for batch \{batch}");
         }
 
         /**
          * Context of execution of this method:
          * This is not a terminal node in this batch
          */
-        private void processNewBatchCommand(BatchCommitCommand.Payload batchCommitCommand){
+        private void processNewBatchCommand(BatchCommitCommand.Payload batchCommitCommand)
+        {
+            // committing output events sent from the VMS
+
             BatchContext batchContext = BatchContext.build(batchCommitCommand);
             batchContextMap.put(batchCommitCommand.batch(), batchContext);
             BatchMetadata batchMetadata = trackingBatchMap.get(batchCommitCommand.batch());
@@ -1335,9 +1368,27 @@ public final class VmsEventHandler extends ModbHttpServer {
             }
             LOGGER.log(DEBUG, me.identifier + ": All TIDs for the batch " + batchCommitCommand.batch() + " have been executed");
             batchContext.setStatus(BatchContext.BATCH_COMPLETED);
+            loggingHandler.commit(batchCommitCommand.batch());
+
             if(options.checkpointing()){
                 LOGGER.log(INFO, me.identifier + ": Requesting checkpoint for batch " + batchCommitCommand.batch());
-                submitBackgroundTask(()->checkpoint(batchCommitCommand.batch(), batchMetadata.maxTidExecuted));
+
+                // committing the actual data snapshot and the commitInfo (metadata) about the snapshot
+                // argue that both of these should be atomic
+                submitBackgroundTask(()->{
+                    checkpoint(batchCommitCommand.batch(), batchMetadata.maxTidExecuted);
+
+                    // log commit info only if snapshot was modified
+                    if (trackingBatchMap.get(batchCommitCommand.batch()).numberTIDsExecuted > 0) {
+
+//                        System.out.println(STR."\{me.identifier} executed " +
+//                                           STR."\{trackingBatchMap.get(batchCommitCommand.batch()).numberTIDsExecuted} " +
+//                                           STR."tids in batch \{batchCommitCommand.batch()}");
+
+                        commitInfo.put(batchCommitCommand.batch(), trackingBatchMap.get(batchCommitCommand.batch()).maxTidExecuted);
+                        System.out.println(STR."Batch \{batchCommitCommand.batch()} committed in \{me.identifier}");
+                    }
+                });
             }
         }
 

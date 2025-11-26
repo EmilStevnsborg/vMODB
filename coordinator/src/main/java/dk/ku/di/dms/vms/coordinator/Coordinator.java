@@ -1014,7 +1014,7 @@ public final class Coordinator extends ModbHttpServer {
                 // all VMSes have received abort
                 if (missingACKs.size() == 0)
                 {
-                    System.out.println(STR."all ACKs for reconnection to \{vmsAcknowledgedAbort} processed");
+                    System.out.println(STR."all ACKs for txAbort \{abortedTid} processed");
 
                     resendTransactions(abortedTid);
                     ongoingAbortMissingVmsAck.remove(abortedTid);
@@ -1345,6 +1345,7 @@ public final class Coordinator extends ModbHttpServer {
         BatchContext batchContext = this.batchContextMap.get( batchComplete.batch() );
         // only if it is not a duplicate vote
         batchContext.missingVotes.remove( batchComplete.vms() );
+
         // System.out.println(STR."Coordinator batch complete from \{batchComplete.vms()} and missingVotes=\{batchContext.missingVotes.size()}");
         if(batchContext.missingVotes.isEmpty()){
             LOGGER.log(INFO,"Leader: Received all missing votes of batch "+ batchContext.batchOffset + " with "+batchContext.numTIDsOverall+" transactions");
@@ -1358,6 +1359,7 @@ public final class Coordinator extends ModbHttpServer {
     {
         if(batchContext.batchOffset == this.batchOffsetPendingCommit) {
             // STORE committed batch events persistently
+            System.out.println(STR."coordinator committing \{batchContext.numTIDsOverall} TiDs in batch \{batchContext.batchOffset}");
             loggingHandler.commit(batchOffsetPendingCommit);
 
             this.numTIDsCommitted.updateAndGet(i -> i + batchContext.numTIDsOverall);
@@ -1400,7 +1402,7 @@ public final class Coordinator extends ModbHttpServer {
 
         // after storing batch context, send to vms workers
         for (var vms : batchContext.terminalVMSs) {
-            System.out.println(STR."sending BATCH COMMIT INFO for batch \{batch} to \{vms}");
+            // System.out.println(STR."sending BATCH COMMIT INFO for batch \{batch} to \{vms}");
             this.vmsWorkerContainerMap.get(vms).queueMessage(
                     BatchCommitInfo.of(batchContext.batchOffset,
                             batchContext.previousBatchPerVms.get(vms),

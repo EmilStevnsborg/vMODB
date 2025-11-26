@@ -21,10 +21,7 @@ import dk.ku.di.dms.vms.sdk.embed.metadata.EmbedMetadataLoader;
 import dk.ku.di.dms.vms.web_common.IHttpHandler;
 import org.reflections.Reflections;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -87,7 +84,11 @@ public final class VmsApplication {
         Map<String, VmsDataModel> vmsDataModelMap = VmsMetadataLoader.buildVmsDataModel(entityToVirtualMicroservice, entityToTableNameMap);
 
         boolean isCheckpointing = options.isCheckpointing();
-        boolean isTruncating = options.isTruncating();
+        boolean isRecovering = options.recoveryEnabled();
+
+        // never truncating if recovering
+        boolean isTruncating = isRecovering ? false : options.isTruncating();
+
         if(!isCheckpointing){
             String checkpointingStr = System.getProperty("checkpointing");
             if(Boolean.parseBoolean(checkpointingStr)){
@@ -118,6 +119,7 @@ public final class VmsApplication {
         if(entryOptional.isEmpty()) throw new IllegalStateException("Cannot find a single instance of VMS");
         String vmsName = entryOptional.get().getValue();
 
+
         IVmsSerdesProxy serdes = VmsSerdesProxyBuilder.build();
 
         // ideally lastTid and lastBatch must be read from the storage
@@ -128,11 +130,13 @@ public final class VmsApplication {
                 vmsMetadata.inputEventSchema(),
                 vmsMetadata.outputEventSchema());
 
+        System.out.println(STR."VmsApplication \{vmsIdentifier.identifier} isRecovering=\{isRecovering}");
+
         IHttpHandler httpHandler = builder.build(transactionManager, tableToRepositoryMap::get);
 
         VmsEmbedInternalChannels vmsInternalPubSubService = new VmsEmbedInternalChannels();
 
-        VmsEventHandler eventHandler = VmsEventHandler.build(vmsIdentifier, transactionManager, vmsInternalPubSubService, vmsMetadata, options, httpHandler, serdes);
+        VmsEventHandler eventHandler = VmsEventHandler.build(vmsIdentifier, transactionManager, vmsInternalPubSubService, vmsMetadata, options, httpHandler, serdes, options.recoveryEnabled());
 
         StoppableRunnable transactionScheduler = VmsTransactionScheduler.build(
                 vmsName,
@@ -140,8 +144,12 @@ public final class VmsApplication {
                 vmsMetadata.queueToVmsTransactionMap(),
                 transactionManager,
                 eventHandler::processOutputEvent,
+                eventHandler.batchAbortedTIDs,
                 options.vmsThreadPoolSize());
 
+        eventHandler.AddSchedulerPauseHandler(transactionScheduler::pauseHandler);
+        eventHandler.AddSchedulerTaskClearer(transactionScheduler::taskClearer);
+        eventHandler.AddSchedulerRecoveryHandler(transactionScheduler::recover);
         return new VmsApplication( vmsName, vmsMetadata, catalog, eventHandler, transactionManager, transactionScheduler, vmsInternalPubSubService );
     }
 
