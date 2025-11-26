@@ -182,6 +182,21 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
         return res;
     }
 
+
+    @Override
+    public List<Object[]> getAllCommitted(Table table){
+        List<Object[]> res = new ArrayList<>();
+
+        // of latest committed info (will skip everything in memory essentially
+
+        Iterator<Object[]> iterator = table.primaryKeyIndex().iteratorCommitted();
+        while(iterator.hasNext()){
+            var object = iterator.next();
+            res.add(object);
+        }
+        return res;
+    }
+
     @Override
     public void insertAll(Table table, List<Object[]> objects){
         // get tid, do all the checks, etc
@@ -429,6 +444,8 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
      * Only log those data versions until the corresponding batch.
      * TIDs are not necessarily a sequence.
      */
+
+    // keep as is
     @Override
     public void checkpoint(long maxTid){
         LOGGER.log(INFO, "Checkpoint for max TID "+maxTid+" started at "+System.currentTimeMillis());
@@ -444,6 +461,15 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
             }
         }
         LOGGER.log(INFO, "Checkpoint for max TID "+maxTid+" finished at "+System.currentTimeMillis());
+    }
+
+    @Override
+    public void restoreStableState(long failedTid)
+    {
+        for (Table table : this.catalog.values()) {
+            LOGGER.log(INFO, "restoring table "+table.getName());
+            table.primaryKeyIndex().restoreStableState(failedTid);
+        }
     }
 
     /**

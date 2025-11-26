@@ -37,8 +37,8 @@ public final class BatchCommitAck {
         buffer.put( payload.vms().getBytes(StandardCharsets.UTF_8) );
     }
 
-    public static BatchCommitAck.Payload of(long batch, String vms){
-        return new BatchCommitAck.Payload(batch, vms);
+    public static Payload of(long batch, String vms){
+        return new Payload(batch, vms);
     }
 
     // a leader cannot issue new events (and batches of course) without receiving batch ACKs from all vms involved

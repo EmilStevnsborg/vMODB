@@ -29,6 +29,8 @@ public interface IMultiVersionIndex {
 
     Iterator<Object[]> iterator(TransactionContext txCtx, IKey[] keys);
 
+    default Iterator<Object[]> iteratorCommitted() { return null; };
+
     default Iterator<Object[]> iterator(TransactionContext txCtx, IKey key){
         return this.iterator(txCtx, new IKey[] { key });
     }

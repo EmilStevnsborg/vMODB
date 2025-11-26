@@ -18,6 +18,7 @@ import dk.ku.di.dms.vms.modb.transaction.multiversion.WriteType;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.function.Consumer;
 
 import static dk.ku.di.dms.vms.modb.common.constraint.ConstraintConstants.*;
 import static java.lang.System.Logger.Level.INFO;
@@ -420,6 +421,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
     private static final boolean GARBAGE_COLLECTION = false;
 
     public void checkpoint(long maxTid){
+        // System.out.println(STR."checkpointing \{maxTid}");
         if(this.keysToFlush.isEmpty() || this.updatesPerKeyMap.isEmpty()) return;
         int numRecords = 0;
         Iterator<IKey> it = this.keysToFlush.iterator();
@@ -455,6 +457,22 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         }
     }
 
+    public void restoreStableState(long failedTid)
+    {
+//        System.out.println("PrimaryIndex restoring stable state");
+        if (this.updatesPerKeyMap.isEmpty()) return;
+
+        // removing latest changes
+        var updatedKeys = this.updatesPerKeyMap.keySet();
+        Iterator<IKey> it = updatedKeys.iterator();
+        while(it.hasNext())
+        {
+            IKey key = it.next();
+            OperationSetOfKey operationSetOfKey = this.updatesPerKeyMap.get(key);
+            operationSetOfKey.removeDownToEntry(failedTid-1);
+        }
+    }
+
     public void installWrites(TransactionContext txCtx){
         Set<IKey> writeSet = this.removeWriteSet(txCtx);
         if(writeSet == null) {
@@ -482,6 +500,44 @@ public final class PrimaryIndex implements IMultiVersionIndex {
     @Override
     public Iterator<Object[]> iterator(TransactionContext txCtx, IKey[] keys) {
         return new MultiVersionIterator(txCtx, keys);
+    }
+
+    @Override
+    public Iterator<Object[]> iteratorCommitted() {
+        return new PrimaryIndexIteratorCommitted();
+    }
+
+    private final class PrimaryIndexIteratorCommitted implements Iterator<Object[]> {
+        private final Iterator<IKey> keyIterator;
+        private Object[] currRecord;
+
+        public PrimaryIndexIteratorCommitted(){
+            this.keyIterator = rawIndex.iterator();
+        }
+
+        @Override
+        public boolean hasNext() {
+            while (keyIterator.hasNext()) {
+                IKey key = keyIterator.next();
+                this.currRecord = rawIndex.lookupByKey(key);
+                // System.out.println(STR."looking up in rawIndex for \{key} record \{currRecord}");
+                if (this.currRecord == null) {
+                    if (this.keyIterator.hasNext()) {
+                        continue;
+                    } else {
+                        return false;
+                    }
+                }
+                return true;
+
+            }
+            return false;
+        }
+
+        @Override
+        public Object[] next() {
+            return this.currRecord;
+        }
     }
 
     /**

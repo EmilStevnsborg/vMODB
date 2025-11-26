@@ -38,6 +38,8 @@ public final class CoordinatorOptions {
 
     private boolean logging = false;
 
+    private boolean recoveryEnabled = false;
+
     public int getNetworkThreadPoolSize() {
         return this.networkThreadPoolSize;
     }
@@ -136,6 +138,15 @@ public final class CoordinatorOptions {
     public CoordinatorOptions withLogging(boolean value) {
         this.logging = value;
         return this;
+    }
+
+    public CoordinatorOptions withRecoveryEnabled(boolean recoveryEnabled) {
+        this.recoveryEnabled = recoveryEnabled;
+        return this;
+    }
+
+    public boolean getRecoveryEnabled() {
+        return this.recoveryEnabled;
     }
 
 }

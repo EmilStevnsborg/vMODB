@@ -4,6 +4,7 @@ import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 
 public interface IVmsContainer {
     void queue(TransactionEvent.PayloadRaw payload);
+    void queueMessage(Object message);
     String identifier();
 
     default void stop() { }

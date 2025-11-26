@@ -1,8 +1,6 @@
 package dk.ku.di.dms.vms.coordinator.vms;
 
 import dk.ku.di.dms.vms.coordinator.options.VmsWorkerOptions;
-import dk.ku.di.dms.vms.modb.common.logging.ILoggingHandler;
-import dk.ku.di.dms.vms.modb.common.logging.LoggingHandlerBuilder;
 import dk.ku.di.dms.vms.modb.common.memory.MemoryManager;
 import dk.ku.di.dms.vms.modb.common.runnable.StoppableRunnable;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitAck;
@@ -78,15 +76,13 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     }
 
     private final ServerNode me;
-    
+
     private final VmsWorkerOptions options;
 
     // the vms this worker is responsible for
     private final IdentifiableNode consumerVms;
 
     private State state;
-
-    private final ILoggingHandler loggingHandler;
 
     private final IVmsSerdesProxy serdesProxy;
 
@@ -106,8 +102,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private final IVmsDeque transactionEventQueue;
 
     private final Deque<Object> messageQueue;
-
-    private final Queue<ByteBuffer> loggingWriteBuffers = new ConcurrentLinkedQueue<>();
 
     private final Deque<ByteBuffer> pendingWriteBuffers = new ConcurrentLinkedDeque<>();
 
@@ -177,16 +171,16 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             }
         }
     }
-    
+
     public static VmsWorker build(// coordinator reference
-                                    ServerNode me,
-                                    // the vms this thread is responsible for
-                                    IdentifiableNode consumerVms,
-                                    // shared data structure to communicate messages to coordinator
-                                    Queue<Object> coordinatorQueue,
-                                    Supplier<IChannel> channelFactory,
-                                    VmsWorkerOptions options,
-                                    IVmsSerdesProxy serdesProxy) throws IOException {
+                                  ServerNode me,
+                                  // the vms this thread is responsible for
+                                  IdentifiableNode consumerVms,
+                                  // shared data structure to communicate messages to coordinator
+                                  Queue<Object> coordinatorQueue,
+                                  Supplier<IChannel> channelFactory,
+                                  VmsWorkerOptions options,
+                                  IVmsSerdesProxy serdesProxy) throws IOException {
         return new VmsWorker(me, consumerVms, coordinatorQueue,
                 channelFactory, options, serdesProxy);
     }
@@ -215,12 +209,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
         this.readBuffer = MemoryManager.getTemporaryDirectBuffer(options.networkBufferSize());
 
-        // logging
-        if(options.logging()) {
-            this.loggingHandler = LoggingHandlerBuilder.build("coordinator_"+consumerVms.identifier); }
-        else {
-            this.loggingHandler = new ILoggingHandler() { };
-        }
         this.serdesProxy = serdesProxy;
 
         // in
@@ -364,35 +352,18 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 if(this.drained.isEmpty()){
                     pollTimeout = Math.min(pollTimeout * 2, this.options.maxSleep());
                     this.processPendingNetworkTasks();
-                    this.processPendingLogging();
                     this.giveUpCpu(pollTimeout);
                     continue;
                 }
                 pollTimeout = pollTimeout > 0 ? pollTimeout / 2 : 0;
 //                if(!this.transactionEventQueue.isEmpty()){
-                    this.sendBatchOfEvents();
+                this.sendBatchOfEvents();
 //                } else {
 //                    this.sendEvent(payloadRaw);
 //                }
                 this.processPendingNetworkTasks();
-                this.processPendingLogging();
             } catch (Exception e) {
                 LOGGER.log(ERROR, "Leader: VMS worker for "+this.consumerVms.identifier+" has caught an exception: \n"+e);
-            }
-        }
-    }
-
-    private void processPendingLogging(){
-        ByteBuffer writeBuffer;
-        if((writeBuffer = this.loggingWriteBuffers.poll()) != null){
-            try {
-                writeBuffer.position(0);
-                this.loggingHandler.log(writeBuffer);
-                // return buffer
-                this.returnByteBuffer(writeBuffer);
-            } catch (IOException e) {
-                LOGGER.log(ERROR, "error on writing byte buffer to logging file: "+e.getMessage());
-                this.loggingWriteBuffers.add(writeBuffer);
             }
         }
     }
@@ -446,11 +417,9 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         switch (message) {
             case BatchCommitCommand.Payload o -> {
                 this.sendBatchCommitCommand(o);
-                this.loggingHandler.force();
             }
             case BatchCommitInfo.Payload o -> {
                 this.sendBatchCommitInfo(o);
-                this.loggingHandler.force();
             }
             case TransactionAbort.Payload o -> this.sendTransactionAbort(o);
             case String o -> this.sendConsumerSet(o);
@@ -684,7 +653,6 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
                 // maximize useful work
                 while(!this.tryAcquireLock()){
-                    this.processPendingLogging();
                 }
                 this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.batchWriteCompletionHandler);
             } catch (Exception e) {
@@ -733,11 +701,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 channel.write(byteBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, byteBuffer, this);
             } else {
                 releaseLock();
-                if(options.logging()){
-                    loggingWriteBuffers.add(byteBuffer);
-                } else {
-                    returnByteBuffer(byteBuffer);
-                }
+                returnByteBuffer(byteBuffer);
             }
         }
 

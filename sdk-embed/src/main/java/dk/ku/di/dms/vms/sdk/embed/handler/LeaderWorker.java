@@ -3,9 +3,14 @@ package dk.ku.di.dms.vms.sdk.embed.handler;
 import dk.ku.di.dms.vms.modb.common.runnable.StoppableRunnable;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitAck;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchComplete;
+import dk.ku.di.dms.vms.modb.common.schema.network.control.CrashAck;
+import dk.ku.di.dms.vms.modb.common.schema.network.control.ReconnectionAck;
+import dk.ku.di.dms.vms.modb.common.schema.network.control.ResetToCommittedAck;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.ServerNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.VmsNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbort;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbortAck;
+import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionAbortInfo;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 
 import java.lang.invoke.MethodHandles;
@@ -45,7 +50,7 @@ final class LeaderWorker extends StoppableRunnable {
     private final ServerNode leader;
 
     private final AsynchronousSocketChannel channel;
-    
+
     private final ByteBuffer writeBuffer;
 
     private final Queue<Object> leaderWorkerQueue;
@@ -92,12 +97,17 @@ final class LeaderWorker extends StoppableRunnable {
     }
 
     private void sendMessage(Object message) {
+//        System.out.println("LeaderWorker sending message");
         switch (message) {
             case BatchComplete.Payload o -> this.sendBatchComplete(o);
             case BatchCommitAck.Payload o -> this.sendBatchCommitAck(o);
-            case TransactionAbort.Payload o -> this.sendTransactionAbort(o);
+            case TransactionAbortInfo.Payload o -> this.sendTransactionAbort(o);
+            case TransactionAbortAck.Payload o -> sendTransactionAbortAck(o);
+            case CrashAck.Payload o -> sendCrashAck(o);
+            case ReconnectionAck.Payload o -> sendReconnectionAck(o);
+            case ResetToCommittedAck.Payload o -> sendResetToCommittedAck(o);
             case TransactionEvent.PayloadRaw o -> this.sendEvent(o);
-            default -> LOGGER.log(WARNING, this.vmsNode.identifier +
+            default -> System.out.println(this.vmsNode.identifier +
                     ": Leader worker do not recognize message type: " + message.getClass().getName());
         }
     }
@@ -108,13 +118,15 @@ final class LeaderWorker extends StoppableRunnable {
 
     private void write(Object message) {
         try {
+//            System.out.println(STR."LeaderWorker writing message \{message}");
             this.writeBuffer.flip();
             do {
-               // var initTs = System.currentTimeMillis();
-               this.channel.write(this.writeBuffer).get();
-               // LOGGER.log(WARNING, this.vmsNode.identifier+". Latency to send leader a message: "+(System.currentTimeMillis()-initTs));
+                // var initTs = System.currentTimeMillis();
+                this.channel.write(this.writeBuffer).get();
+                // LOGGER.log(WARNING, this.vmsNode.identifier+". Latency to send leader a message: "+(System.currentTimeMillis()-initTs));
             } while (this.writeBuffer.hasRemaining());
         } catch (Exception e){
+            System.out.println("LeaderWorker write error");
             // queue to try insert again
             LOGGER.log(ERROR, this.vmsNode.identifier+": Error on writing message to Leader\n"+e.getCause().getMessage(), e);
             e.printStackTrace(System.out);
@@ -136,11 +148,13 @@ final class LeaderWorker extends StoppableRunnable {
      * the acknowledgment arrives
      */
     private void sendEvent(TransactionEvent.PayloadRaw payload) {
+//        System.out.println("Sending event to leader");
         TransactionEvent.write( this.writeBuffer, payload );
         this.write(payload);
     }
 
     private void sendBatchComplete(BatchComplete.Payload payload) {
+//        System.out.println("Sending BatchComplete payload to Leader");
         this.acquireLock();
         BatchComplete.write( this.writeBuffer, payload );
         this.write(payload);
@@ -148,12 +162,31 @@ final class LeaderWorker extends StoppableRunnable {
     }
 
     private void sendBatchCommitAck(BatchCommitAck.Payload payload) {
+//        System.out.println("Sending batch commit ack to leader");
         BatchCommitAck.write( this.writeBuffer, payload );
         this.write(payload);
     }
 
-    private void sendTransactionAbort(TransactionAbort.Payload payload) {
-        TransactionAbort.write( this.writeBuffer, payload );
+    private void sendTransactionAbort(TransactionAbortInfo.Payload payload) {
+//        System.out.println(STR."Sending transaction abort to leader \{payload}");
+        TransactionAbortInfo.write( this.writeBuffer, payload );
+        this.write(payload);
+    }
+    private void sendTransactionAbortAck(TransactionAbortAck.Payload payload) {
+        TransactionAbortAck.write( this.writeBuffer, payload );
+        this.write(payload);
+    }
+    private void sendCrashAck(CrashAck.Payload payload) {
+        // System.out.println(STR."sendCrashAck from \{vmsNode.identifier}");
+        CrashAck.write( this.writeBuffer,  payload);
+        this.write(payload);
+    }
+    private void sendReconnectionAck(ReconnectionAck.Payload payload) {
+        ReconnectionAck.write( this.writeBuffer, payload);
+        this.write(payload);
+    }
+    private void sendResetToCommittedAck(ResetToCommittedAck.Payload payload) {
+        ResetToCommittedAck.write( this.writeBuffer, payload);
         this.write(payload);
     }
 

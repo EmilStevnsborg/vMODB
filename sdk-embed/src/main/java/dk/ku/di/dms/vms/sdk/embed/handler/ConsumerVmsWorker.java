@@ -1,7 +1,5 @@
 package dk.ku.di.dms.vms.sdk.embed.handler;
 
-import dk.ku.di.dms.vms.modb.common.logging.ILoggingHandler;
-import dk.ku.di.dms.vms.modb.common.logging.LoggingHandlerBuilder;
 import dk.ku.di.dms.vms.modb.common.memory.MemoryManager;
 import dk.ku.di.dms.vms.modb.common.runnable.StoppableRunnable;
 import dk.ku.di.dms.vms.modb.common.schema.network.control.Presentation;
@@ -65,10 +63,8 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     private final VmsNode me;
 
     private final IdentifiableNode consumerVms;
-    
-    private final IChannel channel;
 
-    private final ILoggingHandler loggingHandler;
+    private final IChannel channel;
 
     private final IVmsSerdesProxy serdesProxy;
 
@@ -91,38 +87,24 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     private final List<TransactionEvent.PayloadRaw> drained = new ArrayList<>(1024*10);
 
     public static ConsumerVmsWorker build(
-                                  VmsNode me,
-                                  IdentifiableNode consumerVms,
-                                  Supplier<IChannel> channelSupplier,
-                                  VmsEventHandler.VmsHandlerOptions options,
-                                  IVmsSerdesProxy serdesProxy) {
+            VmsNode me,
+            IdentifiableNode consumerVms,
+            Supplier<IChannel> channelSupplier,
+            VmsEventHandler.VmsHandlerOptions options,
+            IVmsSerdesProxy serdesProxy) {
         return new ConsumerVmsWorker(me, consumerVms,
                 channelSupplier.get(), options, serdesProxy);
     }
 
     private ConsumerVmsWorker(VmsNode me,
-                             IdentifiableNode consumerVms,
-                             IChannel channel,
-                             VmsEventHandler.VmsHandlerOptions options,
-                             IVmsSerdesProxy serdesProxy) {
+                              IdentifiableNode consumerVms,
+                              IChannel channel,
+                              VmsEventHandler.VmsHandlerOptions options,
+                              IVmsSerdesProxy serdesProxy) {
         this.me = me;
         this.consumerVms = consumerVms;
         this.channel = channel;
 
-        ILoggingHandler loggingHandler;
-        var logIdentifier = me.identifier+"_"+consumerVms.identifier;
-        if(options.logging()){
-            loggingHandler = LoggingHandlerBuilder.build(logIdentifier);
-        } else {
-            String loggingStr = System.getProperty("logging");
-            if(Boolean.parseBoolean(loggingStr)){
-                loggingHandler = LoggingHandlerBuilder.build(logIdentifier);
-            } else {
-                loggingHandler = new ILoggingHandler() { };
-            }
-        }
-
-        this.loggingHandler = loggingHandler;
         this.serdesProxy = serdesProxy;
         this.options = options;
         this.transactionEventQueue = new MpscBlockingConsumerArrayQueue<>(1024*1500);
@@ -183,11 +165,7 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                     //LOGGER.log(WARNING, me.identifier+": Woke up");
                 }
                 this.transactionEventQueue.drain(this.drained::add);
-                if(this.drained.isEmpty()){
-                    this.processPendingLogging();
-                } else {
-                    this.sendBatchOfEventsNonBlocking();
-                }
+                this.sendBatchOfEventsNonBlocking();
             } catch (Exception e) {
                 LOGGER.log(ERROR, this.me.identifier+ ": Error captured in event loop (logging) \n"+e);
             }
@@ -236,21 +214,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         return true;
     }
 
-    private void processPendingLogging(){
-        ByteBuffer writeBuffer;
-        if((writeBuffer = this.loggingWriteBuffers.poll())!= null){
-            try {
-                writeBuffer.position(0);
-                this.loggingHandler.log(writeBuffer);
-                this.returnByteBuffer(writeBuffer);
-            } catch (Exception e) {
-                LOGGER.log(ERROR, me.identifier + ": Error on writing byte buffer to logging file: "+e.getMessage());
-                e.printStackTrace(System.out);
-                this.loggingWriteBuffers.add(writeBuffer);
-            }
-        }
-    }
-
     private void processPendingWrites() {
         // do we have pending writes?
         ByteBuffer bb = this.pendingWritesBuffer.poll();
@@ -289,7 +252,6 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
                 count = remaining;
                 // maximize useful work
                 while(!this.tryAcquireLock()){
-                    this.processPendingLogging();
                 }
                 this.channel.write(writeBuffer, this.options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
             } catch (Exception e) {
@@ -402,6 +364,11 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
         if(!this.transactionEventQueue.offer(eventPayload)){
             System.out.println(me.identifier +": cannot add event in the input queue");
         }
+    }
+
+    @Override
+    public void queueMessage(Object message) {
+        //
     }
 
     @Override

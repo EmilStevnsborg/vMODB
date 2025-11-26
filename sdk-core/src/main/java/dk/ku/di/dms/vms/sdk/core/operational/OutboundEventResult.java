@@ -10,6 +10,7 @@ public final class OutboundEventResult implements IVmsTransactionResult {
 
     private final long tid;
     private final long batch;
+    private final boolean isAbort;
     private final String outputQueue;
     private final Object output;
 
@@ -18,6 +19,15 @@ public final class OutboundEventResult implements IVmsTransactionResult {
         this.batch = batch;
         this.outputQueue = outputQueue;
         this.output = output;
+        this.isAbort = false;
+    }
+    // I made this and isAbort()
+    public OutboundEventResult(long tid, long batch) {
+        this.tid = tid;
+        this.batch = batch;
+        this.isAbort = true;
+        this.outputQueue = null;
+        this.output = null;
     }
 
     @Override
@@ -30,6 +40,9 @@ public final class OutboundEventResult implements IVmsTransactionResult {
         return this;
     }
 
+    public boolean isAbort() {
+        return this.isAbort;
+    }
     public String outputQueue() {
         return this.outputQueue;
     }

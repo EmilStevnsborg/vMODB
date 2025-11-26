@@ -15,6 +15,7 @@ public final class Constants {
     public static final byte PRESENTATION = 5;
 
     public static final byte CONSUMER_SET = 15;
+    public static final byte VMS_RECONNECTION = 20;
 
     /**
      * Transaction-related Events
@@ -86,5 +87,21 @@ public final class Constants {
      *  {@link BatchAbortRequest}
      */
     public static final byte BATCH_ABORT_REQUEST = 11;
+
+    /**
+     *  This message is sent when a VMS has restored a stable state during abort to before the failed TID
+     */
+    public static final byte RECOVERY = 18;
+
+    public static final byte ABORT_UNCOMMITTED_TRANSACTIONS = 19;
+
+    public static final byte VMS_CRASH = 21;
+    public static final byte CRASH_ACK = 22;
+    public static final byte RECONNECTION_ACK = 23;
+    public static final byte TX_ABORT_ACK = 24;
+
+    public static final byte RESET_TO_COMMITTED = 25;
+    public static final byte RESET_TO_COMMITTED_ACK = 26;
+
 
 }

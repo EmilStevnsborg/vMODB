@@ -33,6 +33,7 @@ public interface IRepository<PK extends Serializable, T extends IEntity<PK>> {
     List<T> lookupByKeys(Collection<PK> keys);
 
     List<T> getAll();
+    List<T> getAllCommitted();
 
     List<T> query(SelectStatement selectStatement);
 

@@ -3,6 +3,8 @@ package dk.ku.di.dms.vms.sdk.embed.handler;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitCommand;
 import dk.ku.di.dms.vms.modb.common.schema.network.batch.BatchCommitInfo;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class BatchContext {
@@ -11,11 +13,12 @@ public final class BatchContext {
 
     public final long previousBatch;
 
-    public final int numberOfTIDsBatch;
+    public int numberOfTIDsBatch;
+    public Set<Long> abortedTIDs;
 
     // if an external thread (i.e., scheduler) modifies
     // this attribute, it needs to change to volatile
-    private final AtomicInteger status = new AtomicInteger(OPEN);
+    private AtomicInteger status = new AtomicInteger(OPEN);
 
     // whether this vms is a terminal for this batch
     public final boolean terminal;
@@ -24,20 +27,26 @@ public final class BatchContext {
         return new BatchContext(batchCommitInfo.batch(),
                 batchCommitInfo.previousBatch(),
                 batchCommitInfo.numberOfTIDsBatch(),
+                batchCommitInfo.abortedTIDs(),
                 true);
+    }
+
+    public static BatchContext buildAsStarter(long batch, long previousBatch, int numberOfTIDsBatch){
+        return new BatchContext(batch, previousBatch, numberOfTIDsBatch, new HashSet<>(), false);
     }
 
     public static BatchContext build(BatchCommitCommand.Payload batchCommitRequest) {
         return new BatchContext(batchCommitRequest.batch(),
                 batchCommitRequest.previousBatch(),
-                batchCommitRequest.numberOfTIDsBatch(), false);
+                batchCommitRequest.numberOfTIDsBatch(), batchCommitRequest.abortedTIDs(), false);
     }
 
-    private BatchContext(long batch, long previousBatch, int numberOfTIDsBatch, boolean terminal) {
+    public BatchContext(long batch, long previousBatch, int numberOfTIDsBatch, Set<Long> abortedTIDs, boolean terminal) {
         this.batch = batch;
         this.previousBatch = previousBatch;
         // this.status = Status.OPEN.value; // always start with 0 anyway
         this.numberOfTIDsBatch = numberOfTIDsBatch;
+        this.abortedTIDs = abortedTIDs;
         this.terminal = terminal;
     }
 
@@ -55,6 +64,14 @@ public final class BatchContext {
     public static final int CHECKPOINTING = 2;
     // this status is set when the state is logged
     public static final int BATCH_COMMITTED = 3;
+
+    public boolean isOpen(){
+        return this.status.get() == OPEN;
+    }
+
+    public boolean isCompleted(){
+        return this.status.get() > OPEN;
+    }
 
     public void setStatus(int status){
         this.status.set(status);

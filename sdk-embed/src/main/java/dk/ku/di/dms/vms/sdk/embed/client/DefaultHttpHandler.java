@@ -22,4 +22,6 @@ public class DefaultHttpHandler implements IHttpHandler {
         this.transactionManager.reset();
     }
 
+    // committing injected data... and checkpoint??
+
 }

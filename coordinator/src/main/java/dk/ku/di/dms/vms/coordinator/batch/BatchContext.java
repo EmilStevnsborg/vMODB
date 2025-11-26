@@ -15,24 +15,24 @@ public final class BatchContext {
     public final long batchOffset;
 
     // set of terminal VMSs that has not voted yet
-    public final Set<String> missingVotes;
+    public Set<String> missingVotes;
 
-    public final Set<String> terminalVMSs;
+    public Set<String> terminalVMSs;
 
     public Map<String, Long> previousBatchPerVms;
 
     public Map<String,Integer> numberOfTIDsPerVms;
 
-    public long tidAborted;
-
     public volatile long numTIDsOverall;
 
     public long lastTid;
+    public Set<Long> abortedTIDs;
 
     public BatchContext(long batchOffset) {
         this.batchOffset = batchOffset;
         this.terminalVMSs = new HashSet<>();
         this.missingVotes = new HashSet<>();
+        this.abortedTIDs = new HashSet<>();
     }
 
     // called when the batch is over
@@ -45,6 +45,35 @@ public final class BatchContext {
         this.numberOfTIDsPerVms = numberOfTIDsPerVms;
         // must be a modifiable hash set because the set will be modified upon BATCH_COMPLETE messages received
         this.missingVotes.addAll(this.terminalVMSs);
+    }
+
+    public void tidAborted(long tid, Set<String> affectedVMSes) {
+        if (abortedTIDs.contains(tid))
+            return;
+
+        numTIDsOverall -= 1;
+        abortedTIDs.add(tid);
+
+        for (var vms : affectedVMSes)
+        {
+            var numberOfTIDsVms = this.numberOfTIDsPerVms.get(vms)-1;
+            this.numberOfTIDsPerVms.put(vms, numberOfTIDsVms);
+
+            // the vms no longer participates in the batch
+            if (numberOfTIDsVms == 0) {
+                this.missingVotes.remove(vms);
+                this.terminalVMSs.remove(vms);
+            }
+        }
+    }
+
+    @Override
+    public String toString() {
+        return "{"
+                + "\"batch\":\"" + batchOffset + "\""
+                + ",\"numberOfTIDsPerVms\":\"" + numberOfTIDsPerVms + "\""
+                + ",\"previousBatchPerVms\":\"" + previousBatchPerVms + "\""
+                + "}";
     }
 
 }

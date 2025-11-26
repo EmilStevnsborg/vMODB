@@ -3,6 +3,8 @@ package dk.ku.di.dms.vms.sdk.embed.handler;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 
+import java.nio.ByteBuffer;
+
 /**
  * A container of consumer VMS workers to facilitate
  * scalable pushing of transaction events
@@ -30,6 +32,16 @@ public final class MultiVmsContainer implements IVmsContainer {
     @Override
     public void queue(TransactionEvent.PayloadRaw payload){
         this.consumerVmsWorkers[this.next].queue(payload);
+        if(this.next == this.consumerVmsWorkers.length-1){
+            this.next = 0;
+        } else {
+            this.next += 1;
+        }
+    }
+
+    @Override
+    public void queueMessage(Object message) {
+        this.consumerVmsWorkers[this.next].queueMessage(message);
         if(this.next == this.consumerVmsWorkers.length-1){
             this.next = 0;
         } else {

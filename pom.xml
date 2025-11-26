@@ -28,7 +28,8 @@
     <module>coordinator</module>
 
     <!-- applications -->
-    <module>marketplace</module>
+<!--    <module>marketplace</module>-->
+      <module>flightScheduler</module>
     <module>tpcc</module>
 
   </modules>

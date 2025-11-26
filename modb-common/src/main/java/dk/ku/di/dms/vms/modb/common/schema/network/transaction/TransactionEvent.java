@@ -12,8 +12,10 @@ import java.nio.charset.StandardCharsets;
 public final class TransactionEvent {
 
     // this payload
-    // message type | tid | batch | size | event name | size | payload | size | precedence map
-    private static final int FIXED_LENGTH = (2 * Long.BYTES) + (3 *  Integer.BYTES);
+    // message type | tid | batch | size | event name | size | payload | size | precedence map | aborted
+    private static final int FIXED_LENGTH = (2 * Long.BYTES) + (3 *  Integer.BYTES)
+//            + 1 * Integer.BYTES
+            ;
 
     public static void write(ByteBuffer buffer, PayloadRaw payload){
         buffer.put(Constants.EVENT);
@@ -30,25 +32,48 @@ public final class TransactionEvent {
 
     public static void writeWithinBatch(ByteBuffer buffer, PayloadRaw payload){
         buffer.putLong( payload.tid );
+//        System.out.println(STR."TransactionEvent position after tid: \{buffer.position()}");
         buffer.putLong( payload.batch );
+//        System.out.println(STR."TransactionEvent position after batch: \{buffer.position()}");
         buffer.putInt( payload.event.length );
+//        System.out.println(STR."TransactionEvent position after event.length: \{buffer.position()}");
         buffer.put( payload.event );
+//        System.out.println(STR."TransactionEvent position after event: \{buffer.position()}");
         buffer.putInt( payload.payload.length );
+//        System.out.println(STR."TransactionEvent position after payload.length: \{buffer.position()}");
         buffer.put( payload.payload );
+//        System.out.println(STR."TransactionEvent position after payload: \{buffer.position()}");
         buffer.putInt( payload.precedenceMap.length );
+//        System.out.println(STR."TransactionEvent position after precedenceMap.length: \{buffer.position()}");
         buffer.put( payload.precedenceMap );
+//        System.out.println(STR."TransactionEvent position after precedenceMap: \{buffer.position()}");
+//        buffer.putInt(payload.aborted);
     }
 
     public static Payload read(ByteBuffer buffer){
         long tid = buffer.getLong();
+//        System.out.println(STR."TransactionEvent position READ tid \{tid}");
         long batch = buffer.getLong();
+//        System.out.println(STR."TransactionEvent position READ batch \{batch}");
         int eventSize = buffer.getInt();
+//        System.out.println(STR."TransactionEvent position READ eventSize \{eventSize}");
         String event = ByteUtils.extractStringFromByteBuffer( buffer, eventSize );
         int payloadSize = buffer.getInt();
+//        System.out.println(STR."TransactionEvent position READ payloadSize \{payloadSize}");
         String payload = ByteUtils.extractStringFromByteBuffer( buffer, payloadSize );
         int precedenceSize = buffer.getInt();
+//        System.out.println(STR."TransactionEvent position READ precedenceSize \{precedenceSize}");
         String precedenceMap = ByteUtils.extractStringFromByteBuffer( buffer, precedenceSize );
+//        int aborted = buffer.getInt();
+//        System.out.println(STR."TransactionEvent position READ aborted \{aborted}");
         return new Payload(tid, batch, event, payload, precedenceMap);
+    }
+
+    public static Payload read(PayloadRaw payloadRaw) {
+        String event = new String(payloadRaw.event(), StandardCharsets.UTF_8);
+        String payload = new String(payloadRaw.payload(), StandardCharsets.UTF_8);
+        String precedenceMap = new String(payloadRaw.precedenceMap(), StandardCharsets.UTF_8);
+        return new Payload(payloadRaw.tid(), payloadRaw.batch(), event, payload, precedenceMap);
     }
 
     /**
@@ -65,6 +90,7 @@ public final class TransactionEvent {
             return "{"
                     + "\"tid\":\"" + tid + "\""
                     + ",\"batch\":\"" + batch + "\""
+//                    + ",\"aborted\":\"" + aborted + "\""
                     + "}";
         }
     }
@@ -80,6 +106,7 @@ public final class TransactionEvent {
                     + ",\"event\":\"" + event + "\""
                     + ",\"payload\":\"" + payload + "\""
                     + ",\"precedenceMap\":\"" + precedenceMap + "\""
+//                    + ",\"aborted\":\"" + aborted + "\""
                     + "}";
         }
     }

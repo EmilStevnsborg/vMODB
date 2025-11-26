@@ -2,9 +2,14 @@ package dk.ku.di.dms.vms.coordinator.vms;
 
 import dk.ku.di.dms.vms.modb.common.schema.network.transaction.TransactionEvent;
 
-public interface IVmsWorker {
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
+public interface IVmsWorker {
     default void queueTransactionEvent(TransactionEvent.PayloadRaw payloadRaw) { }
+    default void requeueTransactionEvent(TransactionEvent.PayloadRaw payload) {}
 
     default void queueMessage(Object message) { }
 

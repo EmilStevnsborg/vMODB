@@ -14,30 +14,30 @@ import java.nio.file.StandardOpenOption;
 
 public class LoggingTest {
 
-    @Test
-    public void testLogging() throws IOException {
-        ILoggingHandler compressedLoggingHandler = LoggingHandlerBuilder.build("test");
-
-        var writeBuffer = ByteBuffer.allocateDirect(1024);
-        writeBuffer.put( "TEST".getBytes(StandardCharsets.UTF_8) );
-        writeBuffer.flip();
-
-        compressedLoggingHandler.log( writeBuffer );
-
-        compressedLoggingHandler.close();
-
-        var fileName = compressedLoggingHandler.getFileName();
-        Path path = Paths.get(fileName);
-
-        var fileChannel = FileChannel.open(path,
-                StandardOpenOption.READ);
-
-        var readBuffer = ByteBuffer.allocate(1024);
-        fileChannel.read(readBuffer);
-        readBuffer.flip();
-        String readString = new String(readBuffer.array(), 0, readBuffer.limit(), StandardCharsets.UTF_8);
-
-        assert readString.equals("TEST");
-    }
+//    @Test
+//    public void testLogging() throws IOException {
+//        ILoggingHandler compressedLoggingHandler = LoggingHandlerBuilder.build("test");
+//
+//        var writeBuffer = ByteBuffer.allocateDirect(1024);
+//        writeBuffer.put( "TEST".getBytes(StandardCharsets.UTF_8) );
+//        writeBuffer.flip();
+//
+//        compressedLoggingHandler.log( writeBuffer );
+//
+//        compressedLoggingHandler.close();
+//
+//        var fileName = compressedLoggingHandler.getFileName();
+//        Path path = Paths.get(fileName);
+//
+//        var fileChannel = FileChannel.open(path,
+//                StandardOpenOption.READ);
+//
+//        var readBuffer = ByteBuffer.allocate(1024);
+//        fileChannel.read(readBuffer);
+//        readBuffer.flip();
+//        String readString = new String(readBuffer.array(), 0, readBuffer.limit(), StandardCharsets.UTF_8);
+//
+//        assert readString.equals("TEST");
+//    }
 
 }

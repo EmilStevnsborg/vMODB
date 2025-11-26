@@ -14,4 +14,5 @@ public interface IHttpHandler {
 
     default void put(String uri, String body) throws Exception { }
 
+    default void commit(String uri) throws Exception { }
 }
