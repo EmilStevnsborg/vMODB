@@ -239,7 +239,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     @Override
     public void recover(long lastCommitBatch,  long lastCommitTid)
     {
-//        System.out.println(STR."Scheduler setting lastTidFinished=lastCommitTid=\{lastCommitTid}, " +
+//        System.out.println(STR."Scheduler for \{vmsIdentifier} setting lastTidFinished=lastCommitTid=\{lastCommitTid}, " +
 //                           STR."where lastCommitBatch=\{lastCommitBatch}");
         lastTidFinished.set(lastCommitTid);
     }

@@ -49,6 +49,7 @@ import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.*;
@@ -866,7 +867,7 @@ public final class Coordinator extends ModbHttpServer {
                 buffer.position(1);
                 var node = IdentifiableNode.read(buffer); // this can potentially be hacked
 
-                // System.out.println(STR."the coordinator was PINGED by \{node.identifier}");
+                System.out.println(STR."the coordinator was PINGED by \{node.identifier}");
 
                 boolean active = consumerToEventsMap.get(node.identifier).size() > 0;
                 try {
@@ -1025,6 +1026,10 @@ public final class Coordinator extends ModbHttpServer {
             {
                 var abortedTid = txAbortInfo.tid();
 
+                if(!ABORT_CONSUMERS.isEmpty()) {
+                    ABORT_CONSUMERS.forEach(c->c.accept(abortedTid));
+                }
+
                 // currently one abort is being processed
                 if (!ongoingAbortMissingVmsAck.isEmpty())
                 {
@@ -1151,19 +1156,19 @@ public final class Coordinator extends ModbHttpServer {
                 .min(Long::compare)
                 .orElse(Long.MAX_VALUE);
 
-        System.out.println(STR."Coordinator resending transactions from after \{failedTid}");
         var affectedEvents =
                 loggingHandler.getAffectedEvents(failedTid)
                         .stream().filter(eventRaw -> eventRaw.tid() < minPendingAbort)
                         .toList();
 
+        // System.out.println(STR."Coordinator resending \{affectedEvents.size()} transactions from after \{failedTid}");
         for (var eventRaw: affectedEvents)
         {
             var event = TransactionEvent.read(eventRaw);
 
             var consumerVMSes = eventToConsumersMap.get(event.event());
             for (var consumerVms : consumerVMSes) {
-                System.out.println(STR."Coordinator resending \{event.tid()} to \{consumerVms} as part of aborting \{failedTid}");
+                // System.out.println(STR."Coordinator resending \{event.tid()} to \{consumerVms} as part of aborting \{failedTid}");
                 vmsWorkerContainerMap.get(consumerVms).requeueTransactionEvent(eventRaw);
             }
         }

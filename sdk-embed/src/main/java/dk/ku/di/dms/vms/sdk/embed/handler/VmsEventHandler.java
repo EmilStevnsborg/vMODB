@@ -35,10 +35,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.*;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -255,7 +252,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         var truncate = recoveryEnabled ? false : true;
         this.loggingHandler = LoggingHandlerBuilder.build(logIdentifier, serdesProxy, options.networkBufferSize, truncate);
 
-        this.commitInfo = new LongPairStore("commit_info", !recoveryEnabled);
+        this.commitInfo = new LongPairStore(STR."\{me.identifier}_commit_info", !recoveryEnabled);
         this.batchAbortedTIDs = new HashMap<>();
     }
 
@@ -263,7 +260,14 @@ public final class VmsEventHandler extends ModbHttpServer {
     public void run() {
         // setup accept since we need to accept connections from the coordinator and other VMSs
         this.serverSocket.accept(null, new AcceptCompletionHandler());
-        LOGGER.log(INFO,this.me.identifier+": Accept handler setup");
+        var crashOccurred = true; // check for logs or snapshot
+
+        System.out.println(STR."crashOccurred=\{crashOccurred} && recoveryEnabled=\{recoveryEnabled}");
+        if (crashOccurred && recoveryEnabled) {
+            // need to be in configuration
+            recoverVms("localhost", 8766);
+//            recoverVms(leader.host, leader.port);
+        }
     }
 
     public void AddSchedulerPauseHandler(Consumer<Boolean> pauseHandler){
@@ -278,7 +282,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     }
     private void fixTrackingBatch(long batch, long numberTIDsExecuted, long maxTidExecuted)
     {
-        System.out.println(STR."fixing tracking batch \{batch} in \{me.identifier}");
+        // System.out.println(STR."fixing tracking batch \{batch} in \{me.identifier}");
         var trackedBatchKeys = trackingBatchMap.keySet();
         for(var trackedBatchKey : trackedBatchKeys) {
             if (trackedBatchKey < batch) continue;
@@ -301,7 +305,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     // crashed VMS tries to recover
     private void recoverVms(String leaderHost, int leaderPort)
     {
-        System.out.println(STR."\{me.identifier} started, and is now recovering");
+        System.out.println(STR."\{me.identifier} started, and is now recovering. It will ping leader at \{leaderHost}:\{leaderPort}");
         pauseHandler.accept(true);
 
         // fix scheduler metadata
@@ -316,10 +320,10 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         // connect to leader
         try {
-            var leaderAsInetSocketAddress = new NetworkAddress(leaderHost, leaderPort);
+            var leaderAsInetSocketAddress = new NetworkAddress("localhost", leaderPort);
             connectToCoordinator(leaderAsInetSocketAddress);
         } catch (Exception e) {
-            System.out.println("Failed to connect to coordinator");
+            System.out.println(STR."\{me.identifier} Failed to reconnect to coordinator");
         }
 
         pauseHandler.accept(false);
@@ -398,7 +402,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
     private void applyAbortLocally(long tid, long bid, boolean initiatedAbort)
     {
-        System.out.println(STR."\{me.identifier} APPLIES abort for \{tid}");
+        // System.out.println(STR."\{me.identifier} APPLIES abort for \{tid}");
         pauseHandler.accept(true);
 
         batchAbortedTIDs.putIfAbsent(bid, new HashSet());
@@ -477,7 +481,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         var tid = eventOutput.tid();
         var bid = eventOutput.batch();
 
-        System.out.println(STR."\{me.identifier} INITIATES abort of \{tid}");
+        // System.out.println(STR."\{me.identifier} INITIATES abort of \{tid}");
 
         applyAbortLocally(tid, bid, true);
     }
@@ -633,6 +637,9 @@ public final class VmsEventHandler extends ModbHttpServer {
     }
 
     public void initConsumerVmsWorker(IdentifiableNode node, List<String> outputEvents, int identifier){
+
+        this.consumerToEventsMap.computeIfAbsent(node.identifier, (ignored) -> new CopyOnWriteArrayList<>());
+
         if(this.producerConnectionMetadataMap.containsKey(node.hashCode())){
             LOGGER.log(WARNING,"The node "+ node.host+" "+ node.port+" already contains a connection as a producer");
         }
@@ -649,8 +656,10 @@ public final class VmsEventHandler extends ModbHttpServer {
                 .start(consumerVmsWorker);
         if(!this.consumerVmsContainerMap.containsKey(node)){
             if(this.options.numVmsWorkers == 1) {
+                vmsMetadataMap.put(node.identifier, node);
                 this.consumerVmsContainerMap.put(node, consumerVmsWorker);
             } else {
+                vmsMetadataMap.put(node.identifier, node);
                 MultiVmsContainer multiVmsContainer = new MultiVmsContainer(consumerVmsWorker, node, this.options.numVmsWorkers);
                 this.consumerVmsContainerMap.put(node, multiVmsContainer);
             }
@@ -659,6 +668,8 @@ public final class VmsEventHandler extends ModbHttpServer {
                 LOGGER.log(INFO,me.identifier+ " adding "+outputEvent+" to consumers map with "+node.identifier);
                 this.eventToConsumersMap.computeIfAbsent(outputEvent, (ignored) -> new ArrayList<>());
                 this.eventToConsumersMap.get(outputEvent).add(consumerVmsWorker);
+
+                this.consumerToEventsMap.get(node.identifier).add(outputEvent);
             }
         } else {
             IVmsContainer vmsContainer = this.consumerVmsContainerMap.get(node);
@@ -667,6 +678,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             } else {
                 // stop previous, replace by the new one
                 vmsContainer.stop();
+                vmsMetadataMap.put(node.identifier, node);
                 this.consumerVmsContainerMap.put(node, consumerVmsWorker);
             }
         }

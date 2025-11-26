@@ -414,6 +414,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         this.queueMessage_.accept(message);
     }
 
+
     private void sendMessage(Object message) {
         switch (message) {
             case BatchCommitCommand.Payload o -> {
@@ -422,20 +423,61 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             case BatchCommitInfo.Payload o -> {
                 this.sendBatchCommitInfo(o);
             }
-            case TransactionAbort.Payload o -> this.sendTransactionAbort(o);
-            case String o -> this.sendConsumerSet(o);
+            case TransactionAbort.Payload o -> {
+                this.sendTransactionAbort(o);
+            }
+            case VmsCrash.Payload o -> {
+                sendVmsCrash(o);
+            }
+            case VmsReconnect.Payload o -> {
+                sendVmsReconnect(o);
+            }
+            case ResetToCommittedState.Payload o -> {
+                sendResetToCommittedState();
+            }
+            case String o -> {
+                this.sendConsumerSet(o);
+            }
             default ->
                     LOGGER.log(WARNING, "Leader: VMS worker for " + this.consumerVms.identifier + " has unknown message type: " + message.getClass().getName());
         }
     }
 
-    private void sendTransactionAbort(TransactionAbort.Payload tidToAbort) {
+    private void sendVmsCrash(VmsCrash.Payload vmsCrash)
+    {
+        // System.out.println(STR."VmsWorker sendAbortUncommittedTransactions message to \{consumerVms.identifier}");
         ByteBuffer writeBuffer = retrieveByteBuffer();
-        TransactionAbort.write(writeBuffer, tidToAbort);
+        VmsCrash.write(writeBuffer, vmsCrash.vms());
         writeBuffer.flip();
         this.acquireLock();
         this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
-        LOGGER.log(WARNING,"Leader: Transaction abort sent to: " + this.consumerVms.identifier);
+    }
+    private void sendVmsReconnect(VmsReconnect.Payload vmsReconnect)
+    {
+        // System.out.println(STR."VmsWorker sendAbortUncommittedTransactions message to \{consumerVms.identifier}");
+        ByteBuffer writeBuffer = retrieveByteBuffer();
+        VmsReconnect.write(writeBuffer, vmsReconnect.vms());
+        writeBuffer.flip();
+        this.acquireLock();
+        this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
+    }
+
+    private void sendResetToCommittedState()
+    {
+        // System.out.println(STR."VmsWorker sendAbortUncommittedTransactions message to \{consumerVms.identifier}");
+        ByteBuffer writeBuffer = retrieveByteBuffer();
+        ResetToCommittedState.write(writeBuffer);
+        writeBuffer.flip();
+        this.acquireLock();
+        this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
+    }
+
+    private void sendTransactionAbort(TransactionAbort.Payload payload) {
+        ByteBuffer writeBuffer = retrieveByteBuffer();
+        TransactionAbort.write(writeBuffer, payload);
+        writeBuffer.flip();
+        this.acquireLock();
+        this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
     }
 
     private void sendBatchCommitCommand(BatchCommitCommand.Payload batchCommitCommand) {

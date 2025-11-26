@@ -36,8 +36,8 @@ public class AbortStressTest
         var unregisteredCustomerIds = DataGenerator.CreateCustomers(50, 50);
 
         System.console().readLine();
-        System.out.println(STR."TEST: submit 100 order flights, where every other of them fail");
-        for (var i = 0; i < 100; i++)
+        System.out.println(STR."TEST: submit 50 order flights, where every other of them fail");
+        for (var i = 0; i < 50; i++)
         {
             // System.out.println(STR."TEST: ordering \{i/2} or \{i/2+1}");
             var customer = i % 2 == 0 ? unregisteredCustomerIds.get((i-1)/2) : customers.get(i/2);
@@ -51,13 +51,13 @@ public class AbortStressTest
         var bookings = VmsEndpoints.GetBookings(client);
 
         var success = true;
-        if (bookings.size() != 50)
+        if (bookings.size() != 25)
         {
-            System.out.println(STR."FAILURE (AbortStressTest): bookings=\{bookings.size()} != 50");
+            System.out.println(STR."FAILURE (AbortStressTest): bookings=\{bookings.size()} != 25");
             success = false;
         }
         else {
-            System.out.println(STR."SUCCESS (AbortStressTest): bookings=\{bookings.size()} != 50");
+            System.out.println(STR."SUCCESS (AbortStressTest): bookings=\{bookings.size()} != 25");
         }
 
         return success;

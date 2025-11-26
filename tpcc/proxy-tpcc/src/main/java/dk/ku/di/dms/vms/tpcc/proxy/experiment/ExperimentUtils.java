@@ -42,9 +42,16 @@ public final class ExperimentUtils {
                     highestKey -> lastExperimentLastTID = (int) BATCH_TO_FINISHED_TS_MAP.get(highestKey).lastTid);
             BATCH_TO_FINISHED_TS_MAP.clear();
         } else {
-            coordinator.registerBatchCommitConsumer((batchId, tid) -> BATCH_TO_FINISHED_TS_MAP.put(
-                    batchId,
-                    new BatchStats(batchId, tid, System.currentTimeMillis())));
+            coordinator.registerBatchCommitConsumer((batchId, tid) -> {
+                BATCH_TO_FINISHED_TS_MAP.put(
+                        batchId,
+                        new BatchStats(batchId, tid, System.currentTimeMillis()));
+            });
+
+            coordinator.registerAbortConsumer((abortedTid) ->  {
+                ABORT_MAP.put(abortedTid, System.currentTimeMillis());
+            });
+
             CONSUMER_REGISTERED = true;
         }
 
@@ -178,6 +185,8 @@ public final class ExperimentUtils {
     private static final Map<Long, BatchStats> BATCH_TO_FINISHED_TS_MAP = new ConcurrentHashMap<>();
 
     private record BatchStats(long batchId, long lastTid, long endTs){}
+
+    private static final Map<Long, Long> ABORT_MAP = new ConcurrentHashMap<>();
 
     private static Function<NewOrderWareIn, Long> newOrderInputBuilder(final Coordinator coordinator) {
         return newOrderWareIn -> {

@@ -7,16 +7,19 @@ import java.nio.*;
 import java.nio.channels.*;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.logging.Logger;
 
 import static java.lang.System.Logger.Level.DEBUG;
 
 public final class LongPairStore implements Closeable {
+    private final String filename;
     private final FileChannel filechannel;
     private final ByteBuffer buffer;
     private long offset = 0;
 
     public LongPairStore(String filename, boolean truncate)
     {
+        this.filename = filename;
         File file = buildFile(filename);
         try {
             StandardOpenOption[] options = buildFileOpenOptions(truncate);
@@ -38,6 +41,7 @@ public final class LongPairStore implements Closeable {
             }
             offset = filechannel.position();
             filechannel.force(false);
+            System.out.println(STR."putting batch=\{batch}, tid=\{maxTid} into commit info \{filename}");
         } catch (IOException e) {
             e.printStackTrace();
         }

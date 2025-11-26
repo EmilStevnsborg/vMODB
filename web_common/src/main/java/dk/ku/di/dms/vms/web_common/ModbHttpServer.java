@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.*;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 import static java.lang.System.Logger.Level.ERROR;
 import static java.lang.System.Logger.Level.WARNING;
@@ -28,6 +29,7 @@ public abstract class ModbHttpServer extends StoppableRunnable {
     // must be concurrent because it is accessed by different threads
     protected static final List<BiConsumer<Long, Long>> BATCH_COMMIT_CONSUMERS = new CopyOnWriteArrayList<>();
 
+    protected static final List<Consumer<Long>> ABORT_CONSUMERS = new CopyOnWriteArrayList<>();
     private static final Set<Future<?>> TRACKED_FUTURES = ConcurrentHashMap.newKeySet();
 
     static {
@@ -446,6 +448,11 @@ public abstract class ModbHttpServer extends StoppableRunnable {
      */
     public void registerBatchCommitConsumer(BiConsumer<Long, Long> consumer){
         BATCH_COMMIT_CONSUMERS.add(consumer);
+    }
+
+    // consumes abort events
+    public void registerAbortConsumer(Consumer<Long> consumer){
+        ABORT_CONSUMERS.add(consumer);
     }
 
 }
