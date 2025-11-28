@@ -1,6 +1,7 @@
 package dk.ku.di.dms.vms.tpcc.proxy.workload;
 
 import dk.ku.di.dms.vms.modb.common.constraint.ConstraintReference;
+import dk.ku.di.dms.vms.modb.common.data_structure.Tuple;
 import dk.ku.di.dms.vms.modb.common.type.DataType;
 import dk.ku.di.dms.vms.modb.common.type.DataTypeUtils;
 import dk.ku.di.dms.vms.modb.definition.Schema;
@@ -159,16 +160,33 @@ public final class WorkloadUtils {
         };
     }
 
-    public static void createWorkload(int numWare, int numTransactions, boolean allowMultiWarehouses){
+    public static void createWorkload(int numWare, int numTransactions, boolean allowMultiWarehouses) {
         deleteWorkloadInputFiles();
-        LOGGER.log(INFO, "Generating "+(numTransactions * numWare)+" transactions ("+numTransactions+" per warehouse/worker)");
+
         long initTs = System.currentTimeMillis();
+
+        // Weird errors when submitting aborts
+
+        var numberOfAborts = 1;
+
+        var aborts = new HashSet<Tuple<Integer,Integer>> ();
+        for (int i = 1; i <= numberOfAborts; i++) {
+            int ware = randomNumber(1, numWare);
+            int tx = randomNumber(i*10000, (i+1)*10000);
+            aborts.add(new Tuple<>(ware, tx));
+        }
+
+
         for(int ware = 1; ware <= numWare; ware++) {
             LOGGER.log(INFO, "Generating "+numTransactions+" transactions for warehouse "+ware);
             String fileName = BASE_WORKLOAD_FILE_NAME+ware;
             AppendOnlyBuffer buffer = StorageUtils.loadAppendOnlyBuffer(numTransactions, SCHEMA.getRecordSize(), fileName, true);
             for (int txIdx = 1; txIdx <= numTransactions; txIdx++) {
-                Object[] newOrderInput = generateNewOrder(ware, numWare, allowMultiWarehouses);
+
+                var abortTx = aborts.contains(new Tuple<>(ware, txIdx));
+                if (abortTx) System.out.println(STR."abort ware=\{ware}, txIdx=\{txIdx}");
+
+                Object[] newOrderInput = generateNewOrder(ware, numWare, allowMultiWarehouses, abortTx);
                 write(buffer.nextOffset(), newOrderInput);
                 buffer.forwardOffset(SCHEMA.getRecordSize());
             }
@@ -177,7 +195,7 @@ public final class WorkloadUtils {
         long endTs = System.currentTimeMillis();
         LOGGER.log(INFO, "Generated "+(numTransactions * numWare)+" transactions in "+(endTs-initTs)+" ms");
     }
-    
+
     public static void deleteWorkloadInputFiles(){
         String basePathStr = StorageUtils.getBasePath();
         Path basePath = Paths.get(basePathStr);
@@ -217,19 +235,17 @@ public final class WorkloadUtils {
         );
     }
 
-    private static Object[] generateNewOrder(int w_id, int num_ware, boolean allowMultiWarehouses){
+    private static Object[] generateNewOrder(int w_id, int num_ware, boolean allowMultiWarehouses, boolean abort){
         int d_id;
         int c_id;
         int ol_cnt;
         int all_local = 1;
         int not_found = NUM_ITEMS + 1;
-        int rbk;
 
         d_id = randomNumber(1, NUM_DIST_PER_WARE);
         c_id = nuRand(1023, 1, NUM_CUST_PER_DIST);
 
         ol_cnt = randomNumber(MIN_NUM_ITEMS_PER_ORDER, MAX_NUM_ITEMS_PER_ORDER);
-        rbk = randomNumber(1, 100);
 
         int[] itemIds = new int[ol_cnt];
         int[] supWares = new int[ol_cnt];
@@ -244,8 +260,10 @@ public final class WorkloadUtils {
             }
             itemIds[i] = item_;
 
+            // not yet
             if(FORCE_ABORTS) {
-                if ((i == ol_cnt - 1) && (rbk == 1)) {
+                if ((i==ol_cnt-1) && abort) {
+                    System.out.println("abort");
                     // this can lead to exception and then abort in app code
                     itemIds[i] = not_found;
                 }

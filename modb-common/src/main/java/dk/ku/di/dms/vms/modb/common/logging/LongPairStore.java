@@ -41,7 +41,7 @@ public final class LongPairStore implements Closeable {
             }
             offset = filechannel.position();
             filechannel.force(false);
-            System.out.println(STR."putting batch=\{batch}, tid=\{maxTid} into commit info \{filename}");
+            // System.out.println(STR."putting batch=\{batch}, tid=\{maxTid} into commit info \{filename}");
         } catch (IOException e) {
             e.printStackTrace();
         }

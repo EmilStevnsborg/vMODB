@@ -15,7 +15,8 @@ import static dk.ku.di.dms.vms.flightScheduler.common.Constants.*;
 public final class Main
 {
 
-    public static void main(String[] args) {
+    public static void main(String[] args)
+    {
         Properties properties = ConfigUtils.loadProperties();
 
         if (args != null && args.length > 0) {
@@ -24,7 +25,7 @@ public final class Main
             {
                 var argSplit = arg.split("=");
                 if (argSplit.length != 2) {
-                    System.out.println(STR."invalid arg}");
+                    System.out.println(STR."invalid arg");
                     continue;
                 }
 
@@ -39,7 +40,7 @@ public final class Main
         }
     }
 
-    private static void loadCoordinator(Properties properties)
+    public static Coordinator loadCoordinator(Properties properties)
     {
         Map<String, TransactionDAG> transactionMap = new HashMap<>();
 
@@ -97,5 +98,7 @@ public final class Main
 
         Thread coordinatorThread = new Thread(coordinator);
         coordinatorThread.start();
+
+        return coordinator;
     }
 }

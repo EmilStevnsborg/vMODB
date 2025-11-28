@@ -1015,10 +1015,14 @@ public final class Coordinator extends ModbHttpServer {
                 // all VMSes have received abort
                 if (missingACKs.size() == 0)
                 {
-                    System.out.println(STR."all ACKs for txAbort \{abortedTid} processed");
+                    // System.out.println(STR."all ACKs for txAbort \{abortedTid} processed");
 
                     resendTransactions(abortedTid);
                     ongoingAbortMissingVmsAck.remove(abortedTid);
+
+                    if(!ABORT_ACK_CONSUMERS.isEmpty()) {
+                        ABORT_ACK_CONSUMERS.forEach(c->c.accept(abortedTid));
+                    }
                 }
             }
             // sent only by VMSes initiating abort
@@ -1503,8 +1507,8 @@ public final class Coordinator extends ModbHttpServer {
         }
 
         if(!BATCH_COMMIT_CONSUMERS.isEmpty()) {
-            final long tid = this.numTIDsCommitted.get();
-            BATCH_COMMIT_CONSUMERS.forEach(c->c.accept(batchContext.batchOffset, tid));
+            final long numTiDsCommitted = this.numTIDsCommitted.get();
+            BATCH_COMMIT_CONSUMERS.forEach(c->c.accept(batchContext.batchOffset, numTiDsCommitted));
             /* must test both approaches in the experiments
             for (var task : BATCH_COMMIT_CONSUMERS){
                 submitBackgroundTask(()-> task.accept(tid));

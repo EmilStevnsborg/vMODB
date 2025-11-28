@@ -1,5 +1,6 @@
 package dk.ku.di.dms.vms.web_common;
 
+import dk.ku.di.dms.vms.modb.common.data_structure.Tuple;
 import dk.ku.di.dms.vms.modb.common.memory.MemoryManager;
 import dk.ku.di.dms.vms.modb.common.memory.MemoryUtils;
 import dk.ku.di.dms.vms.modb.common.runnable.StoppableRunnable;
@@ -30,6 +31,11 @@ public abstract class ModbHttpServer extends StoppableRunnable {
     protected static final List<BiConsumer<Long, Long>> BATCH_COMMIT_CONSUMERS = new CopyOnWriteArrayList<>();
 
     protected static final List<Consumer<Long>> ABORT_CONSUMERS = new CopyOnWriteArrayList<>();
+    protected static final List<Consumer<Long>> ABORT_ACK_CONSUMERS = new CopyOnWriteArrayList<>();
+
+    protected static final List<BiConsumer<Long, String>> CRASH_CONSUMERS = new CopyOnWriteArrayList<>();
+    protected static final List<BiConsumer<Long, String>> CRASH_ACK_CONSUMERS = new CopyOnWriteArrayList<>();
+    protected static final List<BiConsumer<Long, String>> RECONNECTION_ACK_CONSUMERS = new CopyOnWriteArrayList<>();
     private static final Set<Future<?>> TRACKED_FUTURES = ConcurrentHashMap.newKeySet();
 
     static {
@@ -453,6 +459,11 @@ public abstract class ModbHttpServer extends StoppableRunnable {
     // consumes abort events
     public void registerAbortConsumer(Consumer<Long> consumer){
         ABORT_CONSUMERS.add(consumer);
+    }
+
+    // consumes abort all ACKs events
+    public void registerAbortAckConsumer(Consumer<Long> consumer){
+        ABORT_ACK_CONSUMERS.add(consumer);
     }
 
 }

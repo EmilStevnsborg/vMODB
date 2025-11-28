@@ -13,7 +13,7 @@ import java.util.Set;
  */
 public final class BatchCommitCommand {
 
-    public static final int SIZE = 1 + (2 * Long.BYTES) + Integer.BYTES;
+    public static final int SIZE = 1 + (2 * Long.BYTES) + 2*Integer.BYTES;
 
     public static void write(ByteBuffer buffer, Payload payload){
         buffer.put(Constants.BATCH_COMMIT_COMMAND);

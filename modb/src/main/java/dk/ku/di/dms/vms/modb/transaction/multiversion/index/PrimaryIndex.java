@@ -236,13 +236,20 @@ public final class PrimaryIndex implements IMultiVersionIndex {
      */
     public boolean insert(TransactionContext txCtx, IKey key, Object[] record) {
         OperationSetOfKey operationSet = this.updatesPerKeyMap.get(key);
+
+
         // if not delete, violation (it means some tid has written to this PK before)
         if (operationSet != null){
             if(operationSet.lastWriteType != WriteType.DELETE) {
-                LOGGER.log(WARNING, "Primary key violation found in multi version map: " + key);
+                var prevEntry = operationSet.peak();
+                LOGGER.log(WARNING, STR."Primary key violation found in multi version map: \{key}, " +
+                                          STR."operationSet.lastWriteType: \{operationSet.lastWriteType}, " +
+                                          STR."prevEntry TiD = \{prevEntry.key}, prevEntryType = \{prevEntry.val.type}");
                 return false;
             }
         }
+
+
         /*
         unknown error related to this block. only occurs in processStockConfirmed and after an initial run
         either (a) the checkpoint is concurrently putting this entry or
@@ -331,12 +338,14 @@ public final class PrimaryIndex implements IMultiVersionIndex {
             if (this.insert(txCtx, key, values)) {
                 return key;
             }
+            System.out.println(STR."insertAndGetKey, primaryKeyGenerator.isPresent(), insert false key: \{key}");
             return null;
         }
         IKey key = KeyUtils.buildRecordKey(this.rawIndex.schema().getPrimaryKeyColumns(), values);
         if(this.insert(txCtx, key, values)){
             return key;
         }
+        System.out.println(STR."insertAndGetKey, insert false key: \{key}");
         return null;
     }
 
@@ -420,7 +429,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
 
     private static final boolean GARBAGE_COLLECTION = false;
 
-    public void checkpoint(long maxTid){
+    public void checkpoint(long maxTid) {
         // System.out.println(STR."checkpointing \{maxTid}");
         if(this.keysToFlush.isEmpty() || this.updatesPerKeyMap.isEmpty()) return;
         int numRecords = 0;
@@ -441,6 +450,7 @@ public final class PrimaryIndex implements IMultiVersionIndex {
             } else if(GARBAGE_COLLECTION) {
                 operationSetOfKey.removeChildren(entry);
             }
+            // System.out.println(STR."key: \{key}");
             switch (operationSetOfKey.lastWriteType) {
                 case UPDATE -> this.rawIndex.upsert(key, entry.val().record);
                 case INSERT -> this.rawIndex.insert(key, entry.val().record);
@@ -450,10 +460,10 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         }
         this.rawIndex.unlock();
         if(numRecords > 0) {
-            LOGGER.log(INFO, "Updated "+numRecords+" records in disk");
+            // LOGGER.log(INFO, "Updated "+numRecords+" records in disk");
             this.rawIndex.flush();
         } else {
-            LOGGER.log(WARNING, "No records have been flushed");
+            // LOGGER.log(WARNING, "No records have been flushed");
         }
     }
 
@@ -470,6 +480,17 @@ public final class PrimaryIndex implements IMultiVersionIndex {
             IKey key = it.next();
             OperationSetOfKey operationSetOfKey = this.updatesPerKeyMap.get(key);
             operationSetOfKey.removeDownToEntry(failedTid-1);
+
+            var topOperation = operationSetOfKey.peak();
+            if (topOperation == null) {
+                // System.out.println(STR."no more operations for key \{key}");
+                this.updatesPerKeyMap.remove(key);
+                it.remove();
+                this.keysToFlush.remove(key);
+                return;
+            }
+            operationSetOfKey.lastWriteType = topOperation.val().type;
+
         }
     }
 

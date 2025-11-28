@@ -20,6 +20,28 @@ public class VmsEndpoints
 {
     protected static final IVmsSerdesProxy SERDES = VmsSerdesProxyBuilder.build();
 
+    public static void Commit(HttpClient client)
+    {
+        HttpRequest cust_request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:8769/customer/commit"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(""))
+                .build();
+
+        HttpRequest fs_request = HttpRequest.newBuilder()
+                .uri(URI.create(STR."http://localhost:8767/flight/commit"))
+                .header("Accept", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(""))
+                .build();
+
+        try {
+            client.send(cust_request, HttpResponse.BodyHandlers.ofString());
+            client.send(fs_request, HttpResponse.BodyHandlers.ofString());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     public static List<Booking> GetBookings(HttpClient client)
     {
         HttpRequest request = HttpRequest.newBuilder()
@@ -77,6 +99,25 @@ public class VmsEndpoints
         } catch (Exception e) {
             System.err.println("Failed to get flight seats");
             return new ArrayList<FlightSeat>();
+        }
+    }
+
+
+    public static int GetFlightSeatsCount(HttpClient client)
+    {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(STR."http://localhost:8767/flight/count"))
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+
+        try {
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            var payload = response.body();
+            return Integer.parseInt(payload);
+        } catch (Exception e) {
+            System.err.println("Failed to get flight seats");
+            return -1;
         }
     }
 }

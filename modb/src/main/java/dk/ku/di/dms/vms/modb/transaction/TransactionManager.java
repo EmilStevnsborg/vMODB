@@ -469,6 +469,9 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
         for (Table table : this.catalog.values()) {
             LOGGER.log(INFO, "restoring table "+table.getName());
             table.primaryKeyIndex().restoreStableState(failedTid);
+
+            //
+//            table.secondaryIndexMap
         }
     }
 

@@ -83,6 +83,10 @@ public final class WarehouseHttpHandler extends DefaultHttpHandler {
                 this.transactionManager.beginTransaction(0, 0, 0, false);
                 this.customerRepository.upsert(customer);
             }
+            case "commit" -> {
+                transactionManager.commit();
+                transactionManager.checkpoint(0);
+            }
         }
     }
 

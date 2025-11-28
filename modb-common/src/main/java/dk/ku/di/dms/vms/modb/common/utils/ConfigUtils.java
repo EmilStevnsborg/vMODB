@@ -1,6 +1,8 @@
 package dk.ku.di.dms.vms.modb.common.utils;
 
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Properties;
 import java.util.logging.LogManager;
 
@@ -29,6 +31,16 @@ public final class ConfigUtils {
             throw new RuntimeException(e);
         }
     }
+    public static Properties loadProperties(String path) {
+        Properties props = new Properties();
+        try (InputStream in = Files.newInputStream(Paths.get(path))) {
+            props.load(in);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return props;
+    }
+
 
     public static Properties loadProperties(){
         return PROPERTIES;

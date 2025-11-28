@@ -8,7 +8,7 @@ public final class TPCcConstants {
     /**
      * WORKLOAD
      */
-    public static final boolean FORCE_ABORTS = false;
+    public static final boolean FORCE_ABORTS = true;
 
     /**
      * DATA

@@ -168,7 +168,7 @@ final class LeaderWorker extends StoppableRunnable {
     }
 
     private void sendTransactionAbort(TransactionAbortInfo.Payload payload) {
-        System.out.println(STR."Sending transaction abort to leader \{payload}");
+        // System.out.println(STR."Sending transaction abort to leader \{payload}");
         TransactionAbortInfo.write( this.writeBuffer, payload );
         this.write(payload);
     }

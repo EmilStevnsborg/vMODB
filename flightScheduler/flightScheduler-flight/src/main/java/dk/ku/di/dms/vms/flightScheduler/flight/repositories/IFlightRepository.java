@@ -7,4 +7,6 @@ import dk.ku.di.dms.vms.modb.api.interfaces.IRepository;
 import java.util.List;
 
 public interface IFlightRepository  extends IRepository<Integer, FlightSeat> {
+//    @Query("SELECT COUNT(f) FROM flight_seats f")
+//    int numFlightSeats();
 }

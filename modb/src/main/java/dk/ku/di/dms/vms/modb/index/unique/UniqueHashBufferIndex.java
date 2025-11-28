@@ -249,7 +249,7 @@ public class UniqueHashBufferIndex extends ReadWriteIndex<IKey> implements ReadW
         long pos = this.findRecordAddress(key);
         if(pos != -1)
             return this.readFromIndex(pos + Schema.RECORD_HEADER);
-        LOGGER.log(WARNING, ERROR_FINDING);
+        LOGGER.log(WARNING, STR."\{ERROR_FINDING}, key: \{key}, pos: \{pos}");
         return null;
     }
 

@@ -77,6 +77,9 @@ public final class DataLoadUtils {
             long end = System.currentTimeMillis();
             LOGGER.log(INFO, "Table ingestion finished in " + (end - init) + "ms");
         }
+
+        // commit ingested data
+
     }
 
     private static class IngestionWorker implements Runnable {

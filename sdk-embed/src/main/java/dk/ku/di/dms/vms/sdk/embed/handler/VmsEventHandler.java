@@ -429,25 +429,12 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         // input queue clear??? (an event can't be in the queue unless it was processed upstream??)
         // if A->B->C, and 10 aborts in C, then 30 may be in the queue, 30 will still be sent by B?
-        // look at pauseHandler
+
+        vmsInternalChannels.transactionInputQueue().stream().filter(input -> input.tid() >= tid);
 
         var numTIDsExecuted = metadata[0];
         var maxTidExecuted = metadata[1];
         fixTrackingBatch(bid, numTIDsExecuted, maxTidExecuted);
-
-
-        // Had to move this, because the scheduler is not paused properly, which means I will clear the tasks
-        // after processing the events resent by the coordinator
-        if (initiatedAbort) {
-            // send abort message
-            var abortMessage = TransactionAbortInfo.of(bid, tid, me.identifier);
-            this.leaderWorker.queueMessage(abortMessage);
-        } else {
-            // send abort acknowledgement
-            var abortMessage = TransactionAbortAck.of(bid, tid, me.identifier);
-            this.leaderWorker.queueMessage(abortMessage);
-            // System.out.println(STR."\{me.identifier} ACKs abort of \{tid} to leader");
-        }
 
         pauseHandler.accept(false);
     }
@@ -470,6 +457,9 @@ public final class VmsEventHandler extends ModbHttpServer {
         System.out.println(STR."\{me.identifier} PROCESSES abort of \{tid}");
 
         applyAbortLocally(tid, bid, false);
+
+        var abortMessage = TransactionAbortAck.of(bid, tid, me.identifier);
+        this.leaderWorker.queueMessage(abortMessage);
     }
 
     // for vms that failed
@@ -481,9 +471,12 @@ public final class VmsEventHandler extends ModbHttpServer {
         var tid = eventOutput.tid();
         var bid = eventOutput.batch();
 
-        // System.out.println(STR."\{me.identifier} INITIATES abort of \{tid}");
+        System.out.println(STR."\{me.identifier} INITIATES abort of \{tid}");
 
         applyAbortLocally(tid, bid, true);
+
+        var abortMessage = TransactionAbortInfo.of(bid, tid, me.identifier);
+        this.leaderWorker.queueMessage(abortMessage);
     }
 
     public void processOutputEvent(IVmsTransactionResult txResult) {
@@ -1188,7 +1181,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                         this.processNewBatchCommand(payload);
                     }
                     case (TX_ABORT) -> {
-                        if(this.readBuffer.remaining() < (TransactionAbort.SIZE - 1)){
+                        if(this.readBuffer.remaining() < (TransactionAbort.SIZE - 1)) {
                             this.fetchMoreBytes(startPos);
                             return;
                         }
@@ -1388,6 +1381,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                 // committing the actual data snapshot and the commitInfo (metadata) about the snapshot
                 // argue that both of these should be atomic
                 submitBackgroundTask(()->{
+                    // System.out.println(STR."checkpointing batch \{batchCommitCommand.batch()} in \{me.identifier}");
                     checkpoint(batchCommitCommand.batch(), batchMetadata.maxTidExecuted);
 
                     // log commit info only if snapshot was modified
@@ -1398,7 +1392,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 //                                           STR."tids in batch \{batchCommitCommand.batch()}");
 
                         commitInfo.put(batchCommitCommand.batch(), trackingBatchMap.get(batchCommitCommand.batch()).maxTidExecuted);
-                        System.out.println(STR."Batch \{batchCommitCommand.batch()} committed in \{me.identifier}");
+                        // System.out.println(STR."Batch \{batchCommitCommand.batch()} committed in \{me.identifier}");
                     }
                 });
             }

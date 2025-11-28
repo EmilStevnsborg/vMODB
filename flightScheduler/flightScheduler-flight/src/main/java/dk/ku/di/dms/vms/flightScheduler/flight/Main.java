@@ -63,23 +63,19 @@ public final class Main {
         public void post(String uri, String payload)
         {
             String[] split = uri.split("/");
-            long lastTid = VMS.lastTidFinished();
-            this.transactionManager.beginTransaction(lastTid, 0, lastTid, false);
 
-            if (split[split.length-1].equals("clear"))
+            long lastTid = VMS.lastTidFinished();
+
+            if (split[split.length-1].equals("commit"))
             {
-                System.out.println("DELETING ALL DATA");
-                var flight_seats = repository.getAll();
-                this.repository.deleteAll(flight_seats);
-                return;
+                this.transactionManager.commit();
+                this.transactionManager.checkpoint(lastTid);
             }
+
+            this.transactionManager.beginTransaction(lastTid, 0, lastTid, false);
 
             FlightSeat flightSeat = SERDES.deserialize(payload, FlightSeat.class);
             this.repository.upsert(flightSeat); // upsert: update + insert (if it exists, update, else insert)
-
-            // persist injected data
-            this.transactionManager.commit();
-            this.transactionManager.checkpoint(lastTid);
         }
 
         // http://host/flight/{id}
@@ -87,12 +83,19 @@ public final class Main {
         public String getAsJson(String uri)
         {
             String[] split = uri.split("/");
-            int flight_id = Integer.parseInt(split[split.length - 1]);
 
             long lastTid = VMS.lastTidFinished();
             this.transactionManager.beginTransaction(lastTid, 0, lastTid,true);
 
             var flightSeats = this.repository.getAllCommitted();
+
+            if (split[split.length-1].equals("count"))
+            {
+                System.out.println("Getting count of flight seats");
+//                var num = repository.numFlightSeats();
+                var num = flightSeats.size();
+                return String.valueOf(num);
+            }
 
             return flightSeats.stream()
                     .toList()

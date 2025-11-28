@@ -3,6 +3,8 @@ package dk.ku.di.dms.vms.tpcc.warehouse;
 import dk.ku.di.dms.vms.modb.api.annotations.*;
 import dk.ku.di.dms.vms.tpcc.common.events.NewOrderWareIn;
 import dk.ku.di.dms.vms.tpcc.common.events.NewOrderWareOut;
+import dk.ku.di.dms.vms.tpcc.common.events.PaymentOrderOut;
+import dk.ku.di.dms.vms.tpcc.warehouse.entities.Customer;
 import dk.ku.di.dms.vms.tpcc.warehouse.entities.District;
 import dk.ku.di.dms.vms.tpcc.warehouse.repositories.ICustomerRepository;
 import dk.ku.di.dms.vms.tpcc.warehouse.repositories.IDistrictRepository;
@@ -21,6 +23,14 @@ public final class WarehouseService {
         this.warehouseRepository = warehouseRepository;
         this.districtRepository = districtRepository;
         this.customerRepository = customerRepository;
+    }
+
+    @Inbound(values = "payment-order-out")
+    @Transactional(type = RW)
+    public void processNewPayment(PaymentOrderOut in)
+    {
+        var customerId = new Customer.CustomerId(in.c_id, in.d_id, in.w_id);
+        customerRepository.lookupByKey(customerId);
     }
 
     @Inbound(values = "new-order-ware-in")

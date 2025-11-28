@@ -63,28 +63,19 @@ public final class Main {
 
             String[] split = uri.split("/");
             long lastTid = VMS.lastTidFinished();
-            this.transactionManager.beginTransaction(lastTid, 0, lastTid, false);
 
-            if (split[split.length-1].equals("clear"))
+            // persist data
+            // save the data injected by adding them to keysToFlush (only happening when modifying via transaction task)
+            if (split[split.length-1].equals("commit"))
             {
-                System.out.println("DELETING ALL DATA");
-                var customers = this.repository.getAll();
-                this.repository.deleteAll(customers);
-
-                // persist data????
                 this.transactionManager.commit();
                 this.transactionManager.checkpoint(lastTid);
-
-                return;
             }
+
+            this.transactionManager.beginTransaction(lastTid, 0, lastTid, false);
 
             Customer customer = SERDES.deserialize(payload, Customer.class);
             this.repository.upsert(customer);
-
-            // persist data
-            this.transactionManager.commit();
-            this.transactionManager.checkpoint(lastTid);
-            // save the data injected by adding them to keysToFlush (only happening when modifying via transaction task)
         }
 
         // http://host/customer/{id}
