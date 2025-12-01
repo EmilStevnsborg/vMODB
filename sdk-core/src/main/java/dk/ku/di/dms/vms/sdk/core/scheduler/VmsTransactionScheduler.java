@@ -303,7 +303,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         // unblock the queue
 
 
-        // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: sets lastTidFinished to \{lastTidFinished} when clearing for \{failedTid}");
+         System.out.println(STR."\{vmsIdentifier}-SCHEDULER: sets lastTidFinished to \{lastTidFinished} when clearing for \{failedTid}");
         return new Long[] {numTIDsExecuted, maxTidExecuted};
     }
 
@@ -342,7 +342,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                 // System.out.println(STR."task \{task} with lastTidFinished=\{lastTidFinished} in \{vmsIdentifier} isFailed");
                 return;
             }
-            // System.out.println(STR."Execute task tid=\{task.tid()}");
+            // System.out.println(STR."\{vmsIdentifier} Execute task tid=\{task.tid()}");
             switch (task.signature().executionMode()) {
                 case SINGLE_THREADED -> {
                     if (!this.canSingleThreadTaskRun()) {
@@ -475,7 +475,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                         .signatures.getFirst().object(),
                 inboundEvent.input()
         ));
-        // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: put new task for tid=\{inboundEvent.tid()} with lastTid=\{inboundEvent.lastTid()}");
+         // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: put new task for tid=\{inboundEvent.tid()} with lastTid=\{inboundEvent.lastTid()}, current lastTidFinished=\{lastTidFinished}");
 
         // mark the last tid, so we can get the next to execute when appropriate
         if(this.lastTidToTidMap.containsKey(inboundEvent.lastTid())){

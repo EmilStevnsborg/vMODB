@@ -73,34 +73,41 @@ public class ThesisLoggingHandler implements ILoggingHandler
     {
         rwLock.readLock().lock();
         try {
-            var buffer = retrieveByteBuffer();
             var committedEvents = eventsSent.values().stream()
                     .filter(e -> e.batch() == bid)
                     .toList();
 
             if (committedEvents.isEmpty()) return true;
 
+            ByteBuffer buffer;
             try {
-                BatchUtils.assembleBatchPayload(committedEvents.size(), committedEvents, buffer);
-                buffer.limit(buffer.getInt(1));
-                buffer.flip();
+                int remaining = committedEvents.size();
+                while (remaining > 0) {
+                    buffer = retrieveByteBuffer();
+                    var newRemaining = BatchUtils.assembleBatchPayload(committedEvents.size(), committedEvents, buffer);
+                    var numWrittenEvents = remaining-newRemaining;
+                    committedEvents = committedEvents.subList(numWrittenEvents, committedEvents.size());
+                    remaining = newRemaining;
 
-                while (buffer.hasRemaining()) {
-                    fileChannel.write(buffer);
+                    buffer.limit(buffer.getInt(1));
+                    buffer.flip();
+
+                    while (buffer.hasRemaining()) {
+                        fileChannel.write(buffer);
+                    }
+
+                    // remove committed events atomically
+                    committedEvents.forEach(e -> {
+                        eventsSent.remove(e.tid());
+                    });
+                    // System.out.println(STR."LoggingHandler Committing batch=\{bid} of size=\{numWrittenEvents} with \{remaining} events remaining");
+                    returnByteBuffer(buffer);
                 }
                 fileChannel.force(true);
-                // System.out.println(STR."LoggingHandler Committing batch=\{bid} has been forced");
 
-                // remove committed events atomically
-                committedEvents.forEach(e -> {
-                    eventsSent.remove(e.tid());
-                });
-
-                returnByteBuffer(buffer);
                 return true;
             } catch (IOException ex) {
                 ex.printStackTrace();
-                returnByteBuffer(buffer);
                 return false;
             }
         } finally {
@@ -223,7 +230,7 @@ public class ThesisLoggingHandler implements ILoggingHandler
                     .orElse(-1);
 
             latestCommittedTid = batchMaxTid;
-            // System.out.println(STR."Updated: latestCommittedBid=\{latestCommittedBid}, latestCommittedTid=\{latestCommittedTid}");
+            // System.out.println(STR."Updated: latestCommittedBid=\{latestCommittedBid}, latestCommittedTid=\{latestCommittedTid}, eventsInBatch=\{events.size()}");
             batchPosition += segmentSize;
             fileChannel.position(batchPosition);
         }

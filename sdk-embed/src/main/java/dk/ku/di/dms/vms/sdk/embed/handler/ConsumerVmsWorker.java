@@ -367,9 +367,9 @@ public final class ConsumerVmsWorker extends StoppableRunnable implements IVmsCo
     }
 
     @Override
-    public void queueMessage(Object message) {
+    public void clear() {
         //
-
+        transactionEventQueue.clear();
     }
 
     @Override

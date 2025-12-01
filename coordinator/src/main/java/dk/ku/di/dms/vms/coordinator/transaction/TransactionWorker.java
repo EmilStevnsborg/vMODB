@@ -280,7 +280,7 @@ public final class TransactionWorker extends StoppableRunnable {
             TransactionEvent.PayloadRaw txEvent = TransactionEvent.of(this.tid, this.batchContext.batchOffset,
                     transactionInput.event.name, transactionInput.event.payload, precedenceMapStr);
 
-            // System.out.println(STR."txWorker-\{this.id} queues \{transactionInput.event.name} to \{inputVms.identifier}");
+            // System.out.println(STR."\{txEvent.tid()} precedenceMapStr \{precedenceMapStr}");
             this.vmsWorkerContainerMap.get(inputVms.identifier).queueTransactionEvent(txEvent);
         }
         this.tid++;
@@ -359,6 +359,7 @@ public final class TransactionWorker extends StoppableRunnable {
                     pendingInput.input.event.name, pendingInput.input.event.payload, precedenceMapStr);
             LOGGER.log(DEBUG,"Leader: Transaction worker "+id+" adding event "+event.name+" to "+inputVms.identifier+" worker:\n"+txEvent+"\n"+pendingInput.previousTidPerVms);
 
+            // System.out.println(STR."\{txEvent.tid()} precedenceMapStr \{precedenceMapStr}");
             this.vmsWorkerContainerMap.get(inputVms.identifier).queueTransactionEvent(txEvent);
         }
 

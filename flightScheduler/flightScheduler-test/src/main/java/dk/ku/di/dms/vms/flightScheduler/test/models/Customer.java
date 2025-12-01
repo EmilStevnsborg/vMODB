@@ -11,6 +11,7 @@ public class Customer
         this.customer_id = customer_id;
         this.money = money;
         this.name = name;
+        seat_number = -1;
     }
 
     public Customer(){}

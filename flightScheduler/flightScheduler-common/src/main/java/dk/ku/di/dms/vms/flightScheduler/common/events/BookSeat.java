@@ -8,11 +8,11 @@ import java.util.stream.Collectors;
 @Event
 public class BookSeat
 {
-    public Date timestamp;
+    public String timestamp;
     public OrderFlight orderFlight;
 
     public BookSeat(){}
-    public BookSeat(Date timestamp, OrderFlight orderFlight)
+    public BookSeat(String timestamp, OrderFlight orderFlight)
     {
         this.timestamp = timestamp;
         this.orderFlight = orderFlight;

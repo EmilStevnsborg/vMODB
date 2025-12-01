@@ -40,12 +40,9 @@ public final class MultiVmsContainer implements IVmsContainer {
     }
 
     @Override
-    public void queueMessage(Object message) {
-        this.consumerVmsWorkers[this.next].queueMessage(message);
-        if(this.next == this.consumerVmsWorkers.length-1){
-            this.next = 0;
-        } else {
-            this.next += 1;
+    public void clear() {
+        for(var consumer : consumerVmsWorkers){
+            consumer.clear();
         }
     }
 

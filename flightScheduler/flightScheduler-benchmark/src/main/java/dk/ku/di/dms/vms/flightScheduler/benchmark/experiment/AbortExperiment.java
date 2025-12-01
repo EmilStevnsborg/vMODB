@@ -1,0 +1,234 @@
+package dk.ku.di.dms.vms.flightScheduler.benchmark.experiment;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dk.ku.di.dms.vms.coordinator.Coordinator;
+import dk.ku.di.dms.vms.flightScheduler.benchmark.Util.ComponentProcess;
+import dk.ku.di.dms.vms.flightScheduler.benchmark.Util.Util;
+import dk.ku.di.dms.vms.flightScheduler.benchmark.ingestion.IngestionWorkerCustomer;
+import dk.ku.di.dms.vms.flightScheduler.benchmark.ingestion.IngestionWorkerFlight;
+import dk.ku.di.dms.vms.flightScheduler.benchmark.workload.Workload;
+import dk.ku.di.dms.vms.flightScheduler.common.events.OrderFlight;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.*;
+import java.util.concurrent.*;
+
+import static dk.ku.di.dms.vms.flightScheduler.proxy.Main.loadCoordinator;
+
+public class AbortExperiment
+{
+    private boolean initialized;
+    private Coordinator coordinator;
+    private final Map<Long, BatchStats> BATCH_TO_FINISHED_TS_MAP = new ConcurrentHashMap<>();
+    private final Map<Long, Long> ABORT_MAP = new ConcurrentHashMap<>();
+    private final Map<Long, Long> ABORT_ACK_MAP = new ConcurrentHashMap<>();
+    private final Random generate = new Random();
+    private final int numRecords;
+    private final int numIngestionWorkers;
+    private final Iterator<OrderFlight> input;
+
+    public int randomNumber(int min, int max) {
+        int next = generate.nextInt();
+        int div = next % ((max - min) + 1);
+        if (div < 0) {
+            div = div * -1;
+        }
+        return min + div;
+    }
+
+    public AbortExperiment(int numRecords, int numTransactions, int numIngestionWorkers)
+    {
+        this.numRecords = numRecords;
+        this.numIngestionWorkers = numIngestionWorkers;
+
+        var numberOfAborts = 1;
+        var initTx = 1;
+        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions, numRecords, numberOfAborts, initTx);
+        input = orderFlightInput;
+    }
+
+    public void initExperiment(Properties coordinatorProperties) throws Exception
+    {
+        ComponentProcess.KillVMSes();
+        System.out.println(STR."killed VMSes");
+
+        System.console().readLine();
+        System.out.println(STR."starting VMSes and coordinator");
+        ComponentProcess.StartVMSes();
+        Coordinator coordinator = loadCoordinator(coordinatorProperties);
+        this.coordinator = coordinator;
+
+        coordinator.registerBatchCommitConsumer((batchId, commitedTiDs) -> {
+            BATCH_TO_FINISHED_TS_MAP.put(
+                    batchId,
+                    new BatchStats(batchId, commitedTiDs, System.currentTimeMillis()));
+        });
+
+        coordinator.registerAbortConsumer((abortedTid) ->  {
+            ABORT_MAP.put(abortedTid, System.currentTimeMillis());
+        });
+
+        coordinator.registerAbortAckConsumer((abortedTid) ->  {
+            ABORT_ACK_MAP.put(abortedTid, System.currentTimeMillis());
+        });
+
+        System.console().readLine();
+        System.out.println(STR."ingesting data");
+        this.ingestData();
+    }
+
+    public ExperimentResults runExperiment(int runTime, int warmup)
+    {
+        int newRuntime = runTime + warmup;
+        Workload.WorkloadStats workloadStats = Workload.submitOrderFlights(input, coordinator);
+
+        Util.Sleep(newRuntime);
+
+        // avoid submitting after experiment termination
+        coordinator.clearTransactionInputs();
+
+        if(BATCH_TO_FINISHED_TS_MAP.isEmpty()) {
+            return new ExperimentResults();
+        }
+
+        long endTs = workloadStats.initTs() + newRuntime;
+        long initTs = workloadStats.initTs() + warmup;
+        List<Long> allLatencies = new ArrayList<>();
+
+        // find first batch that runs transactions after warm up
+        BatchStats prevBatchStats = null;
+        for(var batchStat : BATCH_TO_FINISHED_TS_MAP.entrySet()){
+            if(batchStat.getValue().endTs() < initTs) {
+                prevBatchStats = batchStat.getValue();
+                continue;
+            }
+            System.out.println(STR."batchStas endTs=\{batchStat.getValue().endTs()} !< initTs=\{initTs}");
+            break;
+        }
+
+        // if none, consider the first batch as the warmup
+        if(prevBatchStats == null) {
+            Long lowestKey = BATCH_TO_FINISHED_TS_MAP.keySet().stream().min(Long::compareTo).orElse(null);
+            prevBatchStats = BATCH_TO_FINISHED_TS_MAP.get(lowestKey);
+        }
+
+        BatchStats firstBatchStats = prevBatchStats;
+
+        List<ThroughputInfo> throughputInfo = new ArrayList<>();
+        List<AbortInfo> aborts = new ArrayList<>();
+
+        // calculate latency based on the batch
+        // calculate committed transactions in each time span
+        while(BATCH_TO_FINISHED_TS_MAP.containsKey(prevBatchStats.batchId()+1)){
+            BatchStats currBatchStats = BATCH_TO_FINISHED_TS_MAP.get(prevBatchStats.batchId()+1);
+            if(currBatchStats.endTs() > endTs) break;
+
+            var transactionsInTimeSpan = currBatchStats.numCommitedTiDs() - prevBatchStats.numCommitedTiDs();
+            var info = new ThroughputInfo(prevBatchStats.endTs(), currBatchStats.endTs(), transactionsInTimeSpan);
+            throughputInfo.add(info);
+
+            allLatencies.add(currBatchStats.endTs() - prevBatchStats.endTs());
+            prevBatchStats = currBatchStats;
+        }
+
+        for (var entry : ABORT_MAP.entrySet())
+        {
+            var abortedTid = entry.getKey();
+            var timestampStart = entry.getValue();
+            var timestampEnd = ABORT_ACK_MAP.get(abortedTid);
+
+            if (timestampStart == null) timestampStart = 0L;
+            if (timestampEnd == null) timestampEnd = 0L;
+
+            aborts.add(new AbortInfo(abortedTid, timestampStart, timestampEnd));
+        }
+
+        var results = ExperimentResults.Abort(throughputInfo, aborts);
+        writeResultsToFile(results);
+
+        return results;
+    }
+
+
+    // store it persistently in
+    // default data
+    private void ingestData()
+    {
+        // flight, customer, booking
+        var totalTasks = 2*numIngestionWorkers;
+
+        ExecutorService threadPool = Executors.newFixedThreadPool(totalTasks);
+        BlockingQueue<Future<Void>> completionQueue = new ArrayBlockingQueue<>(totalTasks);
+        CompletionService<Void> service = new ExecutorCompletionService<>(threadPool, completionQueue);
+
+        var recordPerWorker = this.numRecords / this.numIngestionWorkers;
+
+        long init = System.currentTimeMillis();
+        long end;
+        for (int i = 0; i < this.numIngestionWorkers; i++)
+        {
+            var startIdx = i*recordPerWorker;
+            var endIdx = (i+1)*recordPerWorker;
+            service.submit(new IngestionWorkerCustomer(startIdx, endIdx, false), null);
+            service.submit(new IngestionWorkerFlight(startIdx, endIdx, false), null);
+        }
+        try {
+            for (int i = 0; i < totalTasks; i++) {
+                Future<Void> f = service.take();  // waits for completion
+                try {
+                    f.get(); // propagate exceptions
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        } catch(InterruptedException e){
+            threadPool.shutdownNow();
+            e.printStackTrace(System.err);
+        } finally{
+            end = System.currentTimeMillis();
+        }
+        System.out.println(STR."ingesting \{this.numRecords} flight_seats and customers each with \{this.numIngestionWorkers} workers time: \{end-init}ms");
+
+        // commit ingested data
+        var client = HttpClient.newHttpClient();
+        // Commit(client);
+    }
+    public static void Commit(HttpClient client)
+    {
+        HttpRequest cust_request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:8769/customer/commit"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                .build();
+
+        HttpRequest fs_request = HttpRequest.newBuilder()
+                .uri(URI.create(STR."http://localhost:8767/flight/commit"))
+                .header("Accept", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                .build();
+
+        try {
+            client.send(cust_request, HttpResponse.BodyHandlers.ofString());
+            client.send(fs_request, HttpResponse.BodyHandlers.ofString());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    public static void writeResultsToFile(ExperimentResults results)
+    {
+        String fileName = "result_abort.json";
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            mapper.writerWithDefaultPrettyPrinter().writeValue(new File(fileName), results);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+}

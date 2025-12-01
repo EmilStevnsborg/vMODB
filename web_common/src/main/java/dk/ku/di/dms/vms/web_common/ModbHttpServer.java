@@ -33,9 +33,9 @@ public abstract class ModbHttpServer extends StoppableRunnable {
     protected static final List<Consumer<Long>> ABORT_CONSUMERS = new CopyOnWriteArrayList<>();
     protected static final List<Consumer<Long>> ABORT_ACK_CONSUMERS = new CopyOnWriteArrayList<>();
 
-    protected static final List<BiConsumer<Long, String>> CRASH_CONSUMERS = new CopyOnWriteArrayList<>();
-    protected static final List<BiConsumer<Long, String>> CRASH_ACK_CONSUMERS = new CopyOnWriteArrayList<>();
-    protected static final List<BiConsumer<Long, String>> RECONNECTION_ACK_CONSUMERS = new CopyOnWriteArrayList<>();
+    protected static final List<Consumer<String>> CRASH_CONSUMERS = new CopyOnWriteArrayList<>();
+    protected static final List<Consumer<String>> CRASH_ACK_CONSUMERS = new CopyOnWriteArrayList<>();
+    protected static final List<Consumer<String>> RECONNECTION_ACK_CONSUMERS = new CopyOnWriteArrayList<>();
     private static final Set<Future<?>> TRACKED_FUTURES = ConcurrentHashMap.newKeySet();
 
     static {
@@ -462,8 +462,15 @@ public abstract class ModbHttpServer extends StoppableRunnable {
     }
 
     // consumes abort all ACKs events
-    public void registerAbortAckConsumer(Consumer<Long> consumer){
-        ABORT_ACK_CONSUMERS.add(consumer);
+    public void registerAbortAckConsumer(Consumer<Long> consumer){ ABORT_ACK_CONSUMERS.add(consumer); }
+
+
+    public void registerCrashConsumer(Consumer<String> consumer){
+        CRASH_CONSUMERS.add(consumer);
+    }
+
+    public void registerCrashAckConsumer(Consumer<String> consumer){
+        CRASH_ACK_CONSUMERS.add(consumer);
     }
 
 }

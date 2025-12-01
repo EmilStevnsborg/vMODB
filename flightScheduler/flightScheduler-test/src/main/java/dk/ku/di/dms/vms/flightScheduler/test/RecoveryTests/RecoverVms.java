@@ -40,6 +40,10 @@ public class RecoverVms
         var customers = DataGenerator.GenerateCustomers(client, 40);
         var flightSeats = DataGenerator.GenerateFlightSeats(client, 0, 40);
 
+        System.console().readLine();
+        System.out.println("TEST: committing injecting data");
+        VmsEndpoints.Commit(client);
+
         // 1st and 2nd batch
         System.console().readLine();
         System.out.println(STR."TEST: sending order_flights with TIDs of [1-21)");

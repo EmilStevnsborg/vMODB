@@ -15,7 +15,7 @@ import java.util.Date;
 public final class LoggingHandlerBuilder {
 
     public static ILoggingHandler build(String identifier) {
-        return build(identifier, new VmsSerdesProxyBuilder().build(), 1000, false);
+        return build(identifier, new VmsSerdesProxyBuilder().build(), 16384, false);
     }
 
     public static ILoggingHandler build(String identifier, IVmsSerdesProxy serdesProxy, int bufferSize, boolean truncate)
@@ -30,7 +30,7 @@ public final class LoggingHandlerBuilder {
 
         FileChannel fileChannel;
 
-        System.out.println(STR."\{truncate ? "truncating " : ""}new file filePath: \{filePath}");
+        System.out.println(STR."Log with write_buffers_size \{bufferSize}\{truncate ? " truncating" : ""} at file filePath: \{filePath}");
 
 
         StandardOpenOption[] options;

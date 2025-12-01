@@ -115,6 +115,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     private interface IVmsDeque {
         void drain(List<TransactionEvent.PayloadRaw> list, int maxSize);
         void insert(TransactionEvent.PayloadRaw payloadRaw);
+        void clear();
     }
 
     private static final class MultiDeque implements IVmsDeque {
@@ -147,6 +148,13 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
             this.nextPos++;
             if(this.nextPos == this.numQueues){ this.nextPos=0; }
         }
+
+        @Override
+        public void clear() {
+            for (int i = 0; i < this.numQueues; i++){
+                this.queues.get(i).clear();
+            }
+        }
     }
 
     private static final class SingleDeque implements IVmsDeque {
@@ -155,6 +163,12 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
         public void insert(TransactionEvent.PayloadRaw payloadRaw) {
             this.queue.offerLast(payloadRaw);
         }
+
+        @Override
+        public void clear() {
+            this.queue.clear();
+        }
+
         @Override
         public void drain(List<TransactionEvent.PayloadRaw> list, int maxSize){
             int totalSize = 0;
@@ -398,6 +412,11 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     @Override
     public void queueTransactionEvent(TransactionEvent.PayloadRaw payloadRaw) {
         this.transactionEventQueue.insert(payloadRaw);
+    }
+
+    @Override
+    public void clear() {
+        this.transactionEventQueue.clear();
     }
 
     @SuppressWarnings("unused")

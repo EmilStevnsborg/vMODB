@@ -25,18 +25,24 @@ public class VmsEndpoints
         HttpRequest cust_request = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:8769/customer/commit"))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(""))
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
                 .build();
 
         HttpRequest fs_request = HttpRequest.newBuilder()
                 .uri(URI.create(STR."http://localhost:8767/flight/commit"))
                 .header("Accept", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(""))
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
                 .build();
 
+//        HttpRequest b_request = HttpRequest.newBuilder()
+//                .uri(URI.create("http://localhost:8768/booking/commit"))
+//                .header("Content-Type", "application/json")
+//                .POST(HttpRequest.BodyPublishers.ofString("{}"))
+//                .build();
         try {
             client.send(cust_request, HttpResponse.BodyHandlers.ofString());
             client.send(fs_request, HttpResponse.BodyHandlers.ofString());
+//            client.send(b_request, HttpResponse.BodyHandlers.ofString());
         } catch (Exception e) {
             e.printStackTrace();
         }

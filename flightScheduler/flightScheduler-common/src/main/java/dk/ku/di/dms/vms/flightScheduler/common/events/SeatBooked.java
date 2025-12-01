@@ -11,10 +11,10 @@ public class SeatBooked
     public int flight_id;
     public int seat_number;
     public int customer_id;
-    public Date timestamp;
+    public String timestamp;
 
     public SeatBooked() {}
-    public SeatBooked(int booking_id, int customer_id, int flight_id, int seat_number, Date timestamp)
+    public SeatBooked(int booking_id, int customer_id, int flight_id, int seat_number, String timestamp)
     {
         this.booking_id = booking_id;
         this.customer_id = customer_id;

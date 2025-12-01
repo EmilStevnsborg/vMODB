@@ -11,7 +11,7 @@ import java.util.Date;
 @VmsTable(name="bookings")
 public class Booking implements IEntity<Integer>
 {
-    public Booking(int booking_id, int customer_id, int flight_id, int seat_number, Date timestamp, int price)
+    public Booking(int booking_id, int customer_id, int flight_id, int seat_number, String timestamp, int price)
     {
         this.booking_id = booking_id;
         this.customer_id = customer_id;
@@ -33,7 +33,7 @@ public class Booking implements IEntity<Integer>
     @Column
     public int seat_number;
     @Column
-    public Date timestamp;
+    public String timestamp;
     @Column
     public int paid;
     @Column

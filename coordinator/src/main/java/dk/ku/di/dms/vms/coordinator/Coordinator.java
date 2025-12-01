@@ -442,7 +442,7 @@ public final class Coordinator extends ModbHttpServer {
             try {
                 var loggedAppearances = loggingHandler.getLatestAppearanceOfEventTypes(inputEvents);
                 for (var entry : loggedAppearances.entrySet()) {
-//                    System.out.println(STR."LATEST APPEARANCE FOR \{entry.getKey()} is tid=\{entry.getValue()[0]} and bid=\{entry.getValue()[1]}");
+                    System.out.println(STR."LATEST APPEARANCE FOR \{entry.getKey()} is tid=\{entry.getValue()[0]} and bid=\{entry.getValue()[1]}");
                     eventTypeLatestAppearance.put(entry.getKey(), entry.getValue());
                 }
             } catch (Exception e) {
@@ -476,7 +476,6 @@ public final class Coordinator extends ModbHttpServer {
                 long[] latestInfo = eventTypeLatestAppearance.get(eventType);
                 long lastTid = latestInfo[0];
                 long lastBatch = latestInfo[1];
-                // System.out.println(STR."latest tid and bid for \{node} in dag with eventType \{eventType} are \{lastTid} and \{lastBatch}");
                 var precedenceInfoVms = new TransactionWorker.PrecedenceInfo(lastTid, lastBatch, 0);
                 // System.out.println(STR."precedenceInfoVms for vms \{node}: \{precedenceInfoVms}");
 
@@ -486,14 +485,18 @@ public final class Coordinator extends ModbHttpServer {
                 }
 
                 var oldPrecedenceInfoNode = precedenceMap.get(node);
+                // System.out.println(STR."oldPrecedenceInfoNode for vms \{node}: \{oldPrecedenceInfoNode}");
                 if (oldPrecedenceInfoNode.lastTid() < precedenceInfoVms.lastTid()) {
+                    System.out.println(STR."UPDATED: latest tid and bid for \{node} in dag with eventType \{eventType} are \{lastTid} and \{lastBatch}");
                     precedenceMap.put(node, precedenceInfoVms);
                 }
             }
         }
-//        for (var entry : precedenceMap.entrySet()) {
-//            System.out.println(STR."precedenceMap for \{entry.getKey()} is \{entry.getValue().toString()}");
-//        }
+
+        // this appears to be correct
+        for (var entry : precedenceMap.entrySet()) {
+            System.out.println(STR."precedenceMap for \{entry.getKey()} is \{entry.getValue().toString()}");
+        }
 
         return precedenceMap;
     }
@@ -504,7 +507,7 @@ public final class Coordinator extends ModbHttpServer {
     }
     private void setUpTransactionWorkers(long startingTid, long startingBatchOffset) {
         int numWorkers = this.options.getNumTransactionWorkers();
-        System.out.println(STR."start setUpTransactionWorkers; \{numWorkers} workers");
+        System.out.println(STR."start setUpTransactionWorkers; \{numWorkers} workers, at tid=\{startingTid} and bid=\{startingBatchOffset}");
 
         var firstPrecedenceInputQueue = new ConcurrentLinkedDeque<Map<String, TransactionWorker.PrecedenceInfo>>();
         var precedenceMapInputQueue = firstPrecedenceInputQueue;
@@ -640,6 +643,11 @@ public final class Coordinator extends ModbHttpServer {
         }
     }
 
+    public int numInputsQueued()
+    {
+        return this.transactionInputDeques.stream().mapToInt(q -> q.size()).sum();
+    }
+
     /**
      * A container of vms workers for the same VMS
      * Make a circular buffer. so events are spread among the workers (i.e., channels)
@@ -691,6 +699,13 @@ public final class Coordinator extends ModbHttpServer {
         @Override
         public void requeueTransactionEvent(TransactionEvent.PayloadRaw payload) {
             this.queueFunc.accept(payload);
+        }
+
+        @Override
+        public void clear() {
+            for (int i = 0; i < this.numVmsWorkers; i++){
+                this.vmsWorkers[i].clear();
+            }
         }
     }
 
@@ -959,20 +974,20 @@ public final class Coordinator extends ModbHttpServer {
 
         // dont accept transactions while recovering
         if (this.coordinatorIsRecovering) {
-            System.out.println(STR."Denying \{dag.name}, because coordinator is recovering");
+            // System.out.println(STR."Denying \{dag.name}, because coordinator is recovering");
             return false;
         }
 
         // don't process new transactions when processing a crash
         if (this.processingCrash) {
-            System.out.println(STR."Denying \{dag.name}, because crash is being processed");
+            // System.out.println(STR."Denying \{dag.name}, because crash is being processed");
             return false;
         }
 
         // if transaction that input is associated with is disallowed,
         // inform client that it couldn't be scheduled
         if (disallowedTransactions.contains(dag.name)) {
-            System.out.println(STR."Denying \{dag.name}, because it's disallowed");
+            // System.out.println(STR."Denying \{dag.name}, because it's disallowed");
             return false;
         }
 
@@ -1017,12 +1032,12 @@ public final class Coordinator extends ModbHttpServer {
                 {
                     // System.out.println(STR."all ACKs for txAbort \{abortedTid} processed");
 
-                    resendTransactions(abortedTid);
-                    ongoingAbortMissingVmsAck.remove(abortedTid);
-
                     if(!ABORT_ACK_CONSUMERS.isEmpty()) {
                         ABORT_ACK_CONSUMERS.forEach(c->c.accept(abortedTid));
                     }
+
+                    resendTransactions(abortedTid);
+                    ongoingAbortMissingVmsAck.remove(abortedTid);
                 }
             }
             // sent only by VMSes initiating abort
@@ -1095,6 +1110,11 @@ public final class Coordinator extends ModbHttpServer {
                 // reconnection has been handled
                 if (missingACKs.size() == 0) {
                     System.out.println(STR."all ACKs for reconnection to \{restartedVms} processed");
+
+                    if(!RECONNECTION_ACK_CONSUMERS.isEmpty()) {
+                        RECONNECTION_ACK_CONSUMERS.forEach(c->c.accept(restartedVms));
+                    }
+
                     ongoingReconnectionMissingVmsAck.remove(restartedVms);
                     offlineVMSes.remove(restartedVms);
 
@@ -1110,16 +1130,23 @@ public final class Coordinator extends ModbHttpServer {
             case CrashAck.Payload crashACK -> {
                 var crashedVms = crashACK.vmsCrashed();
                 var vmsAcknowledged = crashACK.vmsAcknowledged();
+
                 // System.out.println(STR."ACK from \{vmsAcknowledged} for crash of \{crashedVms} processed");
 
                 ongoingCrashMissingVmsAck.get(crashedVms).remove(vmsAcknowledged);
 
                 var missingACKs = ongoingCrashMissingVmsAck.get(crashedVms);
-                // System.out.println(STR."Crash ACKs missing from [\{String.join(", ", missingACKs)}] for crash of \{crashedVms}");
+                System.out.println(STR."Crash ACKs missing from [\{String.join(", ", missingACKs)}] for crash of \{crashedVms}");
 
                 // crash has been handled
                 if (missingACKs.size() == 0) {
-                    System.out.println(STR."all ACKs for crash handling of \{crashedVms} processed");
+                    System.out.println(STR."all ACKs for crash handling of \{crashedVms} processed, " +
+                                       STR."current num inputs queued are \{numInputsQueued()}");
+
+                    if(!CRASH_ACK_CONSUMERS.isEmpty()) {
+                        CRASH_ACK_CONSUMERS.forEach(c->c.accept(crashedVms));
+                    }
+
                     ongoingCrashMissingVmsAck.remove(crashedVms);
 
                     // if there are no more crashes happening, safely continue
@@ -1287,9 +1314,18 @@ public final class Coordinator extends ModbHttpServer {
 
     private void processCrashInCoordinator(VmsCrash.Payload vmsCrash)
     {
+        // Consider sleeping as a method for ensuring crash handling is consistent...
+        // same in VMSes
+
+
         var crashedVms = vmsCrash.vms();
         System.out.println(STR."coordinator processing crash of \{crashedVms}");
         if (offlineVMSes.contains(crashedVms)) return;
+
+        if(!CRASH_CONSUMERS.isEmpty()) {
+            CRASH_CONSUMERS.forEach(c->c.accept(crashedVms));
+        }
+
         this.offlineVMSes.add(crashedVms);
 
         // delete worker
@@ -1298,7 +1334,13 @@ public final class Coordinator extends ModbHttpServer {
             crashedVmsWorker.stop();
         vmsWorkerContainerMap.remove(crashedVms);
 
+//        vmsWorkerContainerMap.values().forEach(worker -> {
+//            worker.clear();
+//        });
+
         processingCrash = true;
+
+        // clear all the messages that were queued
         coordinatorQueue.clear();
         clearTransactionInputs();
 
@@ -1345,6 +1387,8 @@ public final class Coordinator extends ModbHttpServer {
         final long finalBid = bid;
         batchContextMap.keySet().removeIf(batch -> batch > finalBid);
         batchOffsetPendingCommit = bid + 1;
+
+        System.out.println(STR."batchOffsetPendingCommit after handling crash: \{batchOffsetPendingCommit}");
     }
 
     private void processBatchComplete(BatchComplete.Payload batchComplete) {
@@ -1352,6 +1396,10 @@ public final class Coordinator extends ModbHttpServer {
         // need to deal with intersecting batches? actually just continue emitting for higher throughput
         LOGGER.log(DEBUG,"Leader: Processing batch ("+ batchComplete.batch()+") complete from: "+ batchComplete.vms());
         BatchContext batchContext = this.batchContextMap.get( batchComplete.batch() );
+
+        // removed batch context from map due to crash
+        if (batchContext == null) return;
+
         // only if it is not a duplicate vote
         batchContext.missingVotes.remove( batchComplete.vms() );
 

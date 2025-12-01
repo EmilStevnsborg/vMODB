@@ -68,8 +68,10 @@ public final class Main {
             // save the data injected by adding them to keysToFlush (only happening when modifying via transaction task)
             if (split[split.length-1].equals("commit"))
             {
+                // System.out.println(STR."committing and checkpointing data up to \{lastTid} in customer");
                 this.transactionManager.commit();
                 this.transactionManager.checkpoint(lastTid);
+                return;
             }
 
             this.transactionManager.beginTransaction(lastTid, 0, lastTid, false);

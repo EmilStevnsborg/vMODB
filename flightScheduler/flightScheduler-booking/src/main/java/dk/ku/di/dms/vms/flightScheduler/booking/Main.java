@@ -1,5 +1,6 @@
 package dk.ku.di.dms.vms.flightScheduler.booking;
 
+import dk.ku.di.dms.vms.flightScheduler.booking.entities.Booking;
 import dk.ku.di.dms.vms.flightScheduler.booking.repositories.IBookingRepository;
 import dk.ku.di.dms.vms.modb.common.transaction.ITransactionManager;
 import dk.ku.di.dms.vms.modb.common.utils.ConfigUtils;
@@ -58,19 +59,30 @@ public final class Main {
         }
 
         @Override
-        public void post(String uri, String payload) {
+        public void post(String uri, String payload)
+        {
 
             String[] split = uri.split("/");
             long lastTid = VMS.lastTidFinished();
+
+            // persist data
+            // save the data injected by adding them to keysToFlush (only happening when modifying via transaction task)
+            if (split[split.length-1].equals("commit"))
+            {
+                System.out.println(STR."committing and checkpointing data up to \{lastTid} in booking");
+                this.transactionManager.commit();
+                this.transactionManager.checkpoint(lastTid);
+                return;
+            }
+
             this.transactionManager.beginTransaction(lastTid, 0, lastTid, false);
 
-            if (split[split.length-1].equals("clear"))
-            {
-                System.out.println("DELETING ALL DATA");
-                var bookings = repository.getAll();
-                this.repository.deleteAll(bookings);
-            }
+            Booking booking = SERDES.deserialize(payload, Booking.class);
+            var bookingId = BookingService.booking_counter.incrementAndGet();
+            booking.booking_id = bookingId;
+            this.repository.upsert(booking);
         }
+
 
         // http://host/booking
         @Override

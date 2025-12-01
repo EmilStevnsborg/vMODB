@@ -8,6 +8,9 @@ import dk.ku.di.dms.vms.modb.api.annotations.Microservice;
 import dk.ku.di.dms.vms.modb.api.annotations.Outbound;
 import dk.ku.di.dms.vms.modb.api.annotations.Transactional;
 
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
 import static dk.ku.di.dms.vms.flightScheduler.common.Constants.*;
 import static dk.ku.di.dms.vms.modb.api.enums.TransactionTypeEnum.RW;
 import static dk.ku.di.dms.vms.modb.api.enums.TransactionTypeEnum.W;
@@ -16,7 +19,7 @@ import static dk.ku.di.dms.vms.modb.api.enums.TransactionTypeEnum.W;
 public class BookingService
 {
     private static final System.Logger LOGGER = System.getLogger(BookingService.class.getName());
-    private static int booking_counter = 0;
+    public static final AtomicInteger booking_counter = new AtomicInteger(0);
     private final IBookingRepository bookingRepository;
     public BookingService(IBookingRepository bookingRepository){
         this.bookingRepository = bookingRepository;
@@ -30,7 +33,7 @@ public class BookingService
     {
 //        if (bookSeat.toString() != null) throw new RuntimeException();
         var order = bookSeat.orderFlight;
-        var booking_id = booking_counter++;
+        var booking_id = booking_counter.incrementAndGet();
         var price = 20;
         var booking = new Booking(booking_id, order.customer_id, order.flight_id, order.seat_number, bookSeat.timestamp, price);
         bookingRepository.insert(booking); // booking validity is verified by prior services

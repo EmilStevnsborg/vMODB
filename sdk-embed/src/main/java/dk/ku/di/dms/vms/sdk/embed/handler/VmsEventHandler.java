@@ -339,20 +339,22 @@ public final class VmsEventHandler extends ModbHttpServer {
         var batch = latestCommitInfo[0];
         var maxTid = latestCommitInfo[1];
 
-        // clear transaction event queues
-        consumerVmsContainerMap.values().forEach(worker -> {
-            worker.queueMessage(ResetToCommittedState.of());
-        });
+        System.out.println(STR."\{me.identifier} resets to state batch=\{batch} and tid=\{maxTid}");
 
-        // input queue clear??? (an event can't be in the queue unless it was processed upstream??)
-        // if A->B->C, and 10 aborts in C, then 30 may be in the queue, 30 will still be sent by B?
-//        vmsInternalChannels.transactionInputQueue().clear();
+//        // clear transaction event queues
+//        consumerVmsContainerMap.values().forEach(worker -> {
+//            worker.clear();
+//        });
+
 
         // clear all tasks at the maxTID or later
         taskClearer.apply(maxTid+1, batch+1);
 
         loggingHandler.cutLog(maxTid+1);
         restoreStableState(maxTid+1);
+
+        // clearing internal queue entirely
+        // vmsInternalChannels.transactionInputQueue().clear();
 
         trackingBatchMap.clear();
         batchContextMap.entrySet().removeIf(entry -> entry.getKey() > batch);
@@ -429,7 +431,6 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         // input queue clear??? (an event can't be in the queue unless it was processed upstream??)
         // if A->B->C, and 10 aborts in C, then 30 may be in the queue, 30 will still be sent by B?
-
         vmsInternalChannels.transactionInputQueue().stream().filter(input -> input.tid() >= tid);
 
         var numTIDsExecuted = metadata[0];
@@ -523,10 +524,6 @@ public final class VmsEventHandler extends ModbHttpServer {
             // must be queued in case leader is off and comes back online
             this.leaderWorker.queueMessage(BatchComplete.of(thisBatch.batch, this.me.identifier));
         }
-        if(this.options.checkpointing()){
-            LOGGER.log(INFO, this.me.identifier + ": Requesting checkpoint for batch " + thisBatch.batch);
-            submitBackgroundTask(()->checkpoint(thisBatch.batch, batchMetadata.maxTidExecuted));
-        }
     }
 
     private BatchMetadata updateBatchMetadataAtomically(OutboundEventResult outputEvent) {
@@ -576,6 +573,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     private static final boolean INFORM_BATCH_ACK = false;
 
     private void checkpoint(long batch, long maxTid) {
+        // System.out.println(STR."checkpointing \{maxTid} in \{me.identifier}");
         //this.batchContextMap.get(batch).setStatus(BatchContext.CHECKPOINTING);
         // of course, I do not need to stop the scheduler on commit
         // I need to make access to the data versions data race free

@@ -38,6 +38,7 @@ public class FlightService
         // throw exception to trigger abort
         if (flightSeat.occupied == 1)
         {
+            System.out.println(STR."flight seat \{orderFlight.seat_number} is occupied");
             throw new RuntimeException("flightSeat is occupied");
         }
 
@@ -45,7 +46,7 @@ public class FlightService
         flightSeat.flightSeatHasBeenBooked();
         this.flightRepository.update(flightSeat);
 
-        return new BookSeat(new Date(), orderFlight);
+        return new BookSeat(new Date().toString(), orderFlight);
     }
 
     // part of CancelBooking

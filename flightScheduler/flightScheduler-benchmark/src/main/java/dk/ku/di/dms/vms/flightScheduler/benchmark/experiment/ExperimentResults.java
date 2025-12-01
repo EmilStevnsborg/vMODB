@@ -8,14 +8,28 @@ public class ExperimentResults
 {
     public List<ThroughputInfo> throughputInfo;
     public List<AbortInfo> aborts;
+    public List<CrashInfo> crashes;
 
     public ExperimentResults() {
         throughputInfo = new ArrayList<>();
         aborts = new ArrayList<>();
+        crashes = new ArrayList<>();
     }
-    public ExperimentResults(List<ThroughputInfo> throughputInfo, List<AbortInfo> aborts) {
+    public ExperimentResults(List<ThroughputInfo> throughputInfo, List<AbortInfo> aborts, List<CrashInfo> crashes) {
         this.throughputInfo = throughputInfo;
         this.aborts = aborts;
+        this.crashes = crashes;
+
+        Summary();
+    }
+    public static ExperimentResults Abort(List<ThroughputInfo> throughputInfo, List<AbortInfo> aborts) {
+        return new ExperimentResults(throughputInfo, aborts, new ArrayList<>());
+    }
+    public static ExperimentResults Crash(List<ThroughputInfo> throughputInfo, List<CrashInfo> crashes) {
+        return new ExperimentResults(throughputInfo, new ArrayList<>(), crashes);
+    }
+    private void Summary()
+    {
 
         var numCommittedTiDsTotal = throughputInfo.stream().mapToLong(info -> info.numCommittedTiDs()).sum();
         var globalTimestampStart = throughputInfo.stream().mapToLong(info -> info.timestampStart()).min().getAsLong();

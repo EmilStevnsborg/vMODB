@@ -68,8 +68,10 @@ public final class Main {
 
             if (split[split.length-1].equals("commit"))
             {
+                // System.out.println(STR."committing and checkpointing data up to \{lastTid} in flight");
                 this.transactionManager.commit();
                 this.transactionManager.checkpoint(lastTid);
+                return;
             }
 
             this.transactionManager.beginTransaction(lastTid, 0, lastTid, false);
@@ -82,6 +84,8 @@ public final class Main {
         @Override
         public String getAsJson(String uri)
         {
+            System.out.println("Get flights");
+
             String[] split = uri.split("/");
 
             long lastTid = VMS.lastTidFinished();

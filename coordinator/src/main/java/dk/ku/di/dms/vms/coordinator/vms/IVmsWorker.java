@@ -10,6 +10,7 @@ import java.util.Map;
 public interface IVmsWorker {
     default void queueTransactionEvent(TransactionEvent.PayloadRaw payloadRaw) { }
     default void requeueTransactionEvent(TransactionEvent.PayloadRaw payload) {}
+    default void clear() {};
 
     default void queueMessage(Object message) { }
 

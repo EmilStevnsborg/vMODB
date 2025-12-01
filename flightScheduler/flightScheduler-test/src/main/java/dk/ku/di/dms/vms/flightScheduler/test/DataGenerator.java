@@ -1,5 +1,6 @@
 package dk.ku.di.dms.vms.flightScheduler.test;
 
+import dk.ku.di.dms.vms.flightScheduler.test.models.Booking;
 import dk.ku.di.dms.vms.flightScheduler.test.models.Customer;
 import dk.ku.di.dms.vms.flightScheduler.test.models.FlightSeat;
 
@@ -22,20 +23,40 @@ public class DataGenerator
         }
         return customers;
     }
+    public static List<FlightSeat> CreateFlightSeats(int numSeats, int flight_id, int statingId)
+    {
+        var flightSeats = new ArrayList<FlightSeat>();
+        for (int i = statingId; i < statingId + numSeats; i++) {
+            int number = i;
+            var seat = new FlightSeat(flight_id, number);
+            flightSeats.add(seat);
+        }
+        return flightSeats;
+    }
+
     public static List<Customer> GenerateCustomers(HttpClient client, int numCustomers)
     {
+        return GenerateCustomers(client, numCustomers, 0);
+    }
+    public static List<FlightSeat> GenerateFlightSeats(HttpClient client, int flight_id, int numSeats)
+    {
+        return GenerateFlightSeats(client, flight_id, numSeats, 0);
+    }
+
+    public static List<Customer> GenerateCustomers(HttpClient client, int numCustomers, int startIdx)
+    {
         var customers = new ArrayList<Customer>();
-        for (int i = 0; i < numCustomers; i++) {
+        for (int i = startIdx; i < startIdx + numCustomers; i++) {
             var customer = new Customer(i, 100, STR."user_\{i}");
             customers.add(customer);
             SendCustomer(client, customer);
         }
         return customers;
     }
-    public static List<FlightSeat> GenerateFlightSeats(HttpClient client, int flight_id, int numSeats)
+    public static List<FlightSeat> GenerateFlightSeats(HttpClient client, int flight_id, int numSeats, int startIdx)
     {
         var flightSeats = new ArrayList<FlightSeat>();
-        for (int i = 0; i < numSeats; i++) {
+        for (int i = startIdx; i < startIdx + numSeats; i++) {
             int number = i;
             var seat = new FlightSeat(flight_id, number);
             flightSeats.add(seat);
@@ -73,6 +94,22 @@ public class DataGenerator
             client.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (Exception e) {
             System.err.println("Failed to send: " + flightSeatJson);
+        }
+    }
+
+    public static void SendBooking(HttpClient client, Booking booking)
+    {
+        var bookingJson = booking.toString();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:8768/booking"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(bookingJson))
+                .build();
+
+        try {
+            client.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (Exception e) {
+            System.err.println("Failed to send: " + bookingJson);
         }
     }
 }
