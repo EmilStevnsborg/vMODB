@@ -17,6 +17,7 @@ public final class VmsComplexTransactionTask implements Callable<VmsTransactionT
     private final long lastTid;
 
     private final long batch;
+    private final long generation;
 
     private final ITransactionManager transactionalHandler;
 
@@ -32,11 +33,12 @@ public final class VmsComplexTransactionTask implements Callable<VmsTransactionT
 
     private int remainingInputs;
 
-    public VmsComplexTransactionTask(ITransactionManager transactionalHandler, long tid, long lastTid, long batch, VmsTransactionSignature signature, int inputSize){
+    public VmsComplexTransactionTask(ITransactionManager transactionalHandler, long tid, long lastTid, long batch, long generation, VmsTransactionSignature signature, int inputSize){
         this.transactionalHandler = transactionalHandler;
         this.tid = tid;
         this.lastTid = lastTid;
         this.batch = batch;
+        this.generation = generation;
         this.signature = signature;
         this.inputs = new Object[inputSize];
         this.remainingInputs = inputSize;
@@ -80,7 +82,7 @@ public final class VmsComplexTransactionTask implements Callable<VmsTransactionT
             // can be null, given we have terminal events (void method)
             // could also be terminal and generate event... maybe an external system wants to consume
             // then send to the leader...
-            OutboundEventResult eventOutput = new OutboundEventResult(this.tid, this.batch, this.signature.outputQueue(), output);
+            OutboundEventResult eventOutput = new OutboundEventResult(this.tid, this.batch, this.generation, this.signature.outputQueue(), output);
             if(this.signature.transactionType() != TransactionTypeEnum.R){
                 this.transactionalHandler.commit();
             }

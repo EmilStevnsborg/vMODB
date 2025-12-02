@@ -31,7 +31,7 @@ public class Main
     public static void main(String[] args) throws Exception
     {
         try {
-            // var experiment = new AbortExperiment(NUM_RECORDS, NUM_TRANSACTIONS, NUM_INGESTION_WORKERS);
+            //var experiment = new AbortExperiment(NUM_RECORDS, NUM_TRANSACTIONS, NUM_INGESTION_WORKERS);
             var experiment = new RecoverVmsExperiment(NUM_RECORDS, NUM_TRANSACTIONS, NUM_INGESTION_WORKERS);
 
             experiment.initExperiment(PROPERTIES);

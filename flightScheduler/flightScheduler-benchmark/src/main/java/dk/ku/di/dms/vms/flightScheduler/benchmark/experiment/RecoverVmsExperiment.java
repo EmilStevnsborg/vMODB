@@ -102,7 +102,7 @@ public class RecoverVmsExperiment
         int reconnectPoint = runTime/4*3;
 
         // workload is submitted and processed by coordinator too quickly
-        Workload.WorkloadStats workloadStats = Workload.submitMixedWorkload(orderFlightInput, payBookingInput, coordinator, 1000, 1000);
+        Workload.WorkloadStats workloadStats = Workload.submitMixedWorkload(orderFlightInput, payBookingInput, coordinator, 200, 3000);
 
         // coordinator has already sent the events ...
         Util.Sleep(warmup + crashPoint);

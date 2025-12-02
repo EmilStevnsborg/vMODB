@@ -145,6 +145,7 @@ public final class VmsApplication {
                 transactionManager,
                 eventHandler::processOutputEvent,
                 eventHandler.batchAbortedTIDs,
+                eventHandler.generation,
                 options.vmsThreadPoolSize());
 
         eventHandler.AddSchedulerPauseHandler(transactionScheduler::pauseHandler);

@@ -183,7 +183,7 @@ public class EventHandlerTest {
                 outToSwap);
 
         InputEventExample1 eventExample = new InputEventExample1(0);
-        InboundEvent event = new InboundEvent(1,0,1,"in", InputEventExample1.class, eventExample);
+        InboundEvent event = new InboundEvent(1,0,1,0,"in", InputEventExample1.class, eventExample);
         channelForAddingInput.transactionInputQueue().add(event);
 
         var input1ForVms2 = channelForAddingInput.transactionOutputQueue().poll();
@@ -191,7 +191,7 @@ public class EventHandlerTest {
 
         for(var res : input1ForVms2.getOutboundEventResults()){
             Class<?> clazz =  res.outputQueue().equalsIgnoreCase("out1") ? OutputEventExample1.class : OutputEventExample2.class;
-            InboundEvent event_ = new InboundEvent(1,0,1,res.outputQueue(),clazz,res.output());
+            InboundEvent event_ = new InboundEvent(1,0,1,0,res.outputQueue(),clazz,res.output());
             channelForGettingOutput.transactionInputQueue().add(event_);
         }
 
@@ -345,7 +345,7 @@ public class EventHandlerTest {
         Map<String,Long> precedenceMap = new HashMap<>();
         precedenceMap.put("example1", 0L);
 
-        TransactionEvent.PayloadRaw eventInput = TransactionEvent.of(1,1,"in", inputPayload, serdes.serializeMap(precedenceMap));
+        TransactionEvent.PayloadRaw eventInput = TransactionEvent.of(1,1,0, "in", inputPayload, serdes.serializeMap(precedenceMap));
         TransactionEvent.writeWithinBatch(buffer, eventInput);
         buffer.flip();
         channel.write(buffer).get(); // no need to wait
@@ -548,7 +548,7 @@ public class EventHandlerTest {
         Map<String,Long> precedenceMap = new HashMap<>();
         precedenceMap.put("example1", 0L);
 
-        TransactionEvent.PayloadRaw eventInput = TransactionEvent.of(1,0,"in", inputPayload, serdes.serializeMap(precedenceMap));
+        TransactionEvent.PayloadRaw eventInput = TransactionEvent.of(1,0,0,"in", inputPayload, serdes.serializeMap(precedenceMap));
         TransactionEvent.writeWithinBatch(buffer, eventInput);
         buffer.flip();
         channel.write(buffer).get(); // no need to wait

@@ -12,8 +12,8 @@ import java.nio.charset.StandardCharsets;
 public final class TransactionEvent {
 
     // this payload
-    // message type | tid | batch | size | event name | size | payload | size | precedence map | aborted
-    private static final int FIXED_LENGTH = (2 * Long.BYTES) + (3 *  Integer.BYTES)
+    // message type | tid | batch | generation | size | event name | size | payload | size | precedence map
+    private static final int FIXED_LENGTH = (3 * Long.BYTES) + (3 *  Integer.BYTES)
 //            + 1 * Integer.BYTES
             ;
 
@@ -35,6 +35,8 @@ public final class TransactionEvent {
 //        System.out.println(STR."TransactionEvent position after tid: \{buffer.position()}");
         buffer.putLong( payload.batch );
 //        System.out.println(STR."TransactionEvent position after batch: \{buffer.position()}");
+        buffer.putLong( payload.generation );
+//        System.out.println(STR."TransactionEvent position after generation: \{buffer.position()}");
         buffer.putInt( payload.event.length );
 //        System.out.println(STR."TransactionEvent position after event.length: \{buffer.position()}");
         buffer.put( payload.event );
@@ -55,6 +57,8 @@ public final class TransactionEvent {
 //        System.out.println(STR."TransactionEvent position READ tid \{tid}");
         long batch = buffer.getLong();
 //        System.out.println(STR."TransactionEvent position READ batch \{batch}");
+        long generation = buffer.getLong();
+
         int eventSize = buffer.getInt();
 //        System.out.println(STR."TransactionEvent position READ eventSize \{eventSize}");
         String event = ByteUtils.extractStringFromByteBuffer( buffer, eventSize );
@@ -66,14 +70,14 @@ public final class TransactionEvent {
         String precedenceMap = ByteUtils.extractStringFromByteBuffer( buffer, precedenceSize );
 //        int aborted = buffer.getInt();
 //        System.out.println(STR."TransactionEvent position READ aborted \{aborted}");
-        return new Payload(tid, batch, event, payload, precedenceMap);
+        return new Payload(tid, batch, generation, event, payload, precedenceMap);
     }
 
     public static Payload read(PayloadRaw payloadRaw) {
         String event = new String(payloadRaw.event(), StandardCharsets.UTF_8);
         String payload = new String(payloadRaw.payload(), StandardCharsets.UTF_8);
         String precedenceMap = new String(payloadRaw.precedenceMap(), StandardCharsets.UTF_8);
-        return new Payload(payloadRaw.tid(), payloadRaw.batch(), event, payload, precedenceMap);
+        return new Payload(payloadRaw.tid(), payloadRaw.batch(), payloadRaw.generation(), event, payload, precedenceMap);
     }
 
     /**
@@ -83,26 +87,28 @@ public final class TransactionEvent {
      * otherwise would need further controls...
      */
     public record PayloadRaw(
-            long tid, long batch, byte[] event, byte[] payload, byte[] precedenceMap, int totalSize
+            long tid, long batch, long generation, byte[] event, byte[] payload, byte[] precedenceMap, int totalSize
     ){
         @Override
         public String toString() {
             return "{"
                     + "\"tid\":\"" + tid + "\""
                     + ",\"batch\":\"" + batch + "\""
+                    + ",\"generation\":\"" + generation + "\""
 //                    + ",\"aborted\":\"" + aborted + "\""
                     + "}";
         }
     }
 
     public record Payload(
-            long tid, long batch, String event, String payload, String precedenceMap
+            long tid, long batch, long generation, String event, String payload, String precedenceMap
     ){
         @Override
         public String toString() {
             return "{"
                     + "\"batch\":\"" + batch + "\""
                     + ",\"tid\":\"" + tid + "\""
+                    + ",\"generation\":\"" + generation + "\""
                     + ",\"event\":\"" + event + "\""
                     + ",\"payload\":\"" + payload + "\""
                     + ",\"precedenceMap\":\"" + precedenceMap + "\""
@@ -114,11 +120,11 @@ public final class TransactionEvent {
     /**
      * <a href="https://www.quora.com/How-many-bytes-can-a-string-hold">Considering UTF-8</a>
      */
-    public static PayloadRaw of(long tid, long batch, String event, String payload, String precedenceMap){
+    public static PayloadRaw of(long tid, long batch, long generation, String event, String payload, String precedenceMap){
         byte[] eventBytes = event.getBytes(StandardCharsets.UTF_8);
         byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
         byte[] precedenceMapBytes = precedenceMap.getBytes(StandardCharsets.UTF_8);
-        return new PayloadRaw(tid, batch, eventBytes, payloadBytes, precedenceMapBytes,
+        return new PayloadRaw(tid, batch, generation, eventBytes, payloadBytes, precedenceMapBytes,
                 FIXED_LENGTH + eventBytes.length + payloadBytes.length + precedenceMapBytes.length);
     }
 

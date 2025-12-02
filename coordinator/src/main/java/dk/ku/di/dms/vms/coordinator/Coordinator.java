@@ -111,6 +111,8 @@ public final class Coordinator extends ModbHttpServer {
      */
     private volatile long batchOffsetPendingCommit;
 
+    private long generation;
+
     // metadata about all non-committed batches. when a batch commit finishes, it is removed from this map
     private final Map<Long, BatchContext> batchContextMap;
 
@@ -373,6 +375,9 @@ public final class Coordinator extends ModbHttpServer {
                 var latestCommitInfo = loggingHandler.latestCommit();
                 var batchOffset = latestCommitInfo[0];
                 var tid = latestCommitInfo[1];
+                // var latestVersion = latestCommitInfo[2];
+                var latestVersion = 1;
+
                 var resetToCommittedStateMessage = ResetToCommittedState.of();
 
                 // NEED ACKs
@@ -384,16 +389,19 @@ public final class Coordinator extends ModbHttpServer {
                 System.out.println(STR."Coordinator start latest tid and bid are \{tid} and \{batchOffset}");
 
                 batchOffsetPendingCommit = batchOffset+1;
+                this.generation = latestVersion;
 
                 this.setUpTransactionWorkers(tid+1, batchOffset+1);
             }
             catch (Exception e) {
                 batchOffsetPendingCommit = 1;
+                this.generation = 0;
                 e.printStackTrace();
                 this.setUpTransactionWorkers();
             }
         } else {
             batchOffsetPendingCommit = 1;
+            this.generation = 0;
             this.setUpTransactionWorkers();
         }
         /////////////////////////////////////////////
@@ -442,7 +450,7 @@ public final class Coordinator extends ModbHttpServer {
             try {
                 var loggedAppearances = loggingHandler.getLatestAppearanceOfEventTypes(inputEvents);
                 for (var entry : loggedAppearances.entrySet()) {
-                    System.out.println(STR."LATEST APPEARANCE FOR \{entry.getKey()} is tid=\{entry.getValue()[0]} and bid=\{entry.getValue()[1]}");
+                    // System.out.println(STR."LATEST APPEARANCE FOR \{entry.getKey()} is tid=\{entry.getValue()[0]} and bid=\{entry.getValue()[1]}");
                     eventTypeLatestAppearance.put(entry.getKey(), entry.getValue());
                 }
             } catch (Exception e) {
@@ -494,9 +502,9 @@ public final class Coordinator extends ModbHttpServer {
         }
 
         // this appears to be correct
-        for (var entry : precedenceMap.entrySet()) {
-            System.out.println(STR."precedenceMap for \{entry.getKey()} is \{entry.getValue().toString()}");
-        }
+//        for (var entry : precedenceMap.entrySet()) {
+//            System.out.println(STR."precedenceMap for \{entry.getKey()} is \{entry.getValue().toString()}");
+//        }
 
         return precedenceMap;
     }
@@ -536,7 +544,7 @@ public final class Coordinator extends ModbHttpServer {
                     this.options.getMaxTransactionsPerBatch(), this.options.getBatchWindow(),
                     numWorkers, precedenceMapInputQueue, precedenceMapOutputQueue, this.transactionMap,
                     this.vmsIdentifiersPerDAG, this.vmsWorkerContainerMap, this.coordinatorQueue, this.serdesProxy,
-                    startingBatchOffset+idx-1);
+                    startingBatchOffset+idx-1, this.generation);
             Thread txWorkerThread = Thread.ofPlatform()
                     .name("tx-worker-"+idx)
                     .inheritInheritableThreadLocals(false)
@@ -752,7 +760,8 @@ public final class Coordinator extends ModbHttpServer {
                         this.options.getNetworkSendTimeout(),
                         this.options.getNumQueuesVmsWorker(),
                         true),
-                this.serdesProxy);
+                this.serdesProxy,
+                this.generation);
         // virtual thread leads to performance degradation
         Thread vmsWorkerThread = Thread.ofPlatform().factory().newThread(vmsWorker);
         vmsWorkerThread.setName("vms-worker-" + vmsNode.identifier + "-0");
@@ -1369,6 +1378,11 @@ public final class Coordinator extends ModbHttpServer {
             bid = 0;
         }
 
+        var oldGeneration = this.generation;
+        this.generation += 1;
+        System.out.println(STR."coordinator setting generation from old \{oldGeneration} to new \{this.generation} when processing \{crashedVms} crash");
+        var vmsCrashUpdated = VmsCrash.of(vmsCrash.vms(), this.generation);
+
         // the VMSes online at the time of crash
         // there is only a worker if the VMS is alive.
         var crashParticipants = vmsMetadataMap.values()
@@ -1377,8 +1391,10 @@ public final class Coordinator extends ModbHttpServer {
                 .filter(vms -> !offlineVMSes.contains(vms))
                 .collect(Collectors.toSet());
         ongoingCrashMissingVmsAck.put(crashedVms, crashParticipants);
+
+        // broadcast crash
         for (var vms : crashParticipants) {
-            vmsWorkerContainerMap.get(vms).queueMessage(vmsCrash);
+            vmsWorkerContainerMap.get(vms).queueMessage(vmsCrashUpdated);
         }
 
         setUpTransactionWorkers(tid+1, bid+1);
@@ -1388,7 +1404,7 @@ public final class Coordinator extends ModbHttpServer {
         batchContextMap.keySet().removeIf(batch -> batch > finalBid);
         batchOffsetPendingCommit = bid + 1;
 
-        System.out.println(STR."batchOffsetPendingCommit after handling crash: \{batchOffsetPendingCommit}");
+        // System.out.println(STR."batchOffsetPendingCommit after handling crash: \{batchOffsetPendingCommit}");
     }
 
     private void processBatchComplete(BatchComplete.Payload batchComplete) {

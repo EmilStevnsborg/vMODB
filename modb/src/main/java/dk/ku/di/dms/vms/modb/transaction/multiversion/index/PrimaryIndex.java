@@ -480,17 +480,6 @@ public final class PrimaryIndex implements IMultiVersionIndex {
             IKey key = it.next();
             OperationSetOfKey operationSetOfKey = this.updatesPerKeyMap.get(key);
             operationSetOfKey.removeDownToEntry(failedTid-1);
-
-            var topOperation = operationSetOfKey.peak();
-            if (topOperation == null) {
-                // System.out.println(STR."no more operations for key \{key}");
-                this.updatesPerKeyMap.remove(key);
-                it.remove();
-                this.keysToFlush.remove(key);
-                return;
-            }
-            operationSetOfKey.lastWriteType = topOperation.val().type;
-
         }
     }
 

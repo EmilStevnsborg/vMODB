@@ -78,7 +78,7 @@ public final class Main {
             this.transactionManager.beginTransaction(lastTid, 0, lastTid, false);
 
             Booking booking = SERDES.deserialize(payload, Booking.class);
-            var bookingId = BookingService.booking_counter.incrementAndGet();
+            var bookingId = BookingService.booking_counter++;
             booking.booking_id = bookingId;
             this.repository.upsert(booking);
         }

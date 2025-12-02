@@ -33,12 +33,14 @@ public class AbortMidBatch
         System.console().readLine();
         System.out.println("TEST: Injecting data");
 
+        // 30 customers, 30 flights, 0 bookings
         var customers = DataGenerator.GenerateCustomers(client, 29);
         var poorCustomer = new Customer(99, 0, "poor_customer");
         DataInjection.SendCustomer(client, poorCustomer);
         customers.add(poorCustomer);
         var flightSeats = DataGenerator.GenerateFlightSeats(client, 0, 30);
 
+        // 30 bookings
         System.console().readLine();
         System.out.println(STR."TEST: sending order_flights with TIDs of [1-31)");
         for (var i = 0; i < customers.size(); i++)
@@ -55,6 +57,7 @@ public class AbortMidBatch
         if (poorCustomerBooking == null) return false;
         bookings.remove(poorCustomerBooking);
 
+        // 10 paid bookings
         System.console().readLine();
         System.out.println(STR."TEST: sending pay_bookings with TIDs of [31-41)");
         // send first batch and half of second batch
@@ -71,12 +74,13 @@ public class AbortMidBatch
         System.out.println(STR."TEST: sending pay_booking to be aborted with TID of [46]");
         Transactions.PayBooking(client, poorCustomerBooking.booking_id, "VISA");
 
+        // 19 paid bookings
         System.console().readLine();
         System.out.println(STR."TEST: sending pay_bookings with TIDs of [47-51)");
         for (var i = 15; i < 19; i++)
             Transactions.PayBooking(client, bookings.get(i).booking_id, "VISA");
 
-        // send third batch
+        // 29 paid bookings
         System.console().readLine();
         System.out.println(STR."TEST: sending pay_bookings with TIDs of [51-61)");
         for (var i = 19; i < 29; i++)
@@ -92,6 +96,10 @@ public class AbortMidBatch
         boolean success = true;
         if (unpaidBookings.size() != 1) {
             System.out.println(STR."FAILURE (PayBookingAbort): unpaidBookings=\{unpaidBookings.size()} != 1");
+            System.out.println(STR."updatedBookings.size=\{updatedBookings.size()}, paidBookings.size=\{paidBookings.size()}");
+            for (var i = 0; i < unpaidBookings.size(); i++) {
+                System.out.println(unpaidBookings.get(i));
+            }
             success = false;
         }
         else if (paidBookings.size() != 29) {

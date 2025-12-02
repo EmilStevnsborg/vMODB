@@ -118,7 +118,7 @@ public class ThesisLoggingHandler implements ILoggingHandler
     @Override
     public SegmentMetadata loadSegment(ByteBuffer byteBuffer, long filePosition) throws IOException
     {
-        ByteBuffer metadataBuffer = ByteBuffer.allocate(1 + 2 * Integer.BYTES + 2 * Long.BYTES); // 25 bytes
+        ByteBuffer metadataBuffer = ByteBuffer.allocate(1 + 2 * Integer.BYTES + 3 * Long.BYTES); // 33 bytes
         fileChannel.position(filePosition);
 
         // read metadata
@@ -187,7 +187,7 @@ public class ThesisLoggingHandler implements ILoggingHandler
         long latestCommittedTid = 0;
         long numTIDs = 0;
 
-        var segmentMetadataSize = 1 + 2 * Integer.BYTES + 2 * Long.BYTES;
+        var segmentMetadataSize = 1 + 2 * Integer.BYTES + 3 * Long.BYTES;
         var metadataBuffer = ByteBuffer.allocate(segmentMetadataSize);
 
         long batchPosition = 0;
@@ -205,6 +205,7 @@ public class ThesisLoggingHandler implements ILoggingHandler
             int count = metadataBuffer.getInt();
             long tid = metadataBuffer.getLong();
             long bid = metadataBuffer.getLong();
+            long generation = metadataBuffer.getLong();
 
             if (bid < latestCommittedBid) {
                 System.out.println(STR."bid=\{bid} in file is less than \{latestCommittedBid}");
@@ -258,6 +259,7 @@ public class ThesisLoggingHandler implements ILoggingHandler
             var event = TransactionEvent.read(eventRaw);
             eventUpdated = TransactionEvent.of(
                     event.tid(), event.batch(),
+                    event.generation(),
                     event.event(), "",
                     event.precedenceMap()
             );
@@ -310,6 +312,7 @@ public class ThesisLoggingHandler implements ILoggingHandler
                 var updatedEventRaw = TransactionEvent.of(
                         eventReadable.tid(),
                         eventReadable.batch(),
+                        eventReadable.generation(),
                         eventReadable.event(),
                         eventReadable.payload(),
                         serdesProxy.serializeMap(eventPrecedenceMap)

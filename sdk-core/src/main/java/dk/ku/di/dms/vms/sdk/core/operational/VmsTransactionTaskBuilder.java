@@ -42,6 +42,7 @@ public final class VmsTransactionTaskBuilder {
         public final long lastTid;
 
         public final long batch;
+        private final long generation;
 
         // the information necessary to run the method
         private final VmsTransactionSignature signature;
@@ -53,23 +54,25 @@ public final class VmsTransactionTaskBuilder {
         private final List<Object> partitionKeys;
         public final boolean aborted;
 
-        private VmsTransactionTask(long tid, long lastTid, long batch,
+        private VmsTransactionTask(long tid, long lastTid, long batch, long generation,
                                    VmsTransactionSignature signature,
                                    Object inputEvent) {
             this.tid = tid;
             this.lastTid = lastTid;
             this.batch = batch;
+            this.generation = generation;
             this.signature = signature;
             this.inputEvent = inputEvent;
             this.partitionKeys = getPartitionKeys(signature, inputEvent);
             this.aborted = false;
         }
 
-        private VmsTransactionTask(long tid, long lastTid, long batch,
+        private VmsTransactionTask(long tid, long lastTid, long batch,  long generation,
                                    VmsTransactionSignature signature) {
             this.tid = tid;
             this.lastTid = lastTid;
             this.batch = batch;
+            this.generation = generation;
             this.signature = signature;
             this.inputEvent = null;
             this.partitionKeys = List.of();
@@ -100,7 +103,7 @@ public final class VmsTransactionTaskBuilder {
             try{
                 transactionManager.beginTransaction(this.tid, -1, this.lastTid, true);
                 Object output = this.signature.method().invoke(this.signature.vmsInstance(), this.inputEvent);
-                OutboundEventResult eventOutput = new OutboundEventResult(this.tid, this.batch, this.signature.outputQueue(), output);
+                OutboundEventResult eventOutput = new OutboundEventResult(this.tid, this.batch, this.generation, this.signature.outputQueue(), output);
                 schedulerCallback.success(this.signature.executionMode(), eventOutput);
             } catch (IllegalAccessException | InvocationTargetException e) {
                 this.handleErrorOnTask(e, this.inputEvent);
@@ -111,7 +114,7 @@ public final class VmsTransactionTaskBuilder {
 
         private void abortedRun(){
             transactionManager.beginTransaction(this.tid, -1, this.lastTid, true);
-            OutboundEventResult eventOutput = new OutboundEventResult(this.tid, this.batch, this.signature.outputQueue(), null);
+            OutboundEventResult eventOutput = new OutboundEventResult(this.tid, this.batch, this.generation, this.signature.outputQueue(), null);
             schedulerCallback.success(this.signature.executionMode(), eventOutput);
         }
 
@@ -119,12 +122,12 @@ public final class VmsTransactionTaskBuilder {
             System.out.println("VmsTransactionTaskBuilder handleGenericError");
             LOGGER.log(ERROR, "Error not related to invoking task "+this.toString()+"\n Input event: "+input+"\n"+ e);
             e.printStackTrace(System.out);
-            schedulerCallback.error(signature.executionMode(), this.tid, this.batch, e);
+            schedulerCallback.error(signature.executionMode(), this.tid, this.batch, this.generation, e);
         }
 
         private void handleErrorOnTask(ReflectiveOperationException e, Object input) {
             // System.out.println(STR."!!!! TASK FAILURE: \{input} !!!");
-            schedulerCallback.error(signature.executionMode(), this.tid, this.batch, e);
+            schedulerCallback.error(signature.executionMode(), this.tid, this.batch, this.generation, e);
         }
 
         @Override
@@ -143,7 +146,7 @@ public final class VmsTransactionTaskBuilder {
             ITransactionContext txCtx = transactionManager.beginTransaction(this.tid, -1, this.lastTid, false);
             try {
                 Object output = this.signature.method().invoke(this.signature.vmsInstance(), this.inputEvent);
-                OutboundEventResult eventOutput = new OutboundEventResult(this.tid, this.batch, this.signature.outputQueue(), output);
+                OutboundEventResult eventOutput = new OutboundEventResult(this.tid, this.batch, this.generation, this.signature.outputQueue(), output);
                 transactionManager.commit();
                 schedulerCallback.success(this.signature.executionMode(), eventOutput);
             } catch (IllegalAccessException | InvocationTargetException e) {
@@ -214,20 +217,20 @@ public final class VmsTransactionTaskBuilder {
 
     }
 
-    public VmsTransactionTask build(long tid, long lastTid, long batch,
+    public VmsTransactionTask build(long tid, long lastTid, long batch, long generation,
                                     VmsTransactionSignature signature,
                                     Object input){
-        return new VmsTransactionTask(tid, lastTid, batch, signature, input);
+        return new VmsTransactionTask(tid, lastTid, batch, generation, signature, input);
     }
 
-    public VmsTransactionTask build(long tid, long lastTid, long batch,
+    public VmsTransactionTask build(long tid, long lastTid, long batch, long generation,
                                     VmsTransactionSignature signature){
-        return new VmsTransactionTask(tid, lastTid, batch, signature);
+        return new VmsTransactionTask(tid, lastTid, batch, generation, signature);
     }
 
-    public VmsTransactionTask buildFinished(long tid){
+    public VmsTransactionTask buildFinished(long tid, long generation){
         var sig = new VmsTransactionSignature(null, null, null, ExecutionModeEnum.SINGLE_THREADED, null, null);
-        var deadTask = new VmsTransactionTask(tid, 0, 0, sig, null);
+        var deadTask = new VmsTransactionTask(tid, 0, 0, generation, sig, null);
         deadTask.status = FINISHED;
         return deadTask;
     }

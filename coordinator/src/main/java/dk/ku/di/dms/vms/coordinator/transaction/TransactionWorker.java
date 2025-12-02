@@ -24,6 +24,7 @@ public final class TransactionWorker extends StoppableRunnable {
     private Deque<Object> messageQueue;
     private long startingTidBatch;
     private long tid;
+    private long generation;
     private final int maxNumberOfTIDsBatch;
     private final int batchWindow;
     private final int numWorkers;
@@ -79,7 +80,7 @@ public final class TransactionWorker extends StoppableRunnable {
                 maxNumberOfTIDsBatch, batchWindow, numWorkers,
                 precedenceMapInputQueue, precedenceMapOutputQueue, transactionMap,
                 vmsIdentifiersPerDAG, vmsWorkerContainerMap, coordinatorQueue,
-                serdesProxy, 0);
+                serdesProxy, 0, 0);
     }
 
     public static TransactionWorker build(int id, Deque<TransactionInput> inputQueue,
@@ -98,7 +99,7 @@ public final class TransactionWorker extends StoppableRunnable {
                 maxNumberOfTIDsBatch, batchWindow, numWorkers,
                 precedenceMapInputQueue, precedenceMapOutputQueue, transactionMap,
                 vmsIdentifiersPerDAG, vmsWorkerContainerMap, coordinatorQueue,
-                serdesProxy, 0);
+                serdesProxy, 0, 0);
     }
     public static TransactionWorker build(int id, Deque<TransactionInput> inputQueue,
                                           Deque<Object> messageQueue,
@@ -110,7 +111,7 @@ public final class TransactionWorker extends StoppableRunnable {
                                           Map<String, VmsNode[]> vmsIdentifiersPerDAG,
                                           Map<String, IVmsWorker> vmsWorkerContainerMap,
                                           Queue<Object> coordinatorQueue,
-                                          IVmsSerdesProxy serdesProxy, long startingBatchOffset)
+                                          IVmsSerdesProxy serdesProxy, long startingBatchOffset, long generation)
     {
         Map<String, VmsTracking> vmsTrackingMap = new HashMap<>();
         Map<String, VmsTracking[]> vmsPerTransactionMap = new HashMap<>(vmsIdentifiersPerDAG.size());
@@ -126,7 +127,7 @@ public final class TransactionWorker extends StoppableRunnable {
         }
         return new TransactionWorker(id, inputQueue, messageQueue, startingTid, maxNumberOfTIDsBatch, batchWindow, numWorkers,
                 precedenceMapInputQueue, precedenceMapOutputQueue, transactionMap,
-                vmsPerTransactionMap, vmsTrackingMap, vmsWorkerContainerMap, coordinatorQueue, serdesProxy, startingBatchOffset);
+                vmsPerTransactionMap, vmsTrackingMap, vmsWorkerContainerMap, coordinatorQueue, serdesProxy, startingBatchOffset, generation);
     }
 
     private TransactionWorker(int id, Deque<TransactionInput> inputQueue,
@@ -136,12 +137,15 @@ public final class TransactionWorker extends StoppableRunnable {
                               Queue<Map<String, PrecedenceInfo>> precedenceMapOutputQueue,
                               Map<String, TransactionDAG> transactionMap, Map<String, VmsTracking[]> vmsPerTransactionMap,
                               Map<String, VmsTracking> vmsTrackingMap, Map<String, IVmsWorker> vmsWorkerContainerMap,
-                              Queue<Object> coordinatorQueue, IVmsSerdesProxy serdesProxy, long startingBatchOffset) {
+                              Queue<Object> coordinatorQueue, IVmsSerdesProxy serdesProxy, long startingBatchOffset, long generation) {
         this.id = id;
         this.inputQueue = inputQueue;
         this.messageQueue = messageQueue;
         this.startingTidBatch = startingTidBatch;
         this.tid = startingTidBatch;
+
+        this.generation = generation;
+
         this.maxNumberOfTIDsBatch = maxNumberOfTIDsBatch;
         this.batchWindow = batchWindow;
         this.numWorkers = numWorkers;
@@ -278,6 +282,7 @@ public final class TransactionWorker extends StoppableRunnable {
             String precedenceMapStr = this.serdesProxy.serializeMap(previousTidPerVms);
             // System.out.println(STR."txWorker=\{id} assigning tid=\{this.tid}");
             TransactionEvent.PayloadRaw txEvent = TransactionEvent.of(this.tid, this.batchContext.batchOffset,
+                    this.generation,
                     transactionInput.event.name, transactionInput.event.payload, precedenceMapStr);
 
             // System.out.println(STR."\{txEvent.tid()} precedenceMapStr \{precedenceMapStr}");
@@ -356,6 +361,7 @@ public final class TransactionWorker extends StoppableRunnable {
             EventIdentifier event = transactionDAG.inputEvents.get(pendingInput.input.event.name);
             VmsTracking inputVms = this.vmsTrackingMap.get(event.targetVms);
             TransactionEvent.PayloadRaw txEvent = TransactionEvent.of(pendingInput.tid, pendingInput.batch,
+                    this.generation,
                     pendingInput.input.event.name, pendingInput.input.event.payload, precedenceMapStr);
             LOGGER.log(DEBUG,"Leader: Transaction worker "+id+" adding event "+event.name+" to "+inputVms.identifier+" worker:\n"+txEvent+"\n"+pendingInput.previousTidPerVms);
 

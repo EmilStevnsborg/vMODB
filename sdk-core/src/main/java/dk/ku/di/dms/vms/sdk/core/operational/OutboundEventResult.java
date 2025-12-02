@@ -10,21 +10,24 @@ public final class OutboundEventResult implements IVmsTransactionResult {
 
     private final long tid;
     private final long batch;
+    private final long generation;
     private final boolean isAbort;
     private final String outputQueue;
     private final Object output;
 
-    public OutboundEventResult(long tid, long batch, String outputQueue, Object output) {
+    public OutboundEventResult(long tid, long batch, long generation, String outputQueue, Object output) {
         this.tid = tid;
         this.batch = batch;
+        this.generation = generation;
         this.outputQueue = outputQueue;
         this.output = output;
         this.isAbort = false;
     }
     // I made this and isAbort()
-    public OutboundEventResult(long tid, long batch) {
+    public OutboundEventResult(long tid, long batch, long generation) {
         this.tid = tid;
         this.batch = batch;
+        this.generation = generation;
         this.isAbort = true;
         this.outputQueue = null;
         this.output = null;
@@ -49,6 +52,9 @@ public final class OutboundEventResult implements IVmsTransactionResult {
 
     public long batch() {
         return this.batch;
+    }
+    public long generation() {
+        return this.generation;
     }
 
     public Object output() {

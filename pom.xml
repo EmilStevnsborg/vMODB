@@ -30,7 +30,7 @@
     <!-- applications -->
 <!--    <module>marketplace</module>-->
       <module>flightScheduler</module>
-    <module>tpcc</module>
+<!--    <module>tpcc</module>-->
       <module>flightScheduler/flightScheduler-benchmark</module>
 
   </modules>

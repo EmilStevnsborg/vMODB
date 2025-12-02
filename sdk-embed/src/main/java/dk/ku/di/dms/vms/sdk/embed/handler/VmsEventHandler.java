@@ -143,6 +143,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
     private LongPairStore commitInfo;
     public Map<Long, Set<Long>> batchAbortedTIDs;
+    public long generation;
     public static VmsEventHandler build(// to identify which vms this is
                                         VmsNode me,
                                         // to checkpoint private state
@@ -254,6 +255,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         this.commitInfo = new LongPairStore(STR."\{me.identifier}_commit_info", !recoveryEnabled);
         this.batchAbortedTIDs = new HashMap<>();
+        this.generation = 0;
     }
 
     @Override
@@ -335,17 +337,19 @@ public final class VmsEventHandler extends ModbHttpServer {
         // System.out.println(STR."\{me.identifier} aborts all uncommitted transactions");
         pauseHandler.accept(true);
 
+        // update epoch
+
+
         var latestCommitInfo = commitInfo.getLatest();
         var batch = latestCommitInfo[0];
         var maxTid = latestCommitInfo[1];
 
         System.out.println(STR."\{me.identifier} resets to state batch=\{batch} and tid=\{maxTid}");
 
-//        // clear transaction event queues
+        // clear transaction event queues
 //        consumerVmsContainerMap.values().forEach(worker -> {
 //            worker.clear();
 //        });
-
 
         // clear all tasks at the maxTID or later
         taskClearer.apply(maxTid+1, batch+1);
@@ -354,6 +358,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         restoreStableState(maxTid+1);
 
         // clearing internal queue entirely
+        // needs to be done reliably
         // vmsInternalChannels.transactionInputQueue().clear();
 
         trackingBatchMap.clear();
@@ -364,7 +369,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
     private void processVmsCrash(VmsCrash.Payload vmsCrash)
     {
-        System.out.println(STR."\{me.identifier} started processing crash of \{vmsCrash}");
+        System.out.println(STR."\{me.identifier} started processing crash of \{vmsCrash}, new gen is \{vmsCrash.newGeneration()}");
         var vmsNode = vmsMetadataMap.get(vmsCrash.vms());
         var crashedVmsWorkerContainer = consumerVmsContainerMap.remove(vmsNode);
         if (crashedVmsWorkerContainer != null) {
@@ -380,7 +385,11 @@ public final class VmsEventHandler extends ModbHttpServer {
 //                        STR."from eventConsumerWorkers, size after=\{eventConsumerWorkers.size()}");
             }
         }
-        // abort uncommitted events
+
+        // updating the generation of events being expected
+        this.generation = vmsCrash.newGeneration();
+
+                // abort uncommitted events
         resetToCommittedState();
 
         var crashAck = CrashAck.of(vmsCrash.vms(), me.identifier);
@@ -431,6 +440,8 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         // input queue clear??? (an event can't be in the queue unless it was processed upstream??)
         // if A->B->C, and 10 aborts in C, then 30 may be in the queue, 30 will still be sent by B?
+        // this is not updating the queue
+        // correctness relies on the scheduler to consider old events as deprecated
         vmsInternalChannels.transactionInputQueue().stream().filter(input -> input.tid() >= tid);
 
         var numTIDsExecuted = metadata[0];
@@ -616,6 +627,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         String payloadpayload = this.serdesProxy.serialize(outputEvent.output(), clazz);
         TransactionEvent.PayloadRaw payload =
                 TransactionEvent.of(outputEvent.tid(), outputEvent.batch(),
+                        outputEvent.generation(),
                         outputEvent.outputQueue(), payloadpayload,
                         precedenceMap);
 
@@ -765,6 +777,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             this.connectionMetadata.channel.read(this.readBuffer, 0, this);
         }
 
+        // dont add events while crash is being processed maybe?
         private void processSingleEvent(ByteBuffer readBuffer) {
             try {
                 TransactionEvent.Payload payload = TransactionEvent.read(readBuffer);
@@ -898,6 +911,8 @@ public final class VmsEventHandler extends ModbHttpServer {
                     LOGGER.log(INFO, me.identifier + ": Leader requested an additional connection");
                     this.buffer.clear();
                     channel.read(buffer, 0, new LeaderReadCompletionHandler(new ConnectionMetadata(leader.hashCode(), ConnectionMetadata.NodeType.SERVER, channel), buffer));
+                    generation = serverNode.generation;
+                    System.out.println(STR."\{me.identifier} setting generation to \{generation} for serverNode gen=\{serverNode.generation} after leader connection");
                 } else {
                     try {
                         LOGGER.log(WARNING,"Dropping a connection attempt from a node claiming to be leader");
@@ -1055,6 +1070,9 @@ public final class VmsEventHandler extends ModbHttpServer {
             boolean includeMetadata = this.buffer.get() == Presentation.YES;
             // leader has disconnected, or new leader
             leader = Presentation.readServer(this.buffer);
+            generation = leader.generation;
+            System.out.println(STR."\{me.identifier} setting generation to \{generation} for serverNode gen=\{leader.generation} after leader connection");
+
             // read queues leader is interested
             boolean hasQueuesToSubscribe = this.buffer.get() == Presentation.YES;
             if(hasQueuesToSubscribe){
@@ -1103,7 +1121,10 @@ public final class VmsEventHandler extends ModbHttpServer {
         }
         this.tidToPrecedenceMap.put(payload.tid(), precedenceMap);
         return new InboundEvent( payload.tid(), precedenceMap.get(this.me.identifier),
-                payload.batch(), payload.event(), clazz, input );
+                payload.batch(),
+//                payload.generation(),
+                0,
+                payload.event(), clazz, input );
     }
 
     private static final ConcurrentLinkedDeque<List<InboundEvent>> LIST_BUFFER = new ConcurrentLinkedDeque<>();

@@ -26,8 +26,8 @@ public final class Presentation {
     public static final byte VMS_TYPE = 11;
 
     //                                                      0 server 1 vms  if leader already have metadata
-    //                                     message type | node type [0,1] | metadata bit | lastOffset | port | size host
-    private static final int SERVER_HEADER_SIZE = Byte.BYTES + Byte.BYTES +    Byte.BYTES +      Long.BYTES + Integer.BYTES + Integer.BYTES;
+    //                                     message type | node type [0,1] | metadata bit | lastOffset | port | size host | generation
+    private static final int SERVER_HEADER_SIZE = Byte.BYTES + Byte.BYTES +    Byte.BYTES +      Long.BYTES + Integer.BYTES + Integer.BYTES + Long.BYTES;
 
     // for server consumption
     public static void writeServer(ByteBuffer buffer,
@@ -39,12 +39,20 @@ public final class Presentation {
         byte[] host = serverIdentifier.host.getBytes(StandardCharsets.UTF_8);
         buffer.putInt( host.length );
         buffer.put( host );
+        buffer.putLong(0);
+    }
+
+    public static void writeServer(ByteBuffer buffer,
+                                   ServerNode serverIdentifier,
+                                   boolean includeMetadataOnAck){
+        writeServer(buffer,serverIdentifier, includeMetadataOnAck, 0L);
     }
 
     // for VMS consumption
     public static void writeServer(ByteBuffer buffer,
                                    ServerNode serverIdentifier,
-                                   boolean includeMetadataOnAck){
+                                   boolean includeMetadataOnAck,
+                                   long generation){
         buffer.put( Constants.PRESENTATION );
         buffer.put( SERVER_TYPE );
         buffer.put( includeMetadataOnAck ? YES : NO );
@@ -53,6 +61,7 @@ public final class Presentation {
         byte[] host = serverIdentifier.host.getBytes(StandardCharsets.UTF_8);
         buffer.putInt( host.length );
         buffer.put( host );
+        buffer.putLong( generation );
     }
 
     public static ServerNode readServer(ByteBuffer buffer){
@@ -69,7 +78,8 @@ public final class Presentation {
         } else {
             host = new String(buffer.array(), SERVER_HEADER_SIZE, hostSize, StandardCharsets.UTF_8);
         }
-        return new ServerNode( host, port, offset );
+        var generation = buffer.getLong();
+        return new ServerNode( host, port, offset, generation );
     }
 
     public static void writeVms(ByteBuffer buffer,

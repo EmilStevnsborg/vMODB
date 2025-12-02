@@ -7,17 +7,25 @@ public final class ServerNode extends NetworkNode {
 
     // maybe volatile?
     public long lastOffset;
+    public long generation;
 
     // maybe also last batch?
 
     public ServerNode(String host, int port) {
         super(host, port);
         this.lastOffset = 0L;
+        this.generation = 0L;
     }
 
     public ServerNode(String host, int port, long lastOffset) {
         super(host,port);
         this.lastOffset = lastOffset;
+        this.generation = 0L;
+    }
+    public ServerNode(String host, int port, long lastOffset, long generation) {
+        super(host,port);
+        this.lastOffset = lastOffset;
+        this.generation = generation;
     }
 
 }

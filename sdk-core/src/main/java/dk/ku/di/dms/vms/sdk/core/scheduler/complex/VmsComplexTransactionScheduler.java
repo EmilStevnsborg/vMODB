@@ -353,6 +353,7 @@ public final class VmsComplexTransactionScheduler extends StoppableRunnable {
                     inboundEvent.tid(),
                     inboundEvent.lastTid(),
                     inboundEvent.batch(),
+                    inboundEvent.generation(),
                     node.object(),
                     signature.inputQueues().length
             );

@@ -6,7 +6,10 @@ abort_result_file = "result_abort.json"
 vms_recovery_result_file = "result_vms_recovery.json"
 coordinator_recovery_result_file = "result_coordinator_recovery.json"
 
-with open(abort_result_file) as f:
+# with open(abort_result_file) as f:
+#     data = json.load(f)
+
+with open(vms_recovery_result_file) as f:
     data = json.load(f)
 
 throughput = data["throughputInfo"]

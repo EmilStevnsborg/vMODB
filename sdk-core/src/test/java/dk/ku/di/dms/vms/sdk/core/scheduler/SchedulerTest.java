@@ -40,16 +40,16 @@ public class SchedulerTest {
         VmsRuntimeMetadata vmsRuntimeMetadata = VmsMetadataLoader.load("dk.ku.di.dms.vms.sdk.core.example");
 
         var scheduler = VmsTransactionScheduler.build("example1", vmsInternalChannels.transactionInputQueue(),
-                vmsRuntimeMetadata.queueToVmsTransactionMap(), new ITransactionManager() {}, x -> { }, new HashMap<>(),4);
+                vmsRuntimeMetadata.queueToVmsTransactionMap(), new ITransactionManager() {}, x -> { }, new HashMap<>(), 0,4);
 
         for(int i = 1; i <= 4; i++){
             InputEventExample1 eventExample = new InputEventExample1(i);
-            InboundEvent event = new InboundEvent(i,i-1,1, "in", InputEventExample1.class, eventExample);
+            InboundEvent event = new InboundEvent(i,i-1,1, 0,"in", InputEventExample1.class, eventExample);
             vmsInternalChannels.transactionInputQueue().add(event);
         }
 
         InputEventExample2 eventExample = new InputEventExample2(5, 5);
-        InboundEvent event = new InboundEvent(5,4,1, "in_", InputEventExample2.class, eventExample);
+        InboundEvent event = new InboundEvent(5,4,1, 0,"in_", InputEventExample2.class, eventExample);
         vmsInternalChannels.transactionInputQueue().add(event);
 
         Thread schedulerThread = new Thread(scheduler);
@@ -81,7 +81,7 @@ public class SchedulerTest {
         InputEventExample1 eventExample = new InputEventExample1(0);
 
         // scheduler needs to deserialize the
-        InboundEvent event = new InboundEvent(1,0,1,"in",InputEventExample1.class, eventExample);
+        InboundEvent event = new InboundEvent(1,0,1, 0,"in",InputEventExample1.class, eventExample);
 
         vmsInternalChannels.transactionInputQueue().add(event);
 
@@ -106,7 +106,7 @@ public class SchedulerTest {
 
         for(var res : out.getOutboundEventResults()){
             Class<?> clazz = vmsRuntimeMetadata.queueToEventMap().get( res.outputQueue() );
-            InboundEvent payload_ = new InboundEvent(1,0,1, res.outputQueue(), clazz, res.output());
+            InboundEvent payload_ = new InboundEvent(1,0,1, 0, res.outputQueue(), clazz, res.output());
             vmsInternalChannels.transactionInputQueue().add(payload_);
         }
 

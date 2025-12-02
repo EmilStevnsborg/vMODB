@@ -112,6 +112,8 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
     private final Consumer<Object> queueMessage_;
 
+    private long generation;
+
     private interface IVmsDeque {
         void drain(List<TransactionEvent.PayloadRaw> list, int maxSize);
         void insert(TransactionEvent.PayloadRaw payloadRaw);
@@ -197,7 +199,20 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                                   VmsWorkerOptions options,
                                   IVmsSerdesProxy serdesProxy) throws IOException {
         return new VmsWorker(me, consumerVms, coordinatorQueue,
-                channelFactory, options, serdesProxy);
+                channelFactory, options, serdesProxy, 0);
+    }
+    public static VmsWorker build(// coordinator reference
+                                  ServerNode me,
+                                  // the vms this thread is responsible for
+                                  IdentifiableNode consumerVms,
+                                  // shared data structure to communicate messages to coordinator
+                                  Queue<Object> coordinatorQueue,
+                                  Supplier<IChannel> channelFactory,
+                                  VmsWorkerOptions options,
+                                  IVmsSerdesProxy serdesProxy,
+                                  long generation) throws IOException {
+        return new VmsWorker(me, consumerVms, coordinatorQueue,
+                channelFactory, options, serdesProxy, generation);
     }
 
     private VmsWorker(// coordinator reference
@@ -208,7 +223,8 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                       Queue<Object> coordinatorQueue,
                       Supplier<IChannel> channelFactory,
                       VmsWorkerOptions options,
-                      IVmsSerdesProxy serdesProxy) {
+                      IVmsSerdesProxy serdesProxy,
+                      long generation) {
         this.me = me;
         this.state = State.NEW;
         this.consumerVms = consumerVms;
@@ -242,6 +258,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
         // out - shared by many vms workers
         this.coordinatorQueue = coordinatorQueue;
+        this.generation = generation;
     }
 
     @SuppressWarnings("StatementWithEmptyBody")
@@ -318,7 +335,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
     // write presentation
     private void sendLeaderPresentationToVms(ByteBuffer writeBuffer) {
-        Presentation.writeServer(writeBuffer, this.me, true);
+        Presentation.writeServer(writeBuffer, this.me, true, this.generation);
         writeBuffer.flip();
         this.acquireLock();
         this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
@@ -466,7 +483,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     {
         // System.out.println(STR."VmsWorker sendAbortUncommittedTransactions message to \{consumerVms.identifier}");
         ByteBuffer writeBuffer = retrieveByteBuffer();
-        VmsCrash.write(writeBuffer, vmsCrash.vms());
+        VmsCrash.write(writeBuffer, vmsCrash.vms(), vmsCrash.newGeneration());
         writeBuffer.flip();
         this.acquireLock();
         this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
@@ -561,7 +578,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 LOGGER.log(WARNING, "Leader: " + consumerVms.identifier+" has disconnected!");
                 channel.close();
 
-                var vmsCrash = VmsCrash.of(consumerVms.identifier);
+                var vmsCrash = VmsCrash.of(consumerVms.identifier, -1);
                 coordinatorQueue.add(vmsCrash);
                 return;
             }

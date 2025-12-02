@@ -31,6 +31,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     // must be concurrent since different threads are writing and reading from it concurrently
     private final Map<Long, VmsTransactionTask> transactionTaskMap;
     private Map<Long, Set<Long>> batchAbortedTIDs;
+    private long currentGeneration;
 
     // map the last tid
     private final Map<Long, Long> lastTidToTidMap;
@@ -67,7 +68,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                                                 Map<String, VmsTransactionMetadata> transactionMetadataMap,
                                                 ITransactionManager transactionalHandler,
                                                 Consumer<IVmsTransactionResult> eventHandler,
-                                                Map<Long, Set<Long>> vmsBatchAbortedTIDs,
+                                                Map<Long, Set<Long>> vmsBatchAbortedTIDs, long generation,
                                                 int vmsThreadPoolSize){
         LOGGER.log(INFO, vmsIdentifier+ ": Building transaction scheduler with thread pool size of "+ vmsThreadPoolSize);
         return new VmsTransactionScheduler(
@@ -78,7 +79,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                 transactionMetadataMap,
                 transactionalHandler,
                 eventHandler,
-                vmsBatchAbortedTIDs);
+                vmsBatchAbortedTIDs, generation);
     }
 
     private VmsTransactionScheduler(String vmsIdentifier,
@@ -87,7 +88,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                                     Map<String, VmsTransactionMetadata> transactionMetadataMap,
                                     ITransactionManager transactionalHandler,
                                     Consumer<IVmsTransactionResult> eventHandler,
-                                    Map<Long, Set<Long>> vmsBatchAbortedTIDs){
+                                    Map<Long, Set<Long>> vmsBatchAbortedTIDs, long generation){
         super();
 
         this.vmsIdentifier = vmsIdentifier;
@@ -102,8 +103,9 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         this.transactionTaskMap = new ConcurrentHashMap<>(1000000);
         SchedulerCallback callback = new SchedulerCallback(eventHandler);
         this.batchAbortedTIDs = vmsBatchAbortedTIDs;
+        this.currentGeneration = generation;
         this.vmsTransactionTaskBuilder = new VmsTransactionTaskBuilder(transactionalHandler, callback);
-        this.transactionTaskMap.put( 0L, this.vmsTransactionTaskBuilder.buildFinished(0) );
+        this.transactionTaskMap.put( 0L, this.vmsTransactionTaskBuilder.buildFinished(0, this.currentGeneration ) );
         this.lastTidToTidMap = new HashMap<>(1000000);
 
         this.lastTidFinished = new AtomicLong(0);
@@ -153,7 +155,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         }
 
         @Override
-        public void error(ExecutionModeEnum executionMode, long tid, long batch, Exception e) {
+        public void error(ExecutionModeEnum executionMode, long tid, long batch, long generation, Exception e) {
             // a simple mechanism to handle error is by re-executing, depending on the nature of the error
             // if constraint violation, it cannot be re-executed
             // in this case, the error must be informed to the event handler, so the event handler
@@ -169,7 +171,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             }
 
             // abort task now
-            var eventOutput = new OutboundEventResult(tid, batch); // abort
+            var eventOutput = new OutboundEventResult(tid, batch, generation); // abort
             this.eventHandler.accept(eventOutput);
         }
 
@@ -438,10 +440,16 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
     private void processNewEvent(InboundEvent inboundEvent)
     {
+        if (inboundEvent.generation() != this.currentGeneration) {
+            System.out.println(STR."\{vmsIdentifier} old gen=\{inboundEvent.generation()} " +
+                               STR."of inbound event \{inboundEvent.tid()}  ignored");
+            return;
+        }
+
         if (this.transactionTaskMap.containsKey(inboundEvent.tid())) {
             var task = transactionTaskMap.get(inboundEvent.tid());
-//            System.out.println(STR."\{vmsIdentifier} inbound \{inboundEvent.tid()} with lastTid=\{inboundEvent.tid()} " +
-//                               STR."is duplicate for task with lastTid=\{task.lastTid}");
+            System.out.println(STR."\{vmsIdentifier} inbound \{inboundEvent.tid()} with lastTid=\{inboundEvent.tid()} " +
+                               STR."is duplicate for task with lastTid=\{task.lastTid}");
 
             return;
         }
@@ -470,6 +478,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                 inboundEvent.tid(),
                 inboundEvent.lastTid(),
                 inboundEvent.batch(),
+                inboundEvent.generation(),
                 this.transactionMetadataMap
                         .get(inboundEvent.event())
                         .signatures.getFirst().object(),
