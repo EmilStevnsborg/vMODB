@@ -3,6 +3,7 @@ package dk.ku.di.dms.vms.flightScheduler.benchmark;
 import dk.ku.di.dms.vms.coordinator.Coordinator;
 import dk.ku.di.dms.vms.flightScheduler.benchmark.Util.ComponentProcess;
 import dk.ku.di.dms.vms.flightScheduler.benchmark.experiment.AbortExperiment;
+import dk.ku.di.dms.vms.flightScheduler.benchmark.experiment.BaselineExperiment;
 import dk.ku.di.dms.vms.flightScheduler.benchmark.experiment.RecoverVmsExperiment;
 import dk.ku.di.dms.vms.flightScheduler.benchmark.ingestion.IngestionWorker;
 import dk.ku.di.dms.vms.flightScheduler.benchmark.ingestion.IngestionWorkerCustomer;
@@ -24,14 +25,15 @@ public class Main
 
     public static int NUM_INGESTION_WORKERS = 4;
 //            = Runtime.getRuntime().availableProcessors() / 4;
-    public static int NUM_RECORDS = 200000;
-    public static int NUM_TRANSACTIONS = 200000;
+    public static int NUM_RECORDS = 1500000; // 1.5 mil (10 workers 17.135s-25.235s)
+    public static int NUM_TRANSACTIONS = 1500000; // 1.5 mil
     private static final Properties PROPERTIES = ConfigUtils.loadProperties("src/main/resources/app.properties");
 
     public static void main(String[] args) throws Exception
     {
         try {
-            //var experiment = new AbortExperiment(NUM_RECORDS, NUM_TRANSACTIONS, NUM_INGESTION_WORKERS);
+//            var experiment = new BaselineExperiment(NUM_RECORDS, NUM_TRANSACTIONS, NUM_INGESTION_WORKERS);
+//            var experiment = new AbortExperiment(NUM_RECORDS, NUM_TRANSACTIONS, NUM_INGESTION_WORKERS);
             var experiment = new RecoverVmsExperiment(NUM_RECORDS, NUM_TRANSACTIONS, NUM_INGESTION_WORKERS);
 
             experiment.initExperiment(PROPERTIES);
@@ -41,8 +43,8 @@ public class Main
             System.console().readLine();
 
             // experiment
-            var runtime = 10000;
-            var warmup = 2000;
+            var runtime = 20000;
+            var warmup = 5000;
 
             experiment.runExperiment(runtime, warmup);
 

@@ -9,24 +9,31 @@ public class ExperimentResults
     public List<ThroughputInfo> throughputInfo;
     public List<AbortInfo> aborts;
     public List<CrashInfo> crashes;
+    public List<ReconnectionInfo> reconnections;
 
     public ExperimentResults() {
         throughputInfo = new ArrayList<>();
         aborts = new ArrayList<>();
         crashes = new ArrayList<>();
+        reconnections = new ArrayList<>();
     }
-    public ExperimentResults(List<ThroughputInfo> throughputInfo, List<AbortInfo> aborts, List<CrashInfo> crashes) {
+    public ExperimentResults(List<ThroughputInfo> throughputInfo, List<AbortInfo> aborts, List<CrashInfo> crashes, List<ReconnectionInfo> reconnections) {
         this.throughputInfo = throughputInfo;
         this.aborts = aborts;
         this.crashes = crashes;
+        this.reconnections = reconnections;
 
         Summary();
     }
-    public static ExperimentResults Abort(List<ThroughputInfo> throughputInfo, List<AbortInfo> aborts) {
-        return new ExperimentResults(throughputInfo, aborts, new ArrayList<>());
+    public static ExperimentResults Baseline(List<ThroughputInfo> throughputInfo) {
+        return new ExperimentResults(throughputInfo, new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
     }
-    public static ExperimentResults Crash(List<ThroughputInfo> throughputInfo, List<CrashInfo> crashes) {
-        return new ExperimentResults(throughputInfo, new ArrayList<>(), crashes);
+
+    public static ExperimentResults Abort(List<ThroughputInfo> throughputInfo, List<AbortInfo> aborts) {
+        return new ExperimentResults(throughputInfo, aborts, new ArrayList<>(), new ArrayList<>());
+    }
+    public static ExperimentResults Recovery(List<ThroughputInfo> throughputInfo, List<CrashInfo> crashes, List<ReconnectionInfo> reconnections) {
+        return new ExperimentResults(throughputInfo, new ArrayList<>(), crashes, reconnections);
     }
     private void Summary()
     {

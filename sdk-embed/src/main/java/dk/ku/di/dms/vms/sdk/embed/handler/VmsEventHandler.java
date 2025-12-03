@@ -36,6 +36,7 @@ import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -143,7 +144,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
     private LongPairStore commitInfo;
     public Map<Long, Set<Long>> batchAbortedTIDs;
-    public long generation;
+    public AtomicLong generation;
     public static VmsEventHandler build(// to identify which vms this is
                                         VmsNode me,
                                         // to checkpoint private state
@@ -255,7 +256,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         this.commitInfo = new LongPairStore(STR."\{me.identifier}_commit_info", !recoveryEnabled);
         this.batchAbortedTIDs = new HashMap<>();
-        this.generation = 0;
+        this.generation = new AtomicLong(0);
     }
 
     @Override
@@ -387,7 +388,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         }
 
         // updating the generation of events being expected
-        this.generation = vmsCrash.newGeneration();
+        this.generation.set(vmsCrash.newGeneration());
 
                 // abort uncommitted events
         resetToCommittedState();
@@ -531,6 +532,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         thisBatch.setStatus(BatchContext.BATCH_COMPLETED);
         // if terminal, must send batch complete
         if (thisBatch.terminal) {
+            // System.out.println(STR."TERMINAL BATCH COMPLETED: \{me.identifier} has processed \{thisBatch.numberOfTIDsBatch} for batch \{thisBatch.batch}");
             LOGGER.log(DEBUG, this.me.identifier + ": Requesting leader worker to send batch " + thisBatch.batch + " complete");
             // must be queued in case leader is off and comes back online
             this.leaderWorker.queueMessage(BatchComplete.of(thisBatch.batch, this.me.identifier));
@@ -911,7 +913,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                     LOGGER.log(INFO, me.identifier + ": Leader requested an additional connection");
                     this.buffer.clear();
                     channel.read(buffer, 0, new LeaderReadCompletionHandler(new ConnectionMetadata(leader.hashCode(), ConnectionMetadata.NodeType.SERVER, channel), buffer));
-                    generation = serverNode.generation;
+                    generation.set(serverNode.generation);
                     System.out.println(STR."\{me.identifier} setting generation to \{generation} for serverNode gen=\{serverNode.generation} after leader connection");
                 } else {
                     try {
@@ -1070,7 +1072,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             boolean includeMetadata = this.buffer.get() == Presentation.YES;
             // leader has disconnected, or new leader
             leader = Presentation.readServer(this.buffer);
-            generation = leader.generation;
+            generation.set(leader.generation);
             System.out.println(STR."\{me.identifier} setting generation to \{generation} for serverNode gen=\{leader.generation} after leader connection");
 
             // read queues leader is interested
@@ -1122,8 +1124,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         this.tidToPrecedenceMap.put(payload.tid(), precedenceMap);
         return new InboundEvent( payload.tid(), precedenceMap.get(this.me.identifier),
                 payload.batch(),
-//                payload.generation(),
-                0,
+                payload.generation(),
                 payload.event(), clazz, input );
     }
 
@@ -1358,7 +1359,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             if(trackingBatchMap.containsKey(batch))
             {
                 var trackedBatch = trackingBatchMap.get(batchCommitInfo.batch());
-                System.out.println(STR."\{me.identifier} has processed \{trackedBatch.numberTIDsExecuted} for batch \{batch}");
+                // System.out.println(STR."TERMINAL BATCH COMPLETED: \{me.identifier} has processed \{trackedBatch.numberTIDsExecuted} for batch \{batch}");
 
                 if (trackedBatch.numberTIDsExecuted != batchCommitInfo.numberOfTIDsBatch())
                     return;

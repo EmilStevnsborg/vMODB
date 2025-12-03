@@ -31,7 +31,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     // must be concurrent since different threads are writing and reading from it concurrently
     private final Map<Long, VmsTransactionTask> transactionTaskMap;
     private Map<Long, Set<Long>> batchAbortedTIDs;
-    private long currentGeneration;
+    private AtomicLong currentGeneration;
 
     // map the last tid
     private final Map<Long, Long> lastTidToTidMap;
@@ -68,7 +68,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                                                 Map<String, VmsTransactionMetadata> transactionMetadataMap,
                                                 ITransactionManager transactionalHandler,
                                                 Consumer<IVmsTransactionResult> eventHandler,
-                                                Map<Long, Set<Long>> vmsBatchAbortedTIDs, long generation,
+                                                Map<Long, Set<Long>> vmsBatchAbortedTIDs, AtomicLong generation,
                                                 int vmsThreadPoolSize){
         LOGGER.log(INFO, vmsIdentifier+ ": Building transaction scheduler with thread pool size of "+ vmsThreadPoolSize);
         return new VmsTransactionScheduler(
@@ -88,7 +88,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                                     Map<String, VmsTransactionMetadata> transactionMetadataMap,
                                     ITransactionManager transactionalHandler,
                                     Consumer<IVmsTransactionResult> eventHandler,
-                                    Map<Long, Set<Long>> vmsBatchAbortedTIDs, long generation){
+                                    Map<Long, Set<Long>> vmsBatchAbortedTIDs, AtomicLong generation){
         super();
 
         this.vmsIdentifier = vmsIdentifier;
@@ -105,7 +105,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         this.batchAbortedTIDs = vmsBatchAbortedTIDs;
         this.currentGeneration = generation;
         this.vmsTransactionTaskBuilder = new VmsTransactionTaskBuilder(transactionalHandler, callback);
-        this.transactionTaskMap.put( 0L, this.vmsTransactionTaskBuilder.buildFinished(0, this.currentGeneration ) );
+        this.transactionTaskMap.put( 0L, this.vmsTransactionTaskBuilder.buildFinished(0, this.currentGeneration.get() ) );
         this.lastTidToTidMap = new HashMap<>(1000000);
 
         this.lastTidFinished = new AtomicLong(0);
@@ -440,15 +440,16 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
     private void processNewEvent(InboundEvent inboundEvent)
     {
-        if (inboundEvent.generation() != this.currentGeneration) {
-            System.out.println(STR."\{vmsIdentifier} old gen=\{inboundEvent.generation()} " +
-                               STR."of inbound event \{inboundEvent.tid()}  ignored");
+        if (inboundEvent.generation() != this.currentGeneration.get()) {
+//            System.out.println(STR."\{vmsIdentifier} inboundEvent gen=\{inboundEvent.generation()} != " +
+//                               STR."currentGeneration=\{currentGeneration} " +
+//                               STR."of inbound event \{inboundEvent.tid()} ignored");
             return;
         }
 
         if (this.transactionTaskMap.containsKey(inboundEvent.tid())) {
             var task = transactionTaskMap.get(inboundEvent.tid());
-            System.out.println(STR."\{vmsIdentifier} inbound \{inboundEvent.tid()} with lastTid=\{inboundEvent.tid()} " +
+            System.out.println(STR."\{vmsIdentifier} inbound \{inboundEvent.tid()} with lastTid=\{inboundEvent.lastTid()} " +
                                STR."is duplicate for task with lastTid=\{task.lastTid}");
 
             return;
@@ -463,7 +464,8 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                         abortedTIDs.contains(inboundEvent.lastTid()));
 
 //        System.out.println(STR."\{vmsIdentifier} tid=\{inboundEvent.tid()} batch=\{inboundEvent.batch()} deprecated=\{deprecated}, " +
-//                STR."lastTid=\{inboundEvent.lastTid()} lastTidFinished=\{lastTidFinished}");
+//                STR."lastTid=\{inboundEvent.lastTid()} lastTidFinished=\{lastTidFinished}," +
+//                STR."inboundEvent.generation=\{inboundEvent.generation()}, currentGeneration=\{currentGeneration}");
 
         // deprecated event
         if (deprecated) {

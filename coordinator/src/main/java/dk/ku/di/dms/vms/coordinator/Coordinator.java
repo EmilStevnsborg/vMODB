@@ -111,7 +111,7 @@ public final class Coordinator extends ModbHttpServer {
      */
     private volatile long batchOffsetPendingCommit;
 
-    private long generation;
+    private AtomicLong generation;
 
     // metadata about all non-committed batches. when a batch commit finishes, it is removed from this map
     private final Map<Long, BatchContext> batchContextMap;
@@ -337,6 +337,8 @@ public final class Coordinator extends ModbHttpServer {
         this.vmsWorkerContainerMap = new HashMap<>();
         this.transactionWorkers = new ArrayList<>();
         this.httpHandler = httpHandlerSupplier.apply(this);
+
+        this.generation = new AtomicLong(0);
     }
 
     private final Map<String, VmsNode[]> vmsIdentifiersPerDAG = new HashMap<>();
@@ -389,19 +391,19 @@ public final class Coordinator extends ModbHttpServer {
                 System.out.println(STR."Coordinator start latest tid and bid are \{tid} and \{batchOffset}");
 
                 batchOffsetPendingCommit = batchOffset+1;
-                this.generation = latestVersion;
+                this.generation.set(latestVersion);
 
                 this.setUpTransactionWorkers(tid+1, batchOffset+1);
             }
             catch (Exception e) {
                 batchOffsetPendingCommit = 1;
-                this.generation = 0;
+                this.generation.set(0);
                 e.printStackTrace();
                 this.setUpTransactionWorkers();
             }
         } else {
             batchOffsetPendingCommit = 1;
-            this.generation = 0;
+            this.generation.set(0);
             this.setUpTransactionWorkers();
         }
         /////////////////////////////////////////////
@@ -495,16 +497,17 @@ public final class Coordinator extends ModbHttpServer {
                 var oldPrecedenceInfoNode = precedenceMap.get(node);
                 // System.out.println(STR."oldPrecedenceInfoNode for vms \{node}: \{oldPrecedenceInfoNode}");
                 if (oldPrecedenceInfoNode.lastTid() < precedenceInfoVms.lastTid()) {
-                    System.out.println(STR."UPDATED: latest tid and bid for \{node} in dag with eventType \{eventType} are \{lastTid} and \{lastBatch}");
+                    // System.out.println(STR."UPDATED: for \{node} in dag with eventType \{eventType}, latest tid=\{lastTid} and bid=\{lastBatch}");
                     precedenceMap.put(node, precedenceInfoVms);
                 }
             }
         }
 
         // this appears to be correct
-//        for (var entry : precedenceMap.entrySet()) {
-//            System.out.println(STR."precedenceMap for \{entry.getKey()} is \{entry.getValue().toString()}");
-//        }
+        // must align with what the VMSes set their lastTidFinished to
+        for (var entry : precedenceMap.entrySet()) {
+            System.out.println(STR."precedenceMap for \{entry.getKey()} is lastTid=\{entry.getValue().lastTid()} and lastBatch=\{entry.getValue().lastBatch()}");
+        }
 
         return precedenceMap;
     }
@@ -515,7 +518,7 @@ public final class Coordinator extends ModbHttpServer {
     }
     private void setUpTransactionWorkers(long startingTid, long startingBatchOffset) {
         int numWorkers = this.options.getNumTransactionWorkers();
-        System.out.println(STR."start setUpTransactionWorkers; \{numWorkers} workers, at tid=\{startingTid} and bid=\{startingBatchOffset}");
+        System.out.println(STR."start setUpTransactionWorkers; \{numWorkers} workers, at tid=\{startingTid} and bid=\{startingBatchOffset}, and gen=\{this.generation.get()}");
 
         var firstPrecedenceInputQueue = new ConcurrentLinkedDeque<Map<String, TransactionWorker.PrecedenceInfo>>();
         var precedenceMapInputQueue = firstPrecedenceInputQueue;
@@ -544,7 +547,7 @@ public final class Coordinator extends ModbHttpServer {
                     this.options.getMaxTransactionsPerBatch(), this.options.getBatchWindow(),
                     numWorkers, precedenceMapInputQueue, precedenceMapOutputQueue, this.transactionMap,
                     this.vmsIdentifiersPerDAG, this.vmsWorkerContainerMap, this.coordinatorQueue, this.serdesProxy,
-                    startingBatchOffset+idx-1, this.generation);
+                    startingBatchOffset+idx-1, this.generation.get());
             Thread txWorkerThread = Thread.ofPlatform()
                     .name("tx-worker-"+idx)
                     .inheritInheritableThreadLocals(false)
@@ -1087,7 +1090,7 @@ public final class Coordinator extends ModbHttpServer {
                     // was this abort pending and re-queued?
                     pendingAborts.remove(abortedTid);
 
-                    this.abortTransactionInCoordinator(txAbort, txAbortInfo.vms());
+                    abortTransactionInCoordinator(txAbort, txAbortInfo.vms());
 
                     // all VMSes have received abort
                     var missingACKs = ongoingAbortMissingVmsAck.get(abortedTid);
@@ -1145,7 +1148,7 @@ public final class Coordinator extends ModbHttpServer {
                 ongoingCrashMissingVmsAck.get(crashedVms).remove(vmsAcknowledged);
 
                 var missingACKs = ongoingCrashMissingVmsAck.get(crashedVms);
-                System.out.println(STR."Crash ACKs missing from [\{String.join(", ", missingACKs)}] for crash of \{crashedVms}");
+                // System.out.println(STR."Crash ACKs missing from [\{String.join(", ", missingACKs)}] for crash of \{crashedVms}");
 
                 // crash has been handled
                 if (missingACKs.size() == 0) {
@@ -1301,6 +1304,11 @@ public final class Coordinator extends ModbHttpServer {
     {
 
         System.out.println(STR."coordinator processing reconnection of \{restartedVms}, initiate reconnection of producers");
+
+        if(!RECONNECTION_CONSUMERS.isEmpty()) {
+            RECONNECTION_CONSUMERS.forEach(c->c.accept(restartedVms));
+        }
+
         var consumerSet = constructVmsConsumerSet().get(restartedVms);
         vmsWorkerContainerMap.get(restartedVms).queueMessage(consumerSet);
 
@@ -1351,7 +1359,7 @@ public final class Coordinator extends ModbHttpServer {
 
         // clear all the messages that were queued
         coordinatorQueue.clear();
-        clearTransactionInputs();
+        // clearTransactionInputs();
 
         // find the DAGs that use the crashed VMS
         var dags = transactionMap.values();
@@ -1379,9 +1387,9 @@ public final class Coordinator extends ModbHttpServer {
         }
 
         var oldGeneration = this.generation;
-        this.generation += 1;
-        System.out.println(STR."coordinator setting generation from old \{oldGeneration} to new \{this.generation} when processing \{crashedVms} crash");
-        var vmsCrashUpdated = VmsCrash.of(vmsCrash.vms(), this.generation);
+        var newGeneration = this.generation.incrementAndGet();
+        System.out.println(STR."coordinator setting generation from old \{oldGeneration} to new \{newGeneration} when processing \{crashedVms} crash");
+        var vmsCrashUpdated = VmsCrash.of(vmsCrash.vms(), newGeneration);
 
         // the VMSes online at the time of crash
         // there is only a worker if the VMS is alive.
@@ -1400,8 +1408,7 @@ public final class Coordinator extends ModbHttpServer {
         setUpTransactionWorkers(tid+1, bid+1);
 
         // UPDATE METADATA
-        final long finalBid = bid;
-        batchContextMap.keySet().removeIf(batch -> batch > finalBid);
+        batchContextMap.clear();
         batchOffsetPendingCommit = bid + 1;
 
         // System.out.println(STR."batchOffsetPendingCommit after handling crash: \{batchOffsetPendingCommit}");

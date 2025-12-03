@@ -33,9 +33,13 @@ public class Workload
     {
         var aborts = new HashSet<Integer>();
         if (numberOfAborts > 0) {
-            var txDuration = numTransactions / numberOfAborts;
-            for (int i = 1; i <= numberOfAborts; i++) {
-                int tx = randomNumber((i - 1) * txDuration + 1, i * txDuration);
+            // start
+            var start = initTx + numTransactions/5;
+            var increment = (numTransactions-start)/numberOfAborts;
+
+            for (int i = 0; i < numberOfAborts; i++) {
+                var tx = start + i*increment;
+                System.out.println(STR."Abort orderFlight tx=\{tx}");
                 aborts.add(tx);
             }
         }
@@ -99,7 +103,7 @@ public class Workload
                     if (i >= batchSize) {
                         Util.Sleep(delay);
                         i=0;
-                        System.out.println("queuing payBookings stopped sleeping");
+                        // System.out.println("queuing payBookings stopped sleeping");
                     }
                     payBookingFunction.accept(payBookingsIterator.next());
                     i++;
@@ -116,7 +120,7 @@ public class Workload
                     if (i >= batchSize) {
                         Util.Sleep(delay);
                         i=0;
-                        System.out.println("queuing orderFlights stopped sleeping");
+                        // System.out.println("queuing orderFlights stopped sleeping");
                     }
                     orderFlightFunction.accept(orderFlightsIterator.next());
                     i++;

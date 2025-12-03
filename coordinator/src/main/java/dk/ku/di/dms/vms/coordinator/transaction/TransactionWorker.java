@@ -203,7 +203,7 @@ public final class TransactionWorker extends StoppableRunnable {
                     // we could do it in advance current batch, but can lead to higher wait in vms
                     this.processTransactionInput(data);
                 }
-            } while (this.isRunning() && this.tid <= lastTidBatch && System.currentTimeMillis() < end && (coordinatorMessage == null));
+            } while (this.isRunning() && this.tid <= lastTidBatch && System.currentTimeMillis() < end);
 
             // no tid was processed in this batch
             if(this.tid == this.startingTidBatch) continue;

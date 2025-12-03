@@ -1,0 +1,65 @@
+{
+  "throughputInfo" : [ {
+    "timestampStart" : 1764788214757,
+    "timestampEnd" : 1764788216188,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1764788216188,
+    "timestampEnd" : 1764788217457,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1764788217457,
+    "timestampEnd" : 1764788218699,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1764788218699,
+    "timestampEnd" : 1764788219838,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1764788219838,
+    "timestampEnd" : 1764788221123,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1764788221123,
+    "timestampEnd" : 1764788222697,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1764788222697,
+    "timestampEnd" : 1764788224295,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1764788224295,
+    "timestampEnd" : 1764788225666,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1764788225666,
+    "timestampEnd" : 1764788227412,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1764788227412,
+    "timestampEnd" : 1764788229297,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1764788229297,
+    "timestampEnd" : 1764788230487,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1764788230487,
+    "timestampEnd" : 1764788231772,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1764788231772,
+    "timestampEnd" : 1764788232906,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1764788232906,
+    "timestampEnd" : 1764788234035,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1764788234035,
+    "timestampEnd" : 1764788235267,
+    "numCommittedTiDs" : 40000
+  } ],
+  "aborts" : [ ],
+  "crashes" : [ ]
+}

@@ -35,6 +35,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -112,7 +113,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
     private final Consumer<Object> queueMessage_;
 
-    private long generation;
+    private AtomicLong generation;
 
     private interface IVmsDeque {
         void drain(List<TransactionEvent.PayloadRaw> list, int maxSize);
@@ -199,7 +200,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                                   VmsWorkerOptions options,
                                   IVmsSerdesProxy serdesProxy) throws IOException {
         return new VmsWorker(me, consumerVms, coordinatorQueue,
-                channelFactory, options, serdesProxy, 0);
+                channelFactory, options, serdesProxy,  new AtomicLong(0));
     }
     public static VmsWorker build(// coordinator reference
                                   ServerNode me,
@@ -210,7 +211,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                                   Supplier<IChannel> channelFactory,
                                   VmsWorkerOptions options,
                                   IVmsSerdesProxy serdesProxy,
-                                  long generation) throws IOException {
+                                  AtomicLong generation) throws IOException {
         return new VmsWorker(me, consumerVms, coordinatorQueue,
                 channelFactory, options, serdesProxy, generation);
     }
@@ -224,7 +225,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                       Supplier<IChannel> channelFactory,
                       VmsWorkerOptions options,
                       IVmsSerdesProxy serdesProxy,
-                      long generation) {
+                      AtomicLong generation) {
         this.me = me;
         this.state = State.NEW;
         this.consumerVms = consumerVms;
@@ -335,7 +336,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
 
     // write presentation
     private void sendLeaderPresentationToVms(ByteBuffer writeBuffer) {
-        Presentation.writeServer(writeBuffer, this.me, true, this.generation);
+        Presentation.writeServer(writeBuffer, this.me, true, this.generation.get());
         writeBuffer.flip();
         this.acquireLock();
         this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);

@@ -35,6 +35,7 @@ public abstract class ModbHttpServer extends StoppableRunnable {
 
     protected static final List<Consumer<String>> CRASH_CONSUMERS = new CopyOnWriteArrayList<>();
     protected static final List<Consumer<String>> CRASH_ACK_CONSUMERS = new CopyOnWriteArrayList<>();
+    protected static final List<Consumer<String>> RECONNECTION_CONSUMERS = new CopyOnWriteArrayList<>();
     protected static final List<Consumer<String>> RECONNECTION_ACK_CONSUMERS = new CopyOnWriteArrayList<>();
     private static final Set<Future<?>> TRACKED_FUTURES = ConcurrentHashMap.newKeySet();
 
@@ -473,5 +474,11 @@ public abstract class ModbHttpServer extends StoppableRunnable {
         CRASH_ACK_CONSUMERS.add(consumer);
     }
 
+    public void registerReconnectionConsumer(Consumer<String> consumer){
+        RECONNECTION_CONSUMERS.add(consumer);
+    }
+    public void registerReconnectionAckConsumer(Consumer<String> consumer){
+        RECONNECTION_ACK_CONSUMERS.add(consumer);
+    }
 }
 

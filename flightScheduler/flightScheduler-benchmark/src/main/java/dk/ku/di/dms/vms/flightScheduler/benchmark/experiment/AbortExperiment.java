@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dk.ku.di.dms.vms.coordinator.Coordinator;
 import dk.ku.di.dms.vms.flightScheduler.benchmark.Util.ComponentProcess;
 import dk.ku.di.dms.vms.flightScheduler.benchmark.Util.Util;
+import dk.ku.di.dms.vms.flightScheduler.benchmark.ingestion.IngestionWorkerBooking;
 import dk.ku.di.dms.vms.flightScheduler.benchmark.ingestion.IngestionWorkerCustomer;
 import dk.ku.di.dms.vms.flightScheduler.benchmark.ingestion.IngestionWorkerFlight;
 import dk.ku.di.dms.vms.flightScheduler.benchmark.workload.Workload;
 import dk.ku.di.dms.vms.flightScheduler.common.events.OrderFlight;
+import dk.ku.di.dms.vms.flightScheduler.common.events.PayBooking;
 
 import java.io.File;
 import java.io.IOException;
@@ -30,7 +32,8 @@ public class AbortExperiment
     private final Random generate = new Random();
     private final int numRecords;
     private final int numIngestionWorkers;
-    private final Iterator<OrderFlight> input;
+    private final Iterator<OrderFlight> orderFlightInput;
+    private final Iterator<PayBooking> payBookingInput;
 
     public int randomNumber(int min, int max) {
         int next = generate.nextInt();
@@ -46,10 +49,16 @@ public class AbortExperiment
         this.numRecords = numRecords;
         this.numIngestionWorkers = numIngestionWorkers;
 
+        // half of the transactions are order flights starting at the midway point
         var numberOfAborts = 1;
-        var initTx = 1;
-        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions, numRecords, numberOfAborts, initTx);
-        input = orderFlightInput;
+        var initTxOF = numTransactions/2+1;
+        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions/2, numRecords, numberOfAborts, initTxOF);
+
+        // the other half are payBookings
+        var initTxPB = 1;
+        var payBookingInput = Workload.createPayBookingIterator(numTransactions/2, initTxPB);
+        this.orderFlightInput = orderFlightInput;
+        this.payBookingInput = payBookingInput;
     }
 
     public void initExperiment(Properties coordinatorProperties) throws Exception
@@ -85,7 +94,7 @@ public class AbortExperiment
     public ExperimentResults runExperiment(int runTime, int warmup)
     {
         int newRuntime = runTime + warmup;
-        Workload.WorkloadStats workloadStats = Workload.submitOrderFlights(input, coordinator);
+        Workload.WorkloadStats workloadStats = Workload.submitMixedWorkload(orderFlightInput, payBookingInput, coordinator, 0, Integer.MAX_VALUE);
 
         Util.Sleep(newRuntime);
 
@@ -156,11 +165,10 @@ public class AbortExperiment
 
 
     // store it persistently in
-    // default data
     private void ingestData()
     {
         // flight, customer, booking
-        var totalTasks = 2*numIngestionWorkers;
+        var totalTasks = 2*numIngestionWorkers + numIngestionWorkers/2;
 
         ExecutorService threadPool = Executors.newFixedThreadPool(totalTasks);
         BlockingQueue<Future<Void>> completionQueue = new ArrayBlockingQueue<>(totalTasks);
@@ -174,8 +182,16 @@ public class AbortExperiment
         {
             var startIdx = i*recordPerWorker;
             var endIdx = (i+1)*recordPerWorker;
-            service.submit(new IngestionWorkerCustomer(startIdx, endIdx, false), null);
-            service.submit(new IngestionWorkerFlight(startIdx, endIdx, false), null);
+
+            // first half of the flight seats and customers have been booked
+            var injectingBookings = i < numIngestionWorkers/2;
+
+            service.submit(new IngestionWorkerCustomer(startIdx, endIdx, injectingBookings), null);
+            service.submit(new IngestionWorkerFlight(startIdx, endIdx, injectingBookings), null);
+
+            if (injectingBookings) {
+                service.submit(new IngestionWorkerBooking(startIdx, endIdx), null);
+            }
         }
         try {
             for (int i = 0; i < totalTasks; i++) {
@@ -197,27 +213,6 @@ public class AbortExperiment
         // commit ingested data
         var client = HttpClient.newHttpClient();
         // Commit(client);
-    }
-    public static void Commit(HttpClient client)
-    {
-        HttpRequest cust_request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8769/customer/commit"))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("{}"))
-                .build();
-
-        HttpRequest fs_request = HttpRequest.newBuilder()
-                .uri(URI.create(STR."http://localhost:8767/flight/commit"))
-                .header("Accept", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("{}"))
-                .build();
-
-        try {
-            client.send(cust_request, HttpResponse.BodyHandlers.ofString());
-            client.send(fs_request, HttpResponse.BodyHandlers.ofString());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
     }
 
 

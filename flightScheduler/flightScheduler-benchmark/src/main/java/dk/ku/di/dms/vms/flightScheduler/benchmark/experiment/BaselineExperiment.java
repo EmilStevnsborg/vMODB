@@ -13,23 +13,16 @@ import dk.ku.di.dms.vms.flightScheduler.common.events.PayBooking;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.*;
 import java.util.concurrent.*;
 
 import static dk.ku.di.dms.vms.flightScheduler.proxy.Main.loadCoordinator;
 
-public class RecoverVmsExperiment
+public class BaselineExperiment
 {
     private Coordinator coordinator;
     private final Map<Long, BatchStats> BATCH_TO_FINISHED_TS_MAP = new ConcurrentHashMap<>();
-    private final Map<String, Long> CRASH_MAP = new ConcurrentHashMap<>();
-    private final Map<String, Long> CRASH_ACK_MAP = new ConcurrentHashMap<>();
-    private final Map<String, Long> RECONNECTION_MAP = new ConcurrentHashMap<>();
-    private final Map<String, Long> RECONNECTION_ACK_MAP = new ConcurrentHashMap<>();
     private final Random generate = new Random();
     private final int numRecords;
     private final int numIngestionWorkers;
@@ -45,7 +38,7 @@ public class RecoverVmsExperiment
         return min + div;
     }
 
-    public RecoverVmsExperiment(int numRecords, int numTransactions, int numIngestionWorkers)
+    public BaselineExperiment(int numRecords, int numTransactions, int numIngestionWorkers)
     {
         this.numRecords = numRecords;
         this.numIngestionWorkers = numIngestionWorkers;
@@ -61,6 +54,7 @@ public class RecoverVmsExperiment
         this.orderFlightInput = orderFlightInput;
         this.payBookingInput = payBookingInput;
     }
+
 
     public void initExperiment(Properties coordinatorProperties) throws Exception
     {
@@ -79,50 +73,18 @@ public class RecoverVmsExperiment
                     new BatchStats(batchId, commitedTiDs, System.currentTimeMillis()));
         });
 
-        coordinator.registerCrashConsumer((crashedVms) ->  {
-            System.out.println(STR."Registering CRASH in experiment consumer");
-            CRASH_MAP.put(crashedVms, System.currentTimeMillis());
-        });
-
-        coordinator.registerCrashAckConsumer((crashedVms) ->  {
-            System.out.println(STR."Registering CRASH ACK in experiment consumer");
-            CRASH_ACK_MAP.put(crashedVms, System.currentTimeMillis());
-        });
-
-        coordinator.registerReconnectionConsumer((restartedVms) ->  {
-            System.out.println(STR."Registering RECONNECTION in experiment consumer");
-            RECONNECTION_MAP.put(restartedVms, System.currentTimeMillis());
-        });
-
-        coordinator.registerReconnectionAckConsumer((restartedVms) ->  {
-            System.out.println(STR."Registering RECONNECTION ACK in experiment consumer");
-            RECONNECTION_ACK_MAP.put(restartedVms, System.currentTimeMillis());
-        });
-
         System.console().readLine();
         System.out.println(STR."ingesting data");
-        this.ingestData();
+        ingestData();
     }
 
     public ExperimentResults runExperiment(int runTime, int warmup) throws IOException {
         int newRuntime = runTime + warmup;
 
-        int crashPoint = warmup + 5000;
-        int reconnectPoint = crashPoint + 4000;
-
         // workload is submitted and processed by coordinator too quickly
-        // just make two separate functions
-        // return the thread
-        // stop the order flight thread when flight crashes
-        Workload.WorkloadStats workloadStats = Workload.submitMixedWorkload(orderFlightInput, payBookingInput, coordinator, 1000, 1000);
+        Workload.WorkloadStats workloadStats = Workload.submitMixedWorkload(orderFlightInput, payBookingInput, coordinator, 0, Integer.MAX_VALUE);
 
-        // coordinator has already sent the events ...
-        Util.Sleep(crashPoint);
-        ComponentProcess.Kill("flight");
-        Util.Sleep(reconnectPoint-crashPoint);
-        ComponentProcess.StartVms("flight", true, 1);
-        Util.Sleep(runTime-reconnectPoint);
-
+        Util.Sleep(newRuntime);
 
         // avoid submitting after experiment termination
         coordinator.clearTransactionInputs();
@@ -155,8 +117,6 @@ public class RecoverVmsExperiment
         BatchStats firstBatchStats = prevBatchStats;
 
         List<ThroughputInfo> throughputInfo = new ArrayList<>();
-        List<CrashInfo> crashes = new ArrayList<>();
-        List<ReconnectionInfo> reconnections = new ArrayList<>();
 
         // calculate latency based on the batch
         // calculate committed transactions in each time span
@@ -172,45 +132,15 @@ public class RecoverVmsExperiment
             prevBatchStats = currBatchStats;
         }
 
-        for (var entry : CRASH_MAP.entrySet())
-        {
-            var crashedVms = entry.getKey();
-            var timestampStart = entry.getValue();
-
-            var timestampEnd = CRASH_ACK_MAP.get(crashedVms);
-
-            if (timestampStart == null) timestampStart = 0L;
-            if (timestampEnd == null) timestampEnd = 0L;
-
-            System.out.println(STR."Crash: \{crashedVms} started \{timestampStart} and ended \{timestampEnd}");
-
-            crashes.add(new CrashInfo(crashedVms, timestampStart, timestampEnd));
-        }
-
-        for (var entry : RECONNECTION_MAP.entrySet())
-        {
-            var restartedVms = entry.getKey();
-            var timestampStart = entry.getValue();
-
-            var timestampEnd = RECONNECTION_ACK_MAP.get(restartedVms);
-
-            if (timestampStart == null) timestampStart = 0L;
-            if (timestampEnd == null) timestampEnd = 0L;
-
-            System.out.println(STR."Reconnection: \{restartedVms} started \{timestampStart} and ended \{timestampEnd}");
-
-            reconnections.add(new ReconnectionInfo(restartedVms, timestampStart, timestampEnd));
-        }
-
-        var results = ExperimentResults.Recovery(throughputInfo, crashes, reconnections);
+        var results = ExperimentResults.Baseline(throughputInfo);
         writeResultsToFile(results);
 
         return results;
     }
 
 
-    // store it persistently in
-    // default data
+
+
     private void ingestData()
     {
         // flight, customer, booking
@@ -260,39 +190,11 @@ public class RecoverVmsExperiment
         var client = HttpClient.newHttpClient();
         // Commit(client);
     }
-    public static void Commit(HttpClient client)
-    {
-        HttpRequest cust_request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8769/customer/commit"))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("{}"))
-                .build();
-
-        HttpRequest fs_request = HttpRequest.newBuilder()
-                .uri(URI.create(STR."http://localhost:8767/flight/commit"))
-                .header("Accept", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("{}"))
-                .build();
-
-        HttpRequest b_request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8768/booking/commit"))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("{}"))
-                .build();
-
-        try {
-            client.send(cust_request, HttpResponse.BodyHandlers.ofString());
-            client.send(fs_request, HttpResponse.BodyHandlers.ofString());
-            client.send(b_request, HttpResponse.BodyHandlers.ofString());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
 
 
     public static void writeResultsToFile(ExperimentResults results)
     {
-        String fileName = "result_vms_recovery.json";
+        String fileName = "result_baseline.json";
         try {
             ObjectMapper mapper = new ObjectMapper();
             mapper.writerWithDefaultPrettyPrinter().writeValue(new File(fileName), results);
