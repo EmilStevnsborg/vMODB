@@ -9,8 +9,8 @@ vms_recovery_result = "result_vms_recovery"
 coordinator_recovery_result = "result_coordinator_recovery"
 
 # experiment = abort_result
-# experiment = vms_recovery_result
-experiment = baseline_result
+experiment = vms_recovery_result
+# experiment = baseline_result
 # experiment = baseline_result
 
 with open(f"{baseline_result}.json") as f:
@@ -64,6 +64,15 @@ for crash in data_experiment["crashes"]:
 
     plt.axvline(x=ts_p, color="b", linestyle="--", label=f"{vms} crash")
     plt.axvline(x=ts_a, color="b", linestyle="-", label=f"{vms} crash ACK")
+
+
+for reconnection in data_experiment["reconnections"]:
+    ts_p = reconnection["timestampProcessed"]-timestamp_start_global
+    ts_a = reconnection["timestampAcknowledged"]-timestamp_start_global
+    vms = reconnection["restartedVms"]
+
+    plt.axvline(x=ts_p, color="g", linestyle="--", label=f"{vms} attempts reconnection")
+    plt.axvline(x=ts_a, color="g", linestyle="-", label=f"{vms} reconnection ACK")
 
 plt.title("Running Throughput of Committed Transactions")
 plt.xlabel("Time (ms since start)")

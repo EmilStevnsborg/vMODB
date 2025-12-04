@@ -569,27 +569,13 @@ public final class Coordinator extends ModbHttpServer {
     {
         System.out.println(STR."start destroyTransactionWorkers");
         for (var tuple : transactionWorkers) {
-            tuple.t1().stop();
-        }
-        for (var tuple : transactionWorkers) {
-            tuple.t2().interrupt();
-        }
-        for (var tuple : transactionWorkers) {
-            try {
-                tuple.t2().join();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-        for (var q : transactionInputDeques) {
-            q.clear();
-        }
-        for (var q : transactionWorkerMessageQueues) {
-            q.clear();
+            tuple.t1().stopSafely(tuple.t2());
         }
         transactionWorkers.clear();
-        // System.out.println(STR."finished destroyTransactionWorkers");
+        System.out.println(STR."finished destroyTransactionWorkers");
     }
+
+
 
 
     /**
@@ -983,6 +969,7 @@ public final class Coordinator extends ModbHttpServer {
     public boolean queueTransactionInput(TransactionInput transactionInput)
     {
         var dag = transactionMap.get(transactionInput.name);
+        // System.out.println(STR."received \{dag.name}");
 
         // dont accept transactions while recovering
         if (this.coordinatorIsRecovering) {
@@ -1148,7 +1135,7 @@ public final class Coordinator extends ModbHttpServer {
                 ongoingCrashMissingVmsAck.get(crashedVms).remove(vmsAcknowledged);
 
                 var missingACKs = ongoingCrashMissingVmsAck.get(crashedVms);
-                // System.out.println(STR."Crash ACKs missing from [\{String.join(", ", missingACKs)}] for crash of \{crashedVms}");
+                // System.out.println(STR."coordinator CRASH ACKs missing from [\{String.join(", ", missingACKs)}] for crash of \{crashedVms}");
 
                 // crash has been handled
                 if (missingACKs.size() == 0) {
@@ -1345,21 +1332,20 @@ public final class Coordinator extends ModbHttpServer {
 
         this.offlineVMSes.add(crashedVms);
 
+        processingCrash = true;
+
+        //
+        destroyTransactionWorkers();
+
+        // clear all the messages that were queued
+        coordinatorQueue.clear();
+        clearTransactionInputs();
+
         // delete worker
         var crashedVmsWorker = vmsWorkerContainerMap.get(crashedVms);
         if (crashedVmsWorker != null)
             crashedVmsWorker.stop();
         vmsWorkerContainerMap.remove(crashedVms);
-
-//        vmsWorkerContainerMap.values().forEach(worker -> {
-//            worker.clear();
-//        });
-
-        processingCrash = true;
-
-        // clear all the messages that were queued
-        coordinatorQueue.clear();
-        // clearTransactionInputs();
 
         // find the DAGs that use the crashed VMS
         var dags = transactionMap.values();
@@ -1369,12 +1355,7 @@ public final class Coordinator extends ModbHttpServer {
         var affectedTransactions = affectedDags.stream().map(d -> d.name).toList();
         disallowedTransactions.addAll(affectedTransactions);
 
-//        System.out.println(STR."coordinator disallows vms: \{crashedVms}");
-//        for (var tx : affectedTransactions) {
-//            System.out.println(STR."coordinator disallows: \{tx}");
-//        }
-
-        destroyTransactionWorkers();
+        // truth
         long tid;
         long bid;
         try {
@@ -1385,7 +1366,7 @@ public final class Coordinator extends ModbHttpServer {
             tid = 0;
             bid = 0;
         }
-
+        // make sure transactions workers are fully destroyed
         var oldGeneration = this.generation;
         var newGeneration = this.generation.incrementAndGet();
         System.out.println(STR."coordinator setting generation from old \{oldGeneration} to new \{newGeneration} when processing \{crashedVms} crash");
@@ -1401,6 +1382,9 @@ public final class Coordinator extends ModbHttpServer {
         ongoingCrashMissingVmsAck.put(crashedVms, crashParticipants);
 
         // broadcast crash
+        // include the batch and lastTidFinished
+        // we can't rely on the commit protocol
+        // coordinator is the source of truth
         for (var vms : crashParticipants) {
             vmsWorkerContainerMap.get(vms).queueMessage(vmsCrashUpdated);
         }
@@ -1580,11 +1564,6 @@ public final class Coordinator extends ModbHttpServer {
         if(!BATCH_COMMIT_CONSUMERS.isEmpty()) {
             final long numTiDsCommitted = this.numTIDsCommitted.get();
             BATCH_COMMIT_CONSUMERS.forEach(c->c.accept(batchContext.batchOffset, numTiDsCommitted));
-            /* must test both approaches in the experiments
-            for (var task : BATCH_COMMIT_CONSUMERS){
-                submitBackgroundTask(()-> task.accept(tid));
-            }
-             */
         }
     }
 

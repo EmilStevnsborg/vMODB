@@ -108,19 +108,25 @@ public class RecoverVmsExperiment
         int newRuntime = runTime + warmup;
 
         int crashPoint = warmup + 5000;
-        int reconnectPoint = crashPoint + 4000;
+        int reconnectPoint = crashPoint + 5000;
 
         // workload is submitted and processed by coordinator too quickly
         // just make two separate functions
         // return the thread
         // stop the order flight thread when flight crashes
-        Workload.WorkloadStats workloadStats = Workload.submitMixedWorkload(orderFlightInput, payBookingInput, coordinator, 1000, 1000);
+        var orderFlightsThread = Workload.submitOrderFlights(orderFlightInput, coordinator, 1000, 35000);
+//        var payBookingsThread = Workload.submitPayBookings(payBookingInput, coordinator, 1000, 2000);
+
+        var globalInitTs = System.currentTimeMillis();
 
         // coordinator has already sent the events ...
         Util.Sleep(crashPoint);
-        ComponentProcess.Kill("flight");
+        ComponentProcess.Kill("payment");
+        try {
+            orderFlightsThread.interrupt();
+        } catch (Exception e) {}
         Util.Sleep(reconnectPoint-crashPoint);
-        ComponentProcess.StartVms("flight", true, 1);
+        ComponentProcess.StartVms("payment", true, 1);
         Util.Sleep(runTime-reconnectPoint);
 
 
@@ -131,8 +137,8 @@ public class RecoverVmsExperiment
             return new ExperimentResults();
         }
 
-        long endTs = workloadStats.initTs() + newRuntime;
-        long initTs = workloadStats.initTs() + warmup;
+        long endTs = globalInitTs + newRuntime;
+        long initTs = globalInitTs + warmup;
         List<Long> allLatencies = new ArrayList<>();
 
         // find first batch that runs transactions after warm up

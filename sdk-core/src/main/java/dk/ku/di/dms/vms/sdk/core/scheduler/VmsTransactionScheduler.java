@@ -230,6 +230,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                 // wait for running tasks to finish
                 while (task.status() == RUNNING) {}
             }
+            // transactionTaskMap.clear();
 
             // also stop processing tasks
             while(!drained.isEmpty()) {}
@@ -298,14 +299,13 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                 .map(e -> e.getKey())
                 .max(Long::compare)
                 .orElse(0L);
+
+        // tasks are never removed
         lastTidFinished.set(floorEntry);
+
         var maxTidExecuted = lastTidFinished.get();
 
-
-        // unblock the queue
-
-
-         System.out.println(STR."\{vmsIdentifier}-SCHEDULER: sets lastTidFinished to \{lastTidFinished} when clearing for \{failedTid}");
+        // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: sets lastTidFinished to \{lastTidFinished} when clearing for \{failedTid}");
         return new Long[] {numTIDsExecuted, maxTidExecuted};
     }
 
@@ -318,7 +318,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         if(nextTid == null) {
             // keep scheduler sleeping since next tid is unknown
             if (!mustWaitForInputEvent) {
-                // System.out.println(STR."\{vmsIdentifier}-SCHEDULER mustWaitForInputEvent=true");
+//                System.out.println(STR."\{vmsIdentifier}-SCHEDULER mustWaitForInputEvent=true");
                 this.mustWaitForInputEvent = true;
             }
             return;
@@ -337,6 +337,10 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             // must check because partitioned task interleave and may finish before a lower TID
             if(task.isFinished()){
                 // System.out.println(STR."task \{task} with lastTidFinished=\{lastTidFinished} in \{vmsIdentifier} isFinished");
+                if (this.isPaused()) {
+                    System.out.println(STR."Scheduler is paused");
+                    return;
+                }
                 this.updateLastFinishedTid(nextTid);
                 return;
             }
@@ -441,9 +445,9 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     private void processNewEvent(InboundEvent inboundEvent)
     {
         if (inboundEvent.generation() != this.currentGeneration.get()) {
-//            System.out.println(STR."\{vmsIdentifier} inboundEvent gen=\{inboundEvent.generation()} != " +
-//                               STR."currentGeneration=\{currentGeneration} " +
-//                               STR."of inbound event \{inboundEvent.tid()} ignored");
+            System.out.println(STR."\{vmsIdentifier} inboundEvent gen=\{inboundEvent.generation()} != " +
+                               STR."currentGeneration=\{currentGeneration} " +
+                               STR."of inbound event \{inboundEvent.tid()} ignored");
             return;
         }
 
@@ -463,9 +467,9 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                 (abortedTIDs.contains(inboundEvent.tid()) ||
                         abortedTIDs.contains(inboundEvent.lastTid()));
 
-//        System.out.println(STR."\{vmsIdentifier} tid=\{inboundEvent.tid()} batch=\{inboundEvent.batch()} deprecated=\{deprecated}, " +
-//                STR."lastTid=\{inboundEvent.lastTid()} lastTidFinished=\{lastTidFinished}," +
-//                STR."inboundEvent.generation=\{inboundEvent.generation()}, currentGeneration=\{currentGeneration}");
+//        System.out.println(STR."\{vmsIdentifier} tid=\{inboundEvent.tid()} deprecated=\{deprecated}, " +
+//                STR."lastTid=\{inboundEvent.lastTid()}, lastTidFinished=\{lastTidFinished}," +
+//                STR."inbound.generation=\{inboundEvent.generation()}, currentGeneration=\{currentGeneration}");
 
         // deprecated event
         if (deprecated) {
@@ -490,10 +494,10 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
         // mark the last tid, so we can get the next to execute when appropriate
         if(this.lastTidToTidMap.containsKey(inboundEvent.lastTid())){
-            // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: containsKey for lastTid()=\{inboundEvent.lastTid()} of inboundEvent tid=\{inboundEvent.tid()}");
+            //System.out.println(STR."\{vmsIdentifier}-SCHEDULER: containsKey for lastTid()=\{inboundEvent.lastTid()} of inboundEvent tid=\{inboundEvent.tid()}");
         } else {
             this.lastTidToTidMap.put(inboundEvent.lastTid(), inboundEvent.tid());
-            // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: put \{inboundEvent.tid()} in map for \{inboundEvent.lastTid()}");
+            //System.out.println(STR."\{vmsIdentifier}-SCHEDULER: put \{inboundEvent.tid()} in map for \{inboundEvent.lastTid()}");
         }
     }
 

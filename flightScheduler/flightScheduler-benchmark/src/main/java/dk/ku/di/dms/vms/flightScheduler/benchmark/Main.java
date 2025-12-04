@@ -44,7 +44,7 @@ public class Main
 
             // experiment
             var runtime = 20000;
-            var warmup = 5000;
+            var warmup = 2000;
 
             experiment.runExperiment(runtime, warmup);
 

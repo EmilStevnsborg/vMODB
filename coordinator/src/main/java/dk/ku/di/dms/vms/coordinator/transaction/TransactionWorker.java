@@ -180,50 +180,90 @@ public final class TransactionWorker extends StoppableRunnable {
     }
 
     private final AtomicLong numTIDsSubmitted = new AtomicLong(0);
+    private boolean finishedRunning = false;
 
     @Override
     public void run() {
-        LOGGER.log(INFO, "Starting transaction worker # " + this.id);
         TransactionInput data;
         Object coordinatorMessage;
         long lastTidBatch;
         long end;
-        while (this.isRunning()) {
-            lastTidBatch = this.getLastTidNextBatch();
-            end = System.currentTimeMillis() + this.batchWindow;
-            do {
-                // drain transaction inputs
-                // maybe add a condition on a message received from the coordinator
-                while ((coordinatorMessage = messageQueue.poll()) == null &&
+
+        try {
+            while (this.isRunning()) {
+
+                // allow immediate exit if requested
+                if (Thread.interrupted()) break;
+
+                lastTidBatch = this.getLastTidNextBatch();
+                end = System.currentTimeMillis() + this.batchWindow;
+
+                do {
+                    // drain transaction inputs
+                    // maybe add a condition on a message received from the coordinator
+                    while ((coordinatorMessage = messageQueue.poll()) == null &&
+                            this.isRunning() &&
+                            (data = this.inputQueue.poll()) != null &&
+                            // avoid calling currentTimeMillis for every item
+                            this.tid <= lastTidBatch) {
+
+                        // allow immediate exit
+                        if (Thread.interrupted()) return;
+
+                        // process precedence from previous worker in the ring
+                        // we could do it in advance current batch, but can lead to higher wait in vms
+                        this.processTransactionInput(data);
+                    }
+
+                } while (this.isRunning() &&
+                        this.tid <= lastTidBatch &&
+                        System.currentTimeMillis() < end &&
+                        !Thread.interrupted());
+
+                // no tid was processed in this batch
+                if (this.tid == this.startingTidBatch) continue;
+
+                do {
+
+                    if (Thread.interrupted()) return;
+
+                    try {
+                        this.processPendingInput();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+
+                } while (!this.advanceCurrentBatch() &&
                         this.isRunning() &&
-                        (data = this.inputQueue.poll()) != null &&
-                        // avoid calling currentTimeMillis for every item
-                        this.tid <= lastTidBatch) {
-                    // process precedence from previous worker in the ring
-                    // we could do it in advance current batch, but can lead to higher wait in vms
-                    this.processTransactionInput(data);
-                }
-            } while (this.isRunning() && this.tid <= lastTidBatch && System.currentTimeMillis() < end);
+                        !Thread.interrupted());
 
-            // no tid was processed in this batch
-            if(this.tid == this.startingTidBatch) continue;
+                this.tid = this.getTidNextBatch();
 
-            do {
-                this.processPendingInput();
-            } while(!this.advanceCurrentBatch() && this.isRunning());
+                this.startingTidBatch = this.tid;
+            }
 
-            this.tid = this.getTidNextBatch();
-
-            this.startingTidBatch = this.tid;
-
-//            System.out.println(STR."coordinatorMessage in txWorker \{this.id}: \{coordinatorMessage}");
-//            if (coordinatorMessage instanceof VmsCrash.Payload) {
-//                inputQueue.clear();
-//                coordinatorQueue.add(new TxWorkerProcessedCrash(this.id, ((VmsCrash.Payload) coordinatorMessage).vms()));
-//            }
+        } finally {
+            finishedRunning = true;
         }
-        LOGGER.log(INFO, "Finishing transaction worker # " + this.id);
     }
+
+    public void stopSafely(Thread thread)
+    {
+        this.stop();
+
+        // wake up thread
+        thread.interrupt();
+
+        try {
+            // wait for termination
+            thread.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        System.out.println("loop stopped");
+    }
+
+
 
     private long getLastTidNextBatch(){
         return this.tid + this.maxNumberOfTIDsBatch - 1;
@@ -285,7 +325,8 @@ public final class TransactionWorker extends StoppableRunnable {
                     this.generation,
                     transactionInput.event.name, transactionInput.event.payload, precedenceMapStr);
 
-            // System.out.println(STR."\{txEvent.tid()} precedenceMapStr \{precedenceMapStr}");
+//            System.out.println(STR."txWorker queued \{txEvent.tid()} to \{inputVms.identifier} of type \{event.name} " +
+//                    STR."with precedence=\{precedenceMapStr} and gen=\{txEvent.generation()}");
             this.vmsWorkerContainerMap.get(inputVms.identifier).queueTransactionEvent(txEvent);
         }
         this.tid++;
@@ -365,7 +406,8 @@ public final class TransactionWorker extends StoppableRunnable {
                     pendingInput.input.event.name, pendingInput.input.event.payload, precedenceMapStr);
             LOGGER.log(DEBUG,"Leader: Transaction worker "+id+" adding event "+event.name+" to "+inputVms.identifier+" worker:\n"+txEvent+"\n"+pendingInput.previousTidPerVms);
 
-            // System.out.println(STR."\{txEvent.tid()} precedenceMapStr \{precedenceMapStr}");
+//            System.out.println(STR."txWorker queued \{txEvent.tid()} to \{inputVms.identifier} of type \{event.name} " +
+//                               STR."with precedence=\{precedenceMapStr} and gen=\{txEvent.generation()}");
             this.vmsWorkerContainerMap.get(inputVms.identifier).queueTransactionEvent(txEvent);
         }
 

@@ -84,7 +84,7 @@ public class ThesisLoggingHandler implements ILoggingHandler
                 int remaining = committedEvents.size();
                 while (remaining > 0) {
                     buffer = retrieveByteBuffer();
-                    var newRemaining = BatchUtils.assembleBatchPayload(committedEvents.size(), committedEvents, buffer);
+                    var newRemaining = BatchUtils.assembleBatchPayload(remaining, committedEvents, buffer);
                     var numWrittenEvents = remaining-newRemaining;
                     committedEvents = committedEvents.subList(numWrittenEvents, committedEvents.size());
                     remaining = newRemaining;
@@ -180,64 +180,43 @@ public class ThesisLoggingHandler implements ILoggingHandler
     }
 
     @Override
-    public long[] latestCommit() throws IOException
-    {
+    public long[] latestCommit() throws IOException {
         var buffer = retrieveByteBuffer();
+
         long latestCommittedBid = 0;
         long latestCommittedTid = 0;
         long numTIDs = 0;
 
-        var segmentMetadataSize = 1 + 2 * Integer.BYTES + 3 * Long.BYTES;
-        var metadataBuffer = ByteBuffer.allocate(segmentMetadataSize);
-
         long batchPosition = 0;
         fileChannel.position(batchPosition);
 
-        while (fileChannel.position() < fileChannel.size())
-        {
-            metadataBuffer.clear();
-            readMetadata(metadataBuffer);
-
-            byte type = metadataBuffer.get();
-            if (type != BATCH_OF_EVENTS) throw new IOException("expected BATCH_OF_EVENTS, got " + type);
-
-            int segmentSize = metadataBuffer.getInt();
-            int count = metadataBuffer.getInt();
-            long tid = metadataBuffer.getLong();
-            long bid = metadataBuffer.getLong();
-            long generation = metadataBuffer.getLong();
-
-            if (bid < latestCommittedBid) {
-                System.out.println(STR."bid=\{bid} in file is less than \{latestCommittedBid}");
-                batchPosition += segmentSize;
-                fileChannel.position(batchPosition);
-                continue;
-            }
-
-            numTIDs = count;
-            latestCommittedBid = bid;
-
+        while (batchPosition != -1 && fileChannel.position() < fileChannel.size()) {
             fileChannel.position(batchPosition);
-            buffer.clear();
-            buffer.limit(segmentSize);
-            while (buffer.hasRemaining()) {
-                fileChannel.read(buffer);
-            }
+            var segmentMetadata = loadSegment(buffer, batchPosition);
+
             buffer.flip();
             var events = BatchUtils.disAssembleBatchPayload(buffer);
-            var batchMaxTid = events.stream()
-                    .mapToLong(e->e.tid())
-                    .max()
-                    .orElse(-1);
 
-            latestCommittedTid = batchMaxTid;
-            // System.out.println(STR."Updated: latestCommittedBid=\{latestCommittedBid}, latestCommittedTid=\{latestCommittedTid}, eventsInBatch=\{events.size()}");
-            batchPosition += segmentSize;
-            fileChannel.position(batchPosition);
+            if (!events.isEmpty()) {
+                long batchMaxTid = events.stream()
+                        .mapToLong(e -> e.tid())
+                        .max()
+                        .orElse(-1);
+
+                if (batchMaxTid > latestCommittedTid) {
+                    latestCommittedTid = batchMaxTid;
+                    latestCommittedBid = segmentMetadata.bid;
+                }
+            }
+
+            buffer.clear();
+            batchPosition = segmentMetadata.nextFilePosition;
         }
 
-        return new long[]{latestCommittedBid, latestCommittedTid, numTIDs};
+        returnByteBuffer(buffer);
+        return new long[]{latestCommittedBid, latestCommittedTid};
     }
+
 
     private void readMetadata(ByteBuffer metadataBuffer) throws IOException
     {

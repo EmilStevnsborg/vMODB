@@ -338,33 +338,30 @@ public final class VmsEventHandler extends ModbHttpServer {
         // System.out.println(STR."\{me.identifier} aborts all uncommitted transactions");
         pauseHandler.accept(true);
 
-        // update epoch
-
-
         var latestCommitInfo = commitInfo.getLatest();
         var batch = latestCommitInfo[0];
         var maxTid = latestCommitInfo[1];
 
         System.out.println(STR."\{me.identifier} resets to state batch=\{batch} and tid=\{maxTid}");
 
-        // clear transaction event queues
-//        consumerVmsContainerMap.values().forEach(worker -> {
-//            worker.clear();
-//        });
-
         // clear all tasks at the maxTID or later
+        // this does not seem safe
+        // maybe put latest committed
         taskClearer.apply(maxTid+1, batch+1);
 
+        // System.out.println(STR."\{me.identifier} cuts log");
         loggingHandler.cutLog(maxTid+1);
+
+        // System.out.println(STR."\{me.identifier} restores stable state");
         restoreStableState(maxTid+1);
 
-        // clearing internal queue entirely
-        // needs to be done reliably
-        // vmsInternalChannels.transactionInputQueue().clear();
-
+        // System.out.println(STR."\{me.identifier} clears tracked map");
         trackingBatchMap.clear();
+
+        // System.out.println(STR."\{me.identifier} clears batch context map");
         batchContextMap.entrySet().removeIf(entry -> entry.getKey() > batch);
 
+        // System.out.println(STR."\{me.identifier} resumes scheduler");
         pauseHandler.accept(false);
     }
 
@@ -390,10 +387,10 @@ public final class VmsEventHandler extends ModbHttpServer {
         // updating the generation of events being expected
         this.generation.set(vmsCrash.newGeneration());
 
-                // abort uncommitted events
         resetToCommittedState();
 
         var crashAck = CrashAck.of(vmsCrash.vms(), me.identifier);
+        // System.out.println(STR."\{me.identifier} queuing CRASH ACK for leader of \{vmsCrash.vms()}");
         leaderWorker.queueMessage(crashAck);
     }
 
@@ -441,9 +438,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         // input queue clear??? (an event can't be in the queue unless it was processed upstream??)
         // if A->B->C, and 10 aborts in C, then 30 may be in the queue, 30 will still be sent by B?
-        // this is not updating the queue
         // correctness relies on the scheduler to consider old events as deprecated
-        vmsInternalChannels.transactionInputQueue().stream().filter(input -> input.tid() >= tid);
 
         var numTIDsExecuted = metadata[0];
         var maxTidExecuted = metadata[1];
@@ -493,7 +488,8 @@ public final class VmsEventHandler extends ModbHttpServer {
     }
 
     public void processOutputEvent(IVmsTransactionResult txResult) {
-        // System.out.println(STR."new transaction result in \{me.identifier} for tid=\{txResult.tid()}");
+//        System.out.println(STR."new transaction result in \{me.identifier} for tid=\{txResult.tid()} with " +
+//                           STR."gen=\{txResult.getOutboundEventResult().generation()}, and current gen=\{this.generation.get()}");
 
         if (txResult.getOutboundEventResult().isAbort()) {
             abortTransaction(txResult);

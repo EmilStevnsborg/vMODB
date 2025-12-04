@@ -144,20 +144,28 @@ public class Workload
             coordinator.queueTransactionInput(txInput);
         };
     }
-    public static WorkloadStats submitPayBookings(Iterator<PayBooking> payBookingsIterator, final Coordinator coordinator)
+    public static Thread submitPayBookings(Iterator<PayBooking> payBookingsIterator,
+                                           final Coordinator coordinator, int delay, int batchSize)
     {
         var payBookingFunction = payBookingBuilder(coordinator);
         Thread thread = new Thread(() -> {
+            var i = 0;
             while (payBookingsIterator.hasNext()) {
                 try {
+                    if (i >= batchSize) {
+                        Util.Sleep(delay);
+                        i=0;
+                        System.out.println("queuing payBookings stopped sleeping");
+                    }
                     payBookingFunction.accept(payBookingsIterator.next());
+                    i++;
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
             }
         });
         thread.start();
-        return new WorkloadStats(System.currentTimeMillis());
+        return thread;
     }
 
 
@@ -171,19 +179,27 @@ public class Workload
     }
 
     public record WorkloadStats(long initTs){}
-    public static WorkloadStats submitOrderFlights(Iterator<OrderFlight> orderFlightsIterator, final Coordinator coordinator)
+    public static Thread submitOrderFlights(Iterator<OrderFlight> orderFlightsIterator,
+                                            final Coordinator coordinator, int delay, int batchSize)
     {
         var orderFlightFunction = orderFlightBuilder(coordinator);
         Thread thread = new Thread(() -> {
+            var i = 0;
             while (orderFlightsIterator.hasNext()) {
                 try {
+                    if (i >= batchSize) {
+                        Util.Sleep(delay);
+                        i=0;
+                        System.out.println("queuing orderFlights stopped sleeping");
+                    }
                     orderFlightFunction.accept(orderFlightsIterator.next());
+                    i++;
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
             }
         });
         thread.start();
-        return new WorkloadStats(System.currentTimeMillis());
+        return thread;
     }
 }
