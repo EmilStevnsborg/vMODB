@@ -427,6 +427,15 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         }
     }
 
+    // kind of like garbage collection
+    public void removeKeysFromKeysToFlush(long maxTid)
+    {
+        for(IKey key : this.keysToFlush){
+            // only remove from keys to flush if max tid meets the entry
+            this.keysToFlush.remove(key);
+        }
+    }
+
     private static final boolean GARBAGE_COLLECTION = false;
 
     public void checkpoint(long maxTid) {

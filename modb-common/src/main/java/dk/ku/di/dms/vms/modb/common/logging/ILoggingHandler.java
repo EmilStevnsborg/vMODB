@@ -24,6 +24,12 @@ public interface ILoggingHandler {
     default List<TransactionEvent.PayloadRaw> readEventsFrom(long failedTid) { return List.of(); }
 
     default List<TransactionEvent.PayloadRaw> getAffectedEvents(long failedTid) { return List.of(); }
+
+
+
+    default List<TransactionEvent.PayloadRaw> getAffectedEvents(Set<String> eventTypes,
+                                                                long latestCheckpointedTid,
+                                                                long currentGeneration) throws IOException { return List.of(); }
     default Map<String, long[]> getLatestAppearanceOfEventTypes(Set<String> eventTypes) throws IOException { return Map.of(); }
 
     default SegmentMetadata loadSegment(ByteBuffer byteBuffer, long filePosition) throws IOException { return null; }

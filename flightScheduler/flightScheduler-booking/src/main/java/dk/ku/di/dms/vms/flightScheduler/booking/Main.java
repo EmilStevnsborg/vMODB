@@ -71,7 +71,7 @@ public final class Main {
             {
                 System.out.println(STR."committing and checkpointing data up to \{lastTid} in booking");
                 this.transactionManager.commit();
-                this.transactionManager.checkpoint(lastTid);
+                this.transactionManager.checkpointButKeepInMemory(lastTid);
                 return;
             }
 

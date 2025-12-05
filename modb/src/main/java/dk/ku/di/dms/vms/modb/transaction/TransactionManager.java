@@ -463,6 +463,20 @@ public final class TransactionManager implements OperationalAPI, ITransactionMan
         LOGGER.log(INFO, "Checkpoint for max TID "+maxTid+" finished at "+System.currentTimeMillis());
     }
 
+
+    @Override
+    public void checkpointButKeepInMemory(long maxTid){
+        if(this.checkpointing) {
+            for (Table table : this.catalog.values()) {
+                table.primaryKeyIndex().checkpoint(maxTid);
+            }
+        } else {
+            for (Table table : this.catalog.values()) {
+                table.primaryKeyIndex().removeKeysFromKeysToFlush(maxTid);
+            }
+        }
+    }
+
     @Override
     public void restoreStableState(long failedTid)
     {

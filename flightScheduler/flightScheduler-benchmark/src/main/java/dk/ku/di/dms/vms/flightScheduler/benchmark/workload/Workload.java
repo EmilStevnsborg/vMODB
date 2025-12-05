@@ -150,12 +150,12 @@ public class Workload
         var payBookingFunction = payBookingBuilder(coordinator);
         Thread thread = new Thread(() -> {
             var i = 0;
-            while (payBookingsIterator.hasNext()) {
+            while (!Thread.currentThread().isInterrupted() && payBookingsIterator.hasNext()) {
                 try {
                     if (i >= batchSize) {
                         Util.Sleep(delay);
                         i=0;
-                        System.out.println("queuing payBookings stopped sleeping");
+                        // System.out.println("queuing payBookings stopped sleeping");
                     }
                     payBookingFunction.accept(payBookingsIterator.next());
                     i++;
@@ -185,7 +185,7 @@ public class Workload
         var orderFlightFunction = orderFlightBuilder(coordinator);
         Thread thread = new Thread(() -> {
             var i = 0;
-            while (orderFlightsIterator.hasNext()) {
+            while (!Thread.currentThread().isInterrupted() && orderFlightsIterator.hasNext()) {
                 try {
                     if (i >= batchSize) {
                         Util.Sleep(delay);

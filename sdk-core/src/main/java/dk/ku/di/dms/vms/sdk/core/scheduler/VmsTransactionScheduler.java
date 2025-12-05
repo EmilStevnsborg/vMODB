@@ -1,6 +1,7 @@
 package dk.ku.di.dms.vms.sdk.core.scheduler;
 
 import dk.ku.di.dms.vms.modb.api.enums.ExecutionModeEnum;
+import dk.ku.di.dms.vms.modb.common.data_structure.Tuple;
 import dk.ku.di.dms.vms.modb.common.runnable.StoppableRunnable;
 import dk.ku.di.dms.vms.modb.common.transaction.ITransactionManager;
 import dk.ku.di.dms.vms.sdk.core.metadata.VmsTransactionMetadata;
@@ -15,6 +16,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
 import static java.lang.System.Logger.Level.*;
@@ -29,7 +31,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     private static final System.Logger LOGGER = System.getLogger(VmsTransactionScheduler.class.getName());
 
     // must be concurrent since different threads are writing and reading from it concurrently
-    private final Map<Long, VmsTransactionTask> transactionTaskMap;
+    private final ConcurrentHashMap<Long, VmsTransactionTask> transactionTaskMap;
     private Map<Long, Set<Long>> batchAbortedTIDs;
     private AtomicLong currentGeneration;
 
@@ -62,6 +64,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     private final String vmsIdentifier;
 
     private final VmsTransactionTaskBuilder vmsTransactionTaskBuilder;
+    private final ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
     public static VmsTransactionScheduler build(String vmsIdentifier,
                                                 BlockingQueue<InboundEvent> transactionInputQueue,
@@ -230,7 +233,6 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
                 // wait for running tasks to finish
                 while (task.status() == RUNNING) {}
             }
-            // transactionTaskMap.clear();
 
             // also stop processing tasks
             while(!drained.isEmpty()) {}
@@ -248,9 +250,12 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     }
 
     @Override
-    public Long[] taskClearer(long failedTid, long failedTidBatch)
+    public Long[] taskClearer(Tuple<Long, Long> tidBidInfo, boolean isLatestCommitted)
     {
+        // need to acquire write locks on lastTidToTidMap
 
+        var tid = tidBidInfo.t1();
+        var bid = tidBidInfo.t2();
         // System.out.println(STR."\{vmsIdentifier} clearing tasks at and later than \{failedTid}");
 
         // input queue may contain
@@ -259,16 +264,17 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
         long numTIDsExecuted = 0;
         var lastTidToTidMapIterator = lastTidToTidMap.entrySet().iterator();
-        while (lastTidToTidMapIterator.hasNext())
-        {
+        while (lastTidToTidMapIterator.hasNext()) {
             var entry = lastTidToTidMapIterator.next();
             if (entry == null) break;
 
             // transactions after failedTid
-            if (entry.getKey() >= failedTid) {
+            if (entry.getKey() >= tid) {
+//                System.out.println(STR."REMOVES lastTidToTid of \{entry.getKey()} in \{vmsIdentifier}");
                 lastTidToTidMapIterator.remove();
             }
-            if (entry.getValue() == failedTid) {
+            if (entry.getValue() == tid) {
+//                System.out.println(STR."REMOVES lastTidToTid of \{entry.getKey()} to \{tid} in \{vmsIdentifier}");
                 lastTidToTidMapIterator.remove();
             }
         }
@@ -282,30 +288,36 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             var taskTid = entry.getKey();
             VmsTransactionTask task = entry.getValue();
             var taskBatchId = task.batch;
-            if (taskTid >= failedTid) {
+            if (taskTid >= tid) {
                 // System.out.println(STR."REMOVES task \{taskTid} with lastTid=\{task.lastTid} as part of abort for \{failedTid} in \{vmsIdentifier}");
                 transactionTaskMapIterator.remove();
             }
 
             // count the events
-            if (taskBatchId == failedTidBatch && taskTid < failedTid) {
+            if (taskBatchId == bid && taskTid < tid) {
                 numTIDsExecuted += 1;
             }
         }
 
-        var floorEntry = transactionTaskMap.entrySet()
-                .stream()
-                .filter(e -> e.getValue().isFinished() && e.getKey() < failedTid)
-                .map(e -> e.getKey())
-                .max(Long::compare)
-                .orElse(0L);
+        if (isLatestCommitted) {
+            // System.out.println(STR."\{vmsIdentifier}-SCHEDULER task clearer is part of reset");
+            // tasks are never removed
+            lastTidFinished.set(tid - 1);
+        } else {
+            var floorEntry = transactionTaskMap.entrySet()
+                    .stream()
+                    .filter(e -> e.getValue().isFinished() && e.getKey() < tid)
+                    .map(e -> e.getKey())
+                    .max(Long::compare)
+                    .orElse(0L);
 
-        // tasks are never removed
-        lastTidFinished.set(floorEntry);
+            // tasks are never removed
+            lastTidFinished.set(floorEntry);
+        }
 
         var maxTidExecuted = lastTidFinished.get();
 
-        // System.out.println(STR."\{vmsIdentifier}-SCHEDULER: sets lastTidFinished to \{lastTidFinished} when clearing for \{failedTid}");
+        System.out.println(STR."\{vmsIdentifier}-SCHEDULER: sets lastTidFinished to \{lastTidFinished} when clearing for \{tid}");
         return new Long[] {numTIDsExecuted, maxTidExecuted};
     }
 
@@ -452,9 +464,9 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         }
 
         if (this.transactionTaskMap.containsKey(inboundEvent.tid())) {
-            var task = transactionTaskMap.get(inboundEvent.tid());
-            System.out.println(STR."\{vmsIdentifier} inbound \{inboundEvent.tid()} with lastTid=\{inboundEvent.lastTid()} " +
-                               STR."is duplicate for task with lastTid=\{task.lastTid}");
+//            var task = transactionTaskMap.get(inboundEvent.tid());
+//            System.out.println(STR."\{vmsIdentifier} inbound \{inboundEvent.tid()} with lastTid=\{inboundEvent.lastTid()} " +
+//                               STR."is duplicate for task with lastTid=\{task.lastTid}");
 
             return;
         }
@@ -494,10 +506,17 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
         // mark the last tid, so we can get the next to execute when appropriate
         if(this.lastTidToTidMap.containsKey(inboundEvent.lastTid())){
-            //System.out.println(STR."\{vmsIdentifier}-SCHEDULER: containsKey for lastTid()=\{inboundEvent.lastTid()} of inboundEvent tid=\{inboundEvent.tid()}");
+            var containedTiD = this.lastTidToTidMap.get(inboundEvent.lastTid());
+            if (abortedTIDs.contains(containedTiD)) {
+                this.lastTidToTidMap.put(inboundEvent.lastTid(), inboundEvent.tid());
+//                System.out.println(STR."\{vmsIdentifier}-SCHEDULER: put \{inboundEvent.tid()} in map for \{inboundEvent.lastTid()}");
+                return;
+            }
+//            System.out.println(STR."\{vmsIdentifier}-SCHEDULER: containsKey for lastTid()=\{inboundEvent.lastTid()} for " +
+//                               STR."\{lastTidToTidMap.get(inboundEvent.lastTid())} when received inboundEvent tid=\{inboundEvent.tid()}");
         } else {
             this.lastTidToTidMap.put(inboundEvent.lastTid(), inboundEvent.tid());
-            //System.out.println(STR."\{vmsIdentifier}-SCHEDULER: put \{inboundEvent.tid()} in map for \{inboundEvent.lastTid()}");
+//            System.out.println(STR."\{vmsIdentifier}-SCHEDULER: put \{inboundEvent.tid()} in map for \{inboundEvent.lastTid()}");
         }
     }
 

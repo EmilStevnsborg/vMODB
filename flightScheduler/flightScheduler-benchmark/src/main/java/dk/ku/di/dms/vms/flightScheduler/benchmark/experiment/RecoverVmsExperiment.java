@@ -52,12 +52,16 @@ public class RecoverVmsExperiment
 
         // half of the transactions are order flights starting at the midway point
         var numberOfAborts = 0;
-        var initTxOF = numTransactions/2+1;
-        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions/2, numRecords, numberOfAborts, initTxOF);
 
-        // the other half are payBookings
-        var initTxPB = 1;
-        var payBookingInput = Workload.createPayBookingIterator(numTransactions/2, initTxPB);
+//        var initTxOF = numTransactions/2+1;
+//        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions/2, numRecords, numberOfAborts, initTxOF);
+//        var initTxPB = 1;
+//        var payBookingInput = Workload.createPayBookingIterator(numTransactions/2, initTxPB);
+
+        var initTxOF = 1;
+        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions, numRecords, numberOfAborts, initTxOF);
+        var payBookingInput = Workload.createPayBookingIterator(0,0);
+
         this.orderFlightInput = orderFlightInput;
         this.payBookingInput = payBookingInput;
     }
@@ -110,21 +114,23 @@ public class RecoverVmsExperiment
         int crashPoint = warmup + 5000;
         int reconnectPoint = crashPoint + 5000;
 
+        var globalInitTs = System.currentTimeMillis();
+
         // workload is submitted and processed by coordinator too quickly
         // just make two separate functions
         // return the thread
         // stop the order flight thread when flight crashes
         var orderFlightsThread = Workload.submitOrderFlights(orderFlightInput, coordinator, 1000, 35000);
-//        var payBookingsThread = Workload.submitPayBookings(payBookingInput, coordinator, 1000, 2000);
-
-        var globalInitTs = System.currentTimeMillis();
+//        var payBookingsThread = Workload.submitPayBookings(payBookingInput, coordinator, 1000, 35000);
 
         // coordinator has already sent the events ...
         Util.Sleep(crashPoint);
         ComponentProcess.Kill("payment");
-        try {
-            orderFlightsThread.interrupt();
-        } catch (Exception e) {}
+
+//        try {
+//            payBookingsThread.interrupt();
+//        } catch (Exception e) {}
+
         Util.Sleep(reconnectPoint-crashPoint);
         ComponentProcess.StartVms("payment", true, 1);
         Util.Sleep(runTime-reconnectPoint);
@@ -220,7 +226,8 @@ public class RecoverVmsExperiment
     private void ingestData()
     {
         // flight, customer, booking
-        var totalTasks = 2*numIngestionWorkers + numIngestionWorkers/2;
+//        var totalTasks = 2*numIngestionWorkers + numIngestionWorkers/2;
+        var totalTasks = 2*numIngestionWorkers;
 
         ExecutorService threadPool = Executors.newFixedThreadPool(totalTasks);
         BlockingQueue<Future<Void>> completionQueue = new ArrayBlockingQueue<>(totalTasks);
@@ -236,7 +243,8 @@ public class RecoverVmsExperiment
             var endIdx = (i+1)*recordPerWorker;
 
             // first half of the flight seats and customers have been booked
-            var injectingBookings = i < numIngestionWorkers/2;
+//            var injectingBookings = i < numIngestionWorkers/2;
+            var injectingBookings = false;
 
             service.submit(new IngestionWorkerCustomer(startIdx, endIdx, injectingBookings), null);
             service.submit(new IngestionWorkerFlight(startIdx, endIdx, injectingBookings), null);

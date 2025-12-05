@@ -185,7 +185,7 @@ public class ThesisLoggingHandler implements ILoggingHandler
 
         long latestCommittedBid = 0;
         long latestCommittedTid = 0;
-        long numTIDs = 0;
+        long latestVersion = 0;
 
         long batchPosition = 0;
         fileChannel.position(batchPosition);
@@ -207,6 +207,13 @@ public class ThesisLoggingHandler implements ILoggingHandler
                     latestCommittedTid = batchMaxTid;
                     latestCommittedBid = segmentMetadata.bid;
                 }
+
+                long latestVersionSegment = events.stream()
+                        .mapToLong(e -> e.generation())
+                        .max()
+                        .orElse(-1);
+                if (latestVersionSegment > latestVersion) latestVersion = latestVersionSegment;
+
             }
 
             buffer.clear();
@@ -214,7 +221,7 @@ public class ThesisLoggingHandler implements ILoggingHandler
         }
 
         returnByteBuffer(buffer);
-        return new long[]{latestCommittedBid, latestCommittedTid};
+        return new long[]{latestCommittedBid, latestCommittedTid,  latestVersion};
     }
 
 
@@ -308,6 +315,45 @@ public class ThesisLoggingHandler implements ILoggingHandler
             if (precedenceToUpdate.isEmpty()) return;
         }
     }
+
+
+    @Override
+    public List<TransactionEvent.PayloadRaw> getAffectedEvents(Set<String> eventTypes,
+                                                               long latestCheckpointedTid,
+                                                               long currentGeneration) throws IOException
+    {
+        var eventsNotPersisted = new ArrayList<TransactionEvent.PayloadRaw>();
+
+        var buffer = retrieveByteBuffer();
+        long batchPosition = 0;
+        fileChannel.position(batchPosition);
+
+        while (batchPosition != -1 && fileChannel.position() < fileChannel.size())
+        {
+            fileChannel.position(batchPosition);
+            var segmentMetadata = loadSegment(buffer, batchPosition);
+            buffer.flip();
+            var events = BatchUtils.disAssembleBatchPayload(buffer);
+            for (var event : events)
+            {
+                var type = event.event();
+                long tid = event.tid();
+                long batch = event.batch();
+
+                if (eventTypes.contains(type) && tid > latestCheckpointedTid)
+                {
+                    eventsNotPersisted.add(TransactionEvent.of(tid, batch, event.generation(), event.event(), event.payload(), event.precedenceMap()));
+                }
+            }
+            buffer.clear();
+            batchPosition = segmentMetadata.nextFilePosition;
+        }
+        returnByteBuffer(buffer);
+
+        return eventsNotPersisted;
+    }
+
+
     @Override
     public TransactionEvent.PayloadRaw abort(long failedTid) {
         // quick existence check under read-lock for better concurrency

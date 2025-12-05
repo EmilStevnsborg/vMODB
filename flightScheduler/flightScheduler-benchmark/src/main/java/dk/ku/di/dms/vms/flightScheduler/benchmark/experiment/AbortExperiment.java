@@ -50,13 +50,17 @@ public class AbortExperiment
         this.numIngestionWorkers = numIngestionWorkers;
 
         // half of the transactions are order flights starting at the midway point
-        var numberOfAborts = 1;
-        var initTxOF = numTransactions/2+1;
-        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions/2, numRecords, numberOfAborts, initTxOF);
+        var numberOfAborts = 20;
 
-        // the other half are payBookings
-        var initTxPB = 1;
-        var payBookingInput = Workload.createPayBookingIterator(numTransactions/2, initTxPB);
+//        var initTxOF = numTransactions/2+1;
+//        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions/2, numRecords, numberOfAborts, initTxOF);
+//        var initTxPB = 1;
+//        var payBookingInput = Workload.createPayBookingIterator(numTransactions/2, initTxPB);
+
+        var initTxOF = 1;
+        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions, numRecords, numberOfAborts, initTxOF);
+        var payBookingInput = Workload.createPayBookingIterator(0,0);
+
         this.orderFlightInput = orderFlightInput;
         this.payBookingInput = payBookingInput;
     }
@@ -94,7 +98,8 @@ public class AbortExperiment
     public ExperimentResults runExperiment(int runTime, int warmup)
     {
         int newRuntime = runTime + warmup;
-        Workload.WorkloadStats workloadStats = Workload.submitMixedWorkload(orderFlightInput, payBookingInput, coordinator, 0, Integer.MAX_VALUE);
+        var globalInitTs = System.currentTimeMillis();
+        var orderFlightsThread = Workload.submitOrderFlights(orderFlightInput, coordinator, 1000, 35000);
 
         Util.Sleep(newRuntime);
 
@@ -105,8 +110,8 @@ public class AbortExperiment
             return new ExperimentResults();
         }
 
-        long endTs = workloadStats.initTs() + newRuntime;
-        long initTs = workloadStats.initTs() + warmup;
+        long endTs = globalInitTs + newRuntime;
+        long initTs = globalInitTs + warmup;
         List<Long> allLatencies = new ArrayList<>();
 
         // find first batch that runs transactions after warm up
@@ -164,11 +169,11 @@ public class AbortExperiment
     }
 
 
-    // store it persistently in
     private void ingestData()
     {
         // flight, customer, booking
-        var totalTasks = 2*numIngestionWorkers + numIngestionWorkers/2;
+//        var totalTasks = 2*numIngestionWorkers + numIngestionWorkers/2;
+        var totalTasks = 2*numIngestionWorkers;
 
         ExecutorService threadPool = Executors.newFixedThreadPool(totalTasks);
         BlockingQueue<Future<Void>> completionQueue = new ArrayBlockingQueue<>(totalTasks);
@@ -184,7 +189,8 @@ public class AbortExperiment
             var endIdx = (i+1)*recordPerWorker;
 
             // first half of the flight seats and customers have been booked
-            var injectingBookings = i < numIngestionWorkers/2;
+//            var injectingBookings = i < numIngestionWorkers/2;
+            var injectingBookings = false;
 
             service.submit(new IngestionWorkerCustomer(startIdx, endIdx, injectingBookings), null);
             service.submit(new IngestionWorkerFlight(startIdx, endIdx, injectingBookings), null);

@@ -1,5 +1,6 @@
 package dk.ku.di.dms.vms.sdk.embed.handler;
 
+import dk.ku.di.dms.vms.modb.common.data_structure.Tuple;
 import dk.ku.di.dms.vms.modb.common.logging.ILoggingHandler;
 import dk.ku.di.dms.vms.modb.common.logging.LoggingHandlerBuilder;
 import dk.ku.di.dms.vms.modb.common.logging.LongPairStore;
@@ -40,6 +41,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import static dk.ku.di.dms.vms.modb.common.schema.network.Constants.*;
 import static java.lang.System.Logger.Level.*;
@@ -137,7 +139,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     private final Map<Long, Map<String, Long>> tidToPrecedenceMap;
 
     private Consumer<Boolean> pauseHandler;
-    private BiFunction<Long, Long, Long[]> taskClearer;
+    private BiFunction<Tuple<Long, Long>, Boolean, Long[]> taskClearer;
     private BiConsumer<Long, Long> recoveryHandler;
 
     private ILoggingHandler loggingHandler;
@@ -277,7 +279,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         this.pauseHandler = pauseHandler;
     }
 
-    public void AddSchedulerTaskClearer(BiFunction<Long, Long, Long[]> taskClearer){
+    public void AddSchedulerTaskClearer(BiFunction<Tuple<Long, Long>, Boolean, Long[]> taskClearer){
         this.taskClearer = taskClearer;
     }
     public void AddSchedulerRecoveryHandler(BiConsumer<Long, Long> recoveryHandler){
@@ -316,7 +318,13 @@ public final class VmsEventHandler extends ModbHttpServer {
             var latestCommitInfo = commitInfo.getLatest();
             var batch = latestCommitInfo[0];
             var maxTid = latestCommitInfo[1];
+
+            // sets the last tid of the scheduler correctly
             recoveryHandler.accept(batch, maxTid);
+
+            // sets the vmsNode information correctly
+            me.batch = batch;
+            me.lastTid = maxTid;
         } catch (Exception e) {
             //
         }
@@ -324,7 +332,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         // connect to leader
         try {
             var leaderAsInetSocketAddress = new NetworkAddress("localhost", leaderPort);
-            connectToCoordinator(leaderAsInetSocketAddress);
+            pingCoordinator(leaderAsInetSocketAddress);
         } catch (Exception e) {
             System.out.println(STR."\{me.identifier} Failed to reconnect to coordinator");
         }
@@ -347,7 +355,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         // clear all tasks at the maxTID or later
         // this does not seem safe
         // maybe put latest committed
-        taskClearer.apply(maxTid+1, batch+1);
+        taskClearer.apply(new Tuple<>(maxTid+1, batch+1), true);
 
         // System.out.println(STR."\{me.identifier} cuts log");
         loggingHandler.cutLog(maxTid+1);
@@ -402,8 +410,29 @@ public final class VmsEventHandler extends ModbHttpServer {
 
         // init new worker
         var restartedVmsNode = vmsMetadataMap.get(restartedVms);
-        initConsumerVmsWorker(restartedVmsNode, consumerToEventsMap.get(restartedVms), 1); // mauybe identifier should change?
+        initConsumerVmsWorker(restartedVmsNode, consumerToEventsMap.get(restartedVms), 1); // maybe identifier should change?
 
+
+        // resend events from logs
+        var consumedEventTypes = consumerToEventsMap.get(restartedVms).stream().collect(Collectors.toSet());
+        try {
+            var eventsNotPersisted = loggingHandler.getAffectedEvents(consumedEventTypes, reconnection.vmsLastTid(),  this.generation.get());
+
+            if (!eventsNotPersisted.isEmpty()) {
+                System.out.println(STR."restarted VMS \{restartedVms} last checkpointed at " +
+                        STR."tid=\{reconnection.vmsLastTid()}, but coordinator found \{eventsNotPersisted.size()} " +
+                        STR."later than tid");
+
+                for (var event : eventsNotPersisted) {
+                    consumerVmsContainerMap.get(restartedVms).queue(event);
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        System.out.println(STR."\{me.identifier} sending RECONNECTION ACK");
         var reconnectionACK = ReconnectionAck.of(restartedVms, me.identifier);
         leaderWorker.queueMessage(reconnectionACK);
     }
@@ -428,7 +457,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         }
 
         // clear tasks
-        var metadata = taskClearer.apply(tid, bid);
+        var metadata = taskClearer.apply(new Tuple<Long, Long>(tid, bid), false);
 
         // including removing tid
         loggingHandler.cutLog(tid);
@@ -550,7 +579,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                 });
     }
 
-    private void connectToCoordinator(NetworkAddress leaderAddress) throws IOException, InterruptedException, ExecutionException
+    private void pingCoordinator(NetworkAddress leaderAddress) throws IOException, InterruptedException, ExecutionException
     {
         var channel = JdkAsyncChannel.create(this.group);
         NetworkUtils.configure(channel, options.soBufferSize());
@@ -1095,9 +1124,13 @@ public final class VmsEventHandler extends ModbHttpServer {
                 String vmsDataSchemaStr = serdesProxy.serializeDataSchema(me.dataSchema);
                 String vmsInputEventSchemaStr = serdesProxy.serializeEventSchema(me.inputEventSchema);
                 String vmsOutputEventSchemaStr = serdesProxy.serializeEventSchema(me.outputEventSchema);
-                Presentation.writeVms(this.buffer, me, me.identifier, me.batch, 0, me.previousBatch, vmsDataSchemaStr, vmsInputEventSchemaStr, vmsOutputEventSchemaStr);
+                Presentation.writeVms(this.buffer, me, me.identifier, me.batch, me.lastTid, me.previousBatch, vmsDataSchemaStr, vmsInputEventSchemaStr, vmsOutputEventSchemaStr);
                 // the protocol requires the leader to wait for the metadata in order to start sending messages
             } else {
+
+                // write your last committed tid and batch
+
+
                 Presentation.writeVms(this.buffer, me, me.identifier, me.batch, 0, me.previousBatch);
             }
             this.buffer.flip();
@@ -1213,6 +1246,8 @@ public final class VmsEventHandler extends ModbHttpServer {
                         processVmsReconnection(vmsReconnect);
                     }
                     case (RESET_TO_COMMITTED) -> {
+                        ResetToCommittedState.Payload reset = ResetToCommittedState.read(this.readBuffer);
+                        generation.set(reset.newGeneration());
                         resetToCommittedState();
                         leaderWorker.queueMessage(ResetToCommittedAck.of(me.identifier));
                     }
@@ -1396,21 +1431,20 @@ public final class VmsEventHandler extends ModbHttpServer {
 
                 // committing the actual data snapshot and the commitInfo (metadata) about the snapshot
                 // argue that both of these should be atomic
-                submitBackgroundTask(()->{
-                    // System.out.println(STR."checkpointing batch \{batchCommitCommand.batch()} in \{me.identifier}");
-                    checkpoint(batchCommitCommand.batch(), batchMetadata.maxTidExecuted);
 
-                    // log commit info only if snapshot was modified
-                    if (trackingBatchMap.get(batchCommitCommand.batch()).numberTIDsExecuted > 0) {
+                // System.out.println(STR."checkpointing batch \{batchCommitCommand.batch()} in \{me.identifier}");
+                checkpoint(batchCommitCommand.batch(), batchMetadata.maxTidExecuted);
+
+                // log commit info only if snapshot was modified
+                if (trackingBatchMap.get(batchCommitCommand.batch()).numberTIDsExecuted > 0) {
 
 //                        System.out.println(STR."\{me.identifier} executed " +
 //                                           STR."\{trackingBatchMap.get(batchCommitCommand.batch()).numberTIDsExecuted} " +
 //                                           STR."tids in batch \{batchCommitCommand.batch()}");
 
-                        commitInfo.put(batchCommitCommand.batch(), trackingBatchMap.get(batchCommitCommand.batch()).maxTidExecuted);
-                        // System.out.println(STR."Batch \{batchCommitCommand.batch()} committed in \{me.identifier}");
-                    }
-                });
+                    commitInfo.put(batchCommitCommand.batch(), trackingBatchMap.get(batchCommitCommand.batch()).maxTidExecuted);
+                    // System.out.println(STR."Batch \{batchCommitCommand.batch()} committed in \{me.identifier}");
+                }
             }
         }
 

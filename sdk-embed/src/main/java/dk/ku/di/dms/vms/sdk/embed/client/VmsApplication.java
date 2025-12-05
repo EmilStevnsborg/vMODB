@@ -122,7 +122,8 @@ public final class VmsApplication {
 
         IVmsSerdesProxy serdes = VmsSerdesProxyBuilder.build();
 
-        // ideally lastTid and lastBatch must be read from the storage
+        // lastTid and lastBatch must be read from the storage
+        // this is done in the handler
         VmsNode vmsIdentifier = new VmsNode(
                 options.host(), options.port(), vmsName,
                 0, 0,0,

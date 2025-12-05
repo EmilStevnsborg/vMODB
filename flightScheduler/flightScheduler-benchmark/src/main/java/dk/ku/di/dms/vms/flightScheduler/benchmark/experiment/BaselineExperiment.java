@@ -45,12 +45,16 @@ public class BaselineExperiment
 
         // half of the transactions are order flights starting at the midway point
         var numberOfAborts = 0;
-        var initTxOF = numTransactions/2+1;
-        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions/2, numRecords, numberOfAborts, initTxOF);
 
-        // the other half are payBookings
-        var initTxPB = 1;
-        var payBookingInput = Workload.createPayBookingIterator(numTransactions/2, initTxPB);
+//        var initTxOF = numTransactions/2+1;
+//        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions/2, numRecords, numberOfAborts, initTxOF);
+//        var initTxPB = 1;
+//        var payBookingInput = Workload.createPayBookingIterator(numTransactions/2, initTxPB);
+
+        var initTxOF = 1;
+        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions, numRecords, numberOfAborts, initTxOF);
+        var payBookingInput = Workload.createPayBookingIterator(0,0);
+
         this.orderFlightInput = orderFlightInput;
         this.payBookingInput = payBookingInput;
     }
@@ -78,11 +82,11 @@ public class BaselineExperiment
         ingestData();
     }
 
-    public ExperimentResults runExperiment(int runTime, int warmup) throws IOException {
+    public ExperimentResults runExperiment(int runTime, int warmup) throws IOException
+    {
         int newRuntime = runTime + warmup;
-
-        // workload is submitted and processed by coordinator too quickly
-        Workload.WorkloadStats workloadStats = Workload.submitMixedWorkload(orderFlightInput, payBookingInput, coordinator, 0, Integer.MAX_VALUE);
+        var globalInitTs = System.currentTimeMillis();
+        var orderFlightsThread = Workload.submitOrderFlights(orderFlightInput, coordinator, 1000, 35000);
 
         Util.Sleep(newRuntime);
 
@@ -93,8 +97,8 @@ public class BaselineExperiment
             return new ExperimentResults();
         }
 
-        long endTs = workloadStats.initTs() + newRuntime;
-        long initTs = workloadStats.initTs() + warmup;
+        long endTs = globalInitTs + newRuntime;
+        long initTs = globalInitTs + warmup;
         List<Long> allLatencies = new ArrayList<>();
 
         // find first batch that runs transactions after warm up
@@ -144,7 +148,8 @@ public class BaselineExperiment
     private void ingestData()
     {
         // flight, customer, booking
-        var totalTasks = 2*numIngestionWorkers + numIngestionWorkers/2;
+//        var totalTasks = 2*numIngestionWorkers + numIngestionWorkers/2;
+        var totalTasks = 2*numIngestionWorkers;
 
         ExecutorService threadPool = Executors.newFixedThreadPool(totalTasks);
         BlockingQueue<Future<Void>> completionQueue = new ArrayBlockingQueue<>(totalTasks);
@@ -160,7 +165,8 @@ public class BaselineExperiment
             var endIdx = (i+1)*recordPerWorker;
 
             // first half of the flight seats and customers have been booked
-            var injectingBookings = i < numIngestionWorkers/2;
+//            var injectingBookings = i < numIngestionWorkers/2;
+            var injectingBookings = false;
 
             service.submit(new IngestionWorkerCustomer(startIdx, endIdx, injectingBookings), null);
             service.submit(new IngestionWorkerFlight(startIdx, endIdx, injectingBookings), null);

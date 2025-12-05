@@ -6,6 +6,7 @@ package dk.ku.di.dms.vms.modb.common.transaction;
 public interface ITransactionManager {
 
     default void checkpoint(long maxTid) { }
+    default void checkpointButKeepInMemory(long maxTid) { }
     default void restoreStableState(long failedTid) {}
 
     default void commit() { }

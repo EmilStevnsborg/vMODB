@@ -32,14 +32,27 @@ public class RecoverVmsHeavyLoad {
         System.console().readLine();
         System.out.println("TEST: injecting data");
 
-        var customers = DataGenerator.GenerateCustomers(client , 15000, 0);
-        var flightSeats = DataGenerator.GenerateFlightSeats(client , 0, 15000, 0);
+        var customers = DataGenerator.GenerateCustomers(client , 20000, 0);
+        var flightSeats = DataGenerator.GenerateFlightSeats(client , 0, 20000, 0);
+
+        System.out.println(STR."TEST: injecting bookings");
+        var bookings = new ArrayList<Booking>();
+        for (int i = customers.size()/2; i < customers.size(); i++) {
+            var j = i-customers.size()/2;
+
+            var customer = customers.get(i);
+            var flightSeat = flightSeats.get(i);
+            var booking = new Booking(j, customer.customer_id, flightSeat.flight_id, flightSeat.seat_number, new Date().toString(), 20);
+            bookings.add(booking);
+            DataGenerator.SendBooking(client, booking);
+        }
+
         System.out.println(STR."TEST: done injecting");
 
         // batch 1-3, should seal and commit at least two batches
         System.console().readLine();
         System.out.println(STR."TEST: sending transactions");
-        for (var i = 0; i < customers.size(); i++) {
+        for (var i = 0; i < customers.size()/2; i++) {
             if (i == 2500) {
                 ComponentProcess.Kill("payment");
             }
@@ -49,7 +62,9 @@ public class RecoverVmsHeavyLoad {
             if (i % 1000 == 0) {
                 Util.Sleep(1000);
             }
+
             Transactions.OrderFlight(client, customers.get(i), flightSeats.get(i));
+            Transactions.PayBooking(client, i, "VISA");
         }
 
         System.console().readLine();

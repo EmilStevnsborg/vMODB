@@ -470,7 +470,7 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
                 sendVmsReconnect(o);
             }
             case ResetToCommittedState.Payload o -> {
-                sendResetToCommittedState();
+                sendResetToCommittedState(o);
             }
             case String o -> {
                 this.sendConsumerSet(o);
@@ -493,17 +493,17 @@ public final class VmsWorker extends StoppableRunnable implements IVmsWorker {
     {
         // System.out.println(STR."VmsWorker sendAbortUncommittedTransactions message to \{consumerVms.identifier}");
         ByteBuffer writeBuffer = retrieveByteBuffer();
-        VmsReconnect.write(writeBuffer, vmsReconnect.vms());
+        VmsReconnect.write(writeBuffer, vmsReconnect.vms(), vmsReconnect.vmsLastTid());
         writeBuffer.flip();
         this.acquireLock();
         this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);
     }
 
-    private void sendResetToCommittedState()
+    private void sendResetToCommittedState(ResetToCommittedState.Payload resetToCommittedState)
     {
         // System.out.println(STR."VmsWorker sendAbortUncommittedTransactions message to \{consumerVms.identifier}");
         ByteBuffer writeBuffer = retrieveByteBuffer();
-        ResetToCommittedState.write(writeBuffer);
+        ResetToCommittedState.write(writeBuffer, resetToCommittedState.newGeneration());
         writeBuffer.flip();
         this.acquireLock();
         this.channel.write(writeBuffer, options.networkSendTimeout(), TimeUnit.MILLISECONDS, writeBuffer, this.writeCompletionHandler);

@@ -377,10 +377,9 @@ public final class Coordinator extends ModbHttpServer {
                 var latestCommitInfo = loggingHandler.latestCommit();
                 var batchOffset = latestCommitInfo[0];
                 var tid = latestCommitInfo[1];
-                // var latestVersion = latestCommitInfo[2];
-                var latestVersion = 1;
+                var latestVersion = latestCommitInfo[2];
 
-                var resetToCommittedStateMessage = ResetToCommittedState.of();
+                var resetToCommittedStateMessage = ResetToCommittedState.of(latestVersion+1);
 
                 // NEED ACKs
                 for (var vms: vmsMetadataMap.values())
@@ -391,7 +390,7 @@ public final class Coordinator extends ModbHttpServer {
                 System.out.println(STR."Coordinator start latest tid and bid are \{tid} and \{batchOffset}");
 
                 batchOffsetPendingCommit = batchOffset+1;
-                this.generation.set(latestVersion);
+                this.generation.set(latestVersion+1);
 
                 this.setUpTransactionWorkers(tid+1, batchOffset+1);
             }
@@ -505,9 +504,9 @@ public final class Coordinator extends ModbHttpServer {
 
         // this appears to be correct
         // must align with what the VMSes set their lastTidFinished to
-        for (var entry : precedenceMap.entrySet()) {
-            System.out.println(STR."precedenceMap for \{entry.getKey()} is lastTid=\{entry.getValue().lastTid()} and lastBatch=\{entry.getValue().lastBatch()}");
-        }
+//        for (var entry : precedenceMap.entrySet()) {
+//            System.out.println(STR."precedenceMap for \{entry.getKey()} is lastTid=\{entry.getValue().lastTid()} and lastBatch=\{entry.getValue().lastBatch()}");
+//        }
 
         return precedenceMap;
     }
@@ -878,7 +877,7 @@ public final class Coordinator extends ModbHttpServer {
             if (messageIdentifier == VMS_RECONNECTION)
             {
                 buffer.position(1);
-                var node = IdentifiableNode.read(buffer); // this can potentially be hacked
+                var node = IdentifiableNode.read(buffer);
 
                 System.out.println(STR."the coordinator was PINGED by \{node.identifier}");
 
@@ -1029,13 +1028,15 @@ public final class Coordinator extends ModbHttpServer {
                 // all VMSes have received abort
                 if (missingACKs.size() == 0)
                 {
-                    // System.out.println(STR."all ACKs for txAbort \{abortedTid} processed");
+                    System.out.println(STR."all ACKs for txAbort \{abortedTid} processed");
 
                     if(!ABORT_ACK_CONSUMERS.isEmpty()) {
                         ABORT_ACK_CONSUMERS.forEach(c->c.accept(abortedTid));
                     }
 
                     resendTransactions(abortedTid);
+
+                    System.out.println(STR."all transactions resent txAbort \{abortedTid} processed");
                     ongoingAbortMissingVmsAck.remove(abortedTid);
                 }
             }
@@ -1179,6 +1180,7 @@ public final class Coordinator extends ModbHttpServer {
         }
     }
 
+
     private void resendTransactions(long failedTid)
     {
         // don't resend transactions which will be aborted by some pending transaction abort anyway
@@ -1287,19 +1289,19 @@ public final class Coordinator extends ModbHttpServer {
     //////////////////////////////////////////////////////////
 
 
-    private void processReconnectionInCoordinator(String restartedVms)
+    private void processReconnectionInCoordinator(VmsNode restartedVms)
     {
 
-        System.out.println(STR."coordinator processing reconnection of \{restartedVms}, initiate reconnection of producers");
+        System.out.println(STR."coordinator processing reconnection of \{restartedVms.identifier}, initiate reconnection of producers");
 
         if(!RECONNECTION_CONSUMERS.isEmpty()) {
-            RECONNECTION_CONSUMERS.forEach(c->c.accept(restartedVms));
+            RECONNECTION_CONSUMERS.forEach(c->c.accept(restartedVms.identifier));
         }
 
-        var consumerSet = constructVmsConsumerSet().get(restartedVms);
-        vmsWorkerContainerMap.get(restartedVms).queueMessage(consumerSet);
+        var consumerSet = constructVmsConsumerSet().get(restartedVms.identifier);
+        vmsWorkerContainerMap.get(restartedVms.identifier).queueMessage(consumerSet);
 
-        var producerVMSes = computeProducerVMSes(restartedVms);
+        var producerVMSes = computeProducerVMSes(restartedVms.identifier);
         var aliveProducers = producerVMSes.stream()
                 .filter(producer -> !offlineVMSes.contains(producer))
                 .collect(Collectors.toSet());
@@ -1307,12 +1309,32 @@ public final class Coordinator extends ModbHttpServer {
 //        System.out.println(STR."putting \{restartedVms} as ongoing reconnection missing ACKs " +
 //                           STR." from [\{String.join(", ", aliveProducers)}]");
 
-        ongoingReconnectionMissingVmsAck.put(restartedVms, aliveProducers);
+        ongoingReconnectionMissingVmsAck.put(restartedVms.identifier, aliveProducers);
 
-        var reconnectionMessage = VmsReconnect.of(restartedVms);
+        var reconnectionMessage = VmsReconnect.of(restartedVms.identifier, restartedVms.lastTid);
         for (var producer : aliveProducers) {
-            System.out.println(STR."sending RECONNECTION to \{producer} since \{restartedVms} has reconnected");
+            // System.out.println(STR."sending RECONNECTION REQUEST to \{producer} of \{restartedVms.identifier}");
             vmsWorkerContainerMap.get(producer).queueMessage(reconnectionMessage);
+        }
+
+        // resend events from logs
+        var consumedEventTypes = consumerToEventsMap.get(restartedVms.identifier).stream().collect(Collectors.toSet());
+
+        try {
+            var eventsNotPersisted = loggingHandler.getAffectedEvents(consumedEventTypes, restartedVms.lastTid, this.generation.get());
+            if (!eventsNotPersisted.isEmpty()) {
+
+                System.out.println(STR."restarted VMS \{restartedVms.identifier} last checkpointed at " +
+                        STR."tid=\{restartedVms.lastTid}, but coordinator found \{eventsNotPersisted.size()} " +
+                        STR."later than tid");
+
+                for (var event : eventsNotPersisted) {
+                    vmsWorkerContainerMap.get(restartedVms.identifier).queueTransactionEvent(event);
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
@@ -1422,7 +1444,9 @@ public final class Coordinator extends ModbHttpServer {
     private void updateBatchOffsetPendingCommit(BatchContext batchContext)
     {
         if(batchContext.batchOffset == this.batchOffsetPendingCommit) {
+
             // STORE committed batch events persistently
+            // before sending messages to VMSes
             System.out.println(STR."coordinator committing \{batchContext.numTIDsOverall} TiDs in batch \{batchContext.batchOffset}");
             loggingHandler.commit(batchOffsetPendingCommit);
 
@@ -1480,11 +1504,10 @@ public final class Coordinator extends ModbHttpServer {
 
         // second part of reconnection
         // sending out the
-        var vmsIdentifier = vmsIdentifier_.identifier;
-        if (vmsMetadataMap.containsKey(vmsIdentifier) && offlineVMSes.contains(vmsIdentifier))
+        if (vmsMetadataMap.containsKey(vmsIdentifier_.identifier) && offlineVMSes.contains(vmsIdentifier_.identifier))
         {
             // System.out.println(STR."\{vmsIdentifier} introduced itself to the coordinator");
-            processReconnectionInCoordinator(vmsIdentifier);
+            processReconnectionInCoordinator(vmsIdentifier_);
             return;
         }
 
