@@ -16,7 +16,7 @@ public final class Main {
     public static VmsApplication build() throws Exception {
         VmsApplicationOptions options = VmsApplicationOptions.build(
                 "0.0.0.0",
-                8003, new String[]{
+                9877, new String[]{
                         "dk.ku.di.dms.vms.tpcc.order",
                         "dk.ku.di.dms.vms.tpcc.common"
                 });

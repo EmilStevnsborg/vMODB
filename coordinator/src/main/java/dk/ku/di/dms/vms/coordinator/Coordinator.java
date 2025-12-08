@@ -1321,6 +1321,7 @@ public final class Coordinator extends ModbHttpServer {
         var consumedEventTypes = consumerToEventsMap.get(restartedVms.identifier).stream().collect(Collectors.toSet());
 
         try {
+            // update gen of persisted events such that
             var eventsNotPersisted = loggingHandler.getAffectedEvents(consumedEventTypes, restartedVms.lastTid, this.generation.get());
             if (!eventsNotPersisted.isEmpty()) {
 

@@ -1,19 +1,15 @@
 package dk.ku.di.dms.vms.tpcc.proxy.experiment;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import dk.ku.di.dms.vms.coordinator.Coordinator;
 import dk.ku.di.dms.vms.coordinator.transaction.TransactionBootstrap;
 import dk.ku.di.dms.vms.coordinator.transaction.TransactionDAG;
 import dk.ku.di.dms.vms.coordinator.transaction.TransactionInput;
-import dk.ku.di.dms.vms.modb.common.data_structure.Tuple;
 import dk.ku.di.dms.vms.modb.common.schema.network.node.IdentifiableNode;
 import dk.ku.di.dms.vms.tpcc.common.events.NewOrderWareIn;
-import dk.ku.di.dms.vms.tpcc.common.events.PaymentOrderIn;
 import dk.ku.di.dms.vms.tpcc.proxy.workload.WorkloadUtils;
 import dk.ku.di.dms.vms.web_common.IHttpHandler;
 
 import java.io.BufferedWriter;
-import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.time.Instant;
@@ -33,31 +29,22 @@ public final class ExperimentUtils {
 
     private static boolean CONSUMER_REGISTERED = false;
 
-    private static int lastExperimentNumCommitedTiDs = 0;
+    private static int lastExperimentLastTID = 0;
 
-    public static ExperimentResults runExperiment(Coordinator coordinator, List<Iterator<NewOrderWareIn>> input, int runTime, int warmUp) {
+    public static ExperimentStats runExperiment(Coordinator coordinator, List<Iterator<NewOrderWareIn>> input, int runTime, int warmUp) {
 
         // provide a consumer to avoid depending on the coordinator
         Function<NewOrderWareIn, Long> func = newOrderInputBuilder(coordinator);
 
         if(CONSUMER_REGISTERED) {
             // clean up possible entries from previous run
+            BATCH_TO_FINISHED_TS_MAP.keySet().stream().max(Long::compareTo).ifPresent(
+                    highestKey -> lastExperimentLastTID = (int) BATCH_TO_FINISHED_TS_MAP.get(highestKey).lastTid);
             BATCH_TO_FINISHED_TS_MAP.clear();
         } else {
-            coordinator.registerBatchCommitConsumer((batchId, commitedTiDs) -> {
-                BATCH_TO_FINISHED_TS_MAP.put(
-                        batchId,
-                        new BatchStats(batchId, commitedTiDs, System.currentTimeMillis()));
-            });
-
-            coordinator.registerAbortConsumer((abortedTid) ->  {
-                ABORT_MAP.put(abortedTid, System.currentTimeMillis());
-            });
-
-            coordinator.registerAbortAckConsumer((abortedTid) ->  {
-                ABORT_ACK_MAP.put(abortedTid, System.currentTimeMillis());
-            });
-
+            coordinator.registerBatchCommitConsumer((batchId, tid) -> BATCH_TO_FINISHED_TS_MAP.put(
+                    batchId,
+                    new BatchStats(batchId, tid, System.currentTimeMillis())));
             CONSUMER_REGISTERED = true;
         }
 
@@ -76,8 +63,7 @@ public final class ExperimentUtils {
 
         if(BATCH_TO_FINISHED_TS_MAP.isEmpty()) {
             LOGGER.log(WARNING, "No batch of transactions completed!");
-            return new ExperimentResults();
-//            return new ExperimentStats(0, 0, 0, 0, 0, 0, 0, 0);
+            return new ExperimentStats(0, 0, 0, 0, 0, 0, 0, 0);
         }
 
         long endTs = workloadStats.initTs() + newRuntime;
@@ -92,7 +78,7 @@ public final class ExperimentUtils {
         for(var batchStat : BATCH_TO_FINISHED_TS_MAP.entrySet()){
             if(batchStat.getValue().endTs < initTs) {
                 prevBatchStats = batchStat.getValue();
-                numCompletedDuringWarmUp = (int) prevBatchStats.numCommitedTiDs - lastExperimentNumCommitedTiDs;
+                numCompletedDuringWarmUp = (int) prevBatchStats.lastTid - lastExperimentLastTID;
                 continue;
             }
             break;
@@ -102,58 +88,46 @@ public final class ExperimentUtils {
         if(prevBatchStats == null) {
             Long lowestKey = BATCH_TO_FINISHED_TS_MAP.keySet().stream().min(Long::compareTo).orElse(null);
             prevBatchStats = BATCH_TO_FINISHED_TS_MAP.get(lowestKey);
-            numCompletedDuringWarmUp = (int) prevBatchStats.numCommitedTiDs - lastExperimentNumCommitedTiDs;
+            numCompletedDuringWarmUp = (int) prevBatchStats.lastTid - lastExperimentLastTID;
         }
 
         BatchStats firstBatchStats = prevBatchStats;
 
-        List<ThroughputInfo> throughputInfo = new ArrayList<>();
-        List<AbortInfo> aborts = new ArrayList<>();
-
         // calculate latency based on the batch
-        // calculate committed transactions in each time span
         while(BATCH_TO_FINISHED_TS_MAP.containsKey(prevBatchStats.batchId+1)){
             BatchStats currBatchStats = BATCH_TO_FINISHED_TS_MAP.get(prevBatchStats.batchId+1);
             if(currBatchStats.endTs > endTs) break;
-
-            var transactionsInTimeSpan = currBatchStats.numCommitedTiDs - prevBatchStats.numCommitedTiDs;
-            var info = new ThroughputInfo(prevBatchStats.endTs, currBatchStats.endTs, transactionsInTimeSpan);
-            throughputInfo.add(info);
-
             allLatencies.add(currBatchStats.endTs - prevBatchStats.endTs);
             prevBatchStats = currBatchStats;
         }
 
-        for (var entry : ABORT_MAP.entrySet())
-        {
-            var abortedTid = entry.getKey();
-            var timestampStart = entry.getValue();
-            var timestampEnd = ABORT_ACK_MAP.get(abortedTid);
+        numCompletedWithWarmUp = (int) prevBatchStats.lastTid - lastExperimentLastTID;
+        numCompleted = numCompletedWithWarmUp - numCompletedDuringWarmUp;
+        long actualRuntime = prevBatchStats.endTs - firstBatchStats.endTs;
 
-            if (timestampStart == null) timestampStart = 0L;
-            if (timestampEnd == null) timestampEnd = 0L;
+        double average = allLatencies.stream().mapToLong(Long::longValue).average().orElse(0.0);
+        allLatencies.sort(null);
+        double percentile_50 = PercentileCalculator.calculatePercentile(allLatencies, 0.50);
+        double percentile_75 = PercentileCalculator.calculatePercentile(allLatencies, 0.75);
+        double percentile_90 = PercentileCalculator.calculatePercentile(allLatencies, 0.90);
+        double txPerSec = numCompleted / ((double) actualRuntime / 1000L);
 
-            aborts.add(new AbortInfo(abortedTid, timestampStart, timestampEnd));
-        }
+        System.out.println("Average latency: "+ average);
+        System.out.println("Latency at 50th percentile: "+ percentile_50);
+        System.out.println("Latency at 75th percentile: "+ percentile_75);
+        System.out.println("Latency at 90th percentile: "+ percentile_90);
+        System.out.println("Number of completed transactions (during warm up): "+ numCompletedDuringWarmUp);
+        System.out.println("Number of completed transactions (after warm up): "+ numCompleted);
+        System.out.println("Number of completed transactions (total): "+ numCompletedWithWarmUp);
+        System.out.println("Transactions per second: "+txPerSec);
+        System.out.println();
 
-        var results = new ExperimentResults(throughputInfo, aborts);
-
-        return results;
+        return new ExperimentStats(workloadStats.initTs(), numCompletedWithWarmUp, numCompleted, txPerSec, average, percentile_50, percentile_75, percentile_90);
     }
 
     public record ExperimentStats(long initTs, int numCompletedWithWarmUp, int numCompleted, double txPerSec, double average,
                                    double percentile_50, double percentile_75, double percentile_90){}
 
-    public static void writeResultsToFile(ExperimentResults results)
-    {
-        String fileName = "tpcc_result.json";
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            mapper.writerWithDefaultPrettyPrinter().writeValue(new File(fileName), results);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
     public static void writeResultsToFile(int numWare, ExperimentStats expStats, int runTime, int warmUp,
                                           int numTransactionWorkers, int batchWindow, int maxTransactionsPerBatch){
         LocalDateTime time = LocalDateTime.ofInstant(
@@ -203,25 +177,12 @@ public final class ExperimentUtils {
 
     private static final Map<Long, BatchStats> BATCH_TO_FINISHED_TS_MAP = new ConcurrentHashMap<>();
 
-    private record BatchStats(long batchId, long numCommitedTiDs, long endTs){}
-
-    private static final Map<Long, Long> ABORT_MAP = new ConcurrentHashMap<>();
-
-    private static final Map<Long, Long> ABORT_ACK_MAP = new ConcurrentHashMap<>();
+    private record BatchStats(long batchId, long lastTid, long endTs){}
 
     private static Function<NewOrderWareIn, Long> newOrderInputBuilder(final Coordinator coordinator) {
         return newOrderWareIn -> {
             TransactionInput.Event eventPayload = new TransactionInput.Event("new-order-ware-in", newOrderWareIn.toString());
             TransactionInput txInput = new TransactionInput("new_order", eventPayload);
-            coordinator.queueTransactionInput(txInput);
-            return (long) BATCH_TO_FINISHED_TS_MAP.size() + 1;
-        };
-    }
-
-    private static Function<PaymentOrderIn, Long>  paymentInputBuilder(final Coordinator coordinator) {
-        return paymentOrderIn -> {
-            TransactionInput.Event eventPayload = new TransactionInput.Event("payment-order-in", paymentOrderIn.toString());
-            TransactionInput txInput = new TransactionInput("payment", eventPayload);
             coordinator.queueTransactionInput(txInput);
             return (long) BATCH_TO_FINISHED_TS_MAP.size() + 1;
         };
@@ -235,13 +196,6 @@ public final class ExperimentUtils {
                 .terminal("c", "order", "b")
                 .build();
         transactionMap.put(newOrderDag.name, newOrderDag);
-
-        TransactionDAG paymentDag = TransactionBootstrap.name("payment")
-                .input("a", "order", "payment-order-in")
-                .terminal("b", "warehouse", "a")
-                .build();
-        transactionMap.put(paymentDag.name, paymentDag);
-
         Map<String, IdentifiableNode> starterVMSs = getVmsMap(properties);
         Coordinator coordinator = Coordinator.build(properties, starterVMSs, transactionMap, (ignored1) -> IHttpHandler.DEFAULT);
         Thread coordinatorThread = new Thread(coordinator);
@@ -256,9 +210,9 @@ public final class ExperimentUtils {
         if(warehouseHost == null) throw new RuntimeException("Warehouse host is null");
         if(inventoryHost == null) throw new RuntimeException("Inventory host is null");
         if(orderHost == null) throw new RuntimeException("Order host is null");
-        IdentifiableNode warehouseAddress = new IdentifiableNode("warehouse", warehouseHost, 8001);
-        IdentifiableNode inventoryAddress = new IdentifiableNode("inventory", inventoryHost, 8002);
-        IdentifiableNode orderAddress = new IdentifiableNode("order", orderHost, 8003);
+        IdentifiableNode warehouseAddress = new IdentifiableNode("warehouse", warehouseHost, 9876);
+        IdentifiableNode inventoryAddress = new IdentifiableNode("inventory", inventoryHost, 9875);
+        IdentifiableNode orderAddress = new IdentifiableNode("order", orderHost, 9877);
         Map<String, IdentifiableNode> starterVMSs = new HashMap<>();
         starterVMSs.putIfAbsent(warehouseAddress.identifier, warehouseAddress);
         starterVMSs.putIfAbsent(inventoryAddress.identifier, inventoryAddress);

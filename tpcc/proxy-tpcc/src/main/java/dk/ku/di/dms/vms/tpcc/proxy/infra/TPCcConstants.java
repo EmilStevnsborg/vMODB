@@ -8,7 +8,7 @@ public final class TPCcConstants {
     /**
      * WORKLOAD
      */
-    public static final boolean FORCE_ABORTS = true;
+    public static final boolean FORCE_ABORTS = false;
 
     /**
      * DATA
@@ -22,11 +22,11 @@ public final class TPCcConstants {
     /**
      * PORTS
      */
-    public static final int WAREHOUSE_VMS_PORT = 8001;
+    public static final int WAREHOUSE_VMS_PORT = 9876;
 
-    public static final int INVENTORY_VMS_PORT = 8002;
+    public static final int INVENTORY_VMS_PORT = 9875;
 
-    public static final int ORDER_VMS_PORT = 8003;
+    public static final int ORDER_VMS_PORT = 9877;
 
     public static final Map<String, Integer> VMS_TO_PORT_MAP;
 

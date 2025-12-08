@@ -6,14 +6,12 @@ import numpy as np
 baseline_result = "result_baseline"
 abort_result = "result_abort"
 vms_recovery_result = "result_vms_recovery"
-vms_recovery_result = "result_vms_recovery"
-coordinator_recovery_result = "result_coordinator_recovery"
 
-experiment = abort_result
+# experiment = abort_result
 # experiment = vms_recovery_result
-# experiment = baseline_result
+experiment = baseline_result
 
-with open(f"test_experiment_results_final/{experiment}_1.json") as f:
+with open(f"test_results_plot_final/{experiment}.json") as f:
     data_experiment = json.load(f)
 
 
@@ -75,8 +73,8 @@ for reconnection in data_experiment["reconnections"]:
 if experiment == baseline_result:
     #plot constant line
     plt.title("Baseline Running Throughput")
-    avg_throughput = int(np.floor(np.mean(throughputs_np)/1000))
-    plt.axhline(y=avg_throughput*1000, color="k", linestyle="--", label=f"Average Throughput ~{avg_throughput}K TXs / s")
+    avg_throughput = np.mean(throughputs_np)
+    plt.axhline(y=avg_throughput, color="k", linestyle="--", label=f"Average Throughput ~{('%.0f'%avg_throughput)} TXs / s")
 elif experiment == abort_result:
     plt.title("Abort Effects on Running Throughput")
 else:
@@ -85,8 +83,8 @@ else:
 plt.xlabel("Time in seconds (s)")
 plt.ylabel("Throughput (Committed TXs / s)")
 
-plt.ylim(30000, 40000)
-plt.yticks(range(25000, 40001, 5000))
+plt.ylim(32000, 37000)
+plt.yticks(range(32000, 37001, 1000))
 
 xmin = max(1, int(np.floor(timestamps_np.min()/1000)))
 xmax = int(np.ceil(timestamps_np.max()/1000))

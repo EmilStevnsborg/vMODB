@@ -29,6 +29,7 @@ public final class WarehouseHttpHandler extends DefaultHttpHandler {
 
     @Override
     public Object getAsJson(String uri) throws RuntimeException {
+        System.out.println("WarehouseHttpHandler.getAsJson");
         String[] uriSplit = uri.split("/");
         String table;
         switch (uriSplit.length){
@@ -37,9 +38,11 @@ public final class WarehouseHttpHandler extends DefaultHttpHandler {
             case 5 -> table = uriSplit[uriSplit.length - 4];
             default -> table = "";
         }
+        System.out.println("WarehouseHttpHandler.getAsJson table: " + table);
         switch (table){
             case "warehouse" -> {
                 int wareId = Integer.parseInt(uriSplit[uriSplit.length - 1]);
+                System.out.println("WarehouseHttpHandler.getAsJson warehouse wareId: " + wareId);
                 this.transactionManager.beginTransaction(0, 0, 0, true);
                 return this.warehouseRepository.lookupByKey(wareId);
             }
@@ -82,10 +85,6 @@ public final class WarehouseHttpHandler extends DefaultHttpHandler {
                 Customer customer = SERDES.deserialize(payload, Customer.class);
                 this.transactionManager.beginTransaction(0, 0, 0, false);
                 this.customerRepository.upsert(customer);
-            }
-            case "commit" -> {
-                transactionManager.commit();
-                transactionManager.checkpoint(0);
             }
         }
     }

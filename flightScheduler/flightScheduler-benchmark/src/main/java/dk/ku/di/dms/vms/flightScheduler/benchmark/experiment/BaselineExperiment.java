@@ -52,7 +52,7 @@ public class BaselineExperiment
 //        var payBookingInput = Workload.createPayBookingIterator(numTransactions/2, initTxPB);
 
         var initTxOF = 1;
-        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions, numRecords, numberOfAborts, initTxOF);
+        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions, numRecords, numberOfAborts, initTxOF, 0);
         var payBookingInput = Workload.createPayBookingIterator(0,0);
 
         this.orderFlightInput = orderFlightInput;
@@ -86,7 +86,7 @@ public class BaselineExperiment
     {
         int newRuntime = runTime + warmup;
         var globalInitTs = System.currentTimeMillis();
-        var orderFlightsThread = Workload.submitOrderFlights(orderFlightInput, coordinator, 1000, 35000);
+        var orderFlightsThread = Workload.submitOrderFlights(orderFlightInput, coordinator, 1000, 40000);
 
         Util.Sleep(newRuntime);
 

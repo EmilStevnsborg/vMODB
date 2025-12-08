@@ -6,7 +6,6 @@ import dk.ku.di.dms.vms.modb.index.unique.UniqueHashBufferIndex;
 import dk.ku.di.dms.vms.tpcc.common.events.NewOrderWareIn;
 import dk.ku.di.dms.vms.tpcc.proxy.dataload.DataLoadUtils;
 import dk.ku.di.dms.vms.tpcc.proxy.dataload.QueueTableIterator;
-import dk.ku.di.dms.vms.tpcc.proxy.experiment.ExperimentResults;
 import dk.ku.di.dms.vms.tpcc.proxy.experiment.ExperimentUtils;
 import dk.ku.di.dms.vms.tpcc.proxy.infra.MinimalHttpClient;
 import dk.ku.di.dms.vms.tpcc.proxy.infra.TPCcConstants;
@@ -33,13 +32,6 @@ public final class Main {
             loadMicroBenchMenu();
         }
     }
-
-//    private static void testBenchMenu() throws Exception
-//    {
-//        dk.ku.di.dms.vms.tpcc.warehouse.Main.main(null);
-//        dk.ku.di.dms.vms.tpcc.inventory.Main.main(null);
-//        dk.ku.di.dms.vms.tpcc.order.Main.main(null);
-//    }
 
     private static void loadMicroBenchMenu() throws Exception {
         // set default values to override for all in-process VMSes
@@ -210,15 +202,9 @@ public final class Main {
                             numConnected = coordinator.getConnectedVMSs().size();
                         } while (numConnected < 3);
                     }
-
-                    var experimentResults = ExperimentUtils.runExperiment(coordinator, input, runTime, warmUp);
-                    ExperimentUtils.writeResultsToFile(experimentResults);
-
-//                    var expStats = ExperimentUtils.runExperiment(coordinator, input, runTime, warmUp);
-//                    ExperimentUtils.writeResultsToFile(numWare, expStats, runTime, warmUp,
-//                            coordinator.getOptions().getNumTransactionWorkers(), coordinator.getOptions().getBatchWindow(), coordinator.getOptions().getMaxTransactionsPerBatch());
-
-
+                    var expStats = ExperimentUtils.runExperiment(coordinator, input, runTime, warmUp);
+                    ExperimentUtils.writeResultsToFile(numWare, expStats, runTime, warmUp,
+                            coordinator.getOptions().getNumTransactionWorkers(), coordinator.getOptions().getBatchWindow(), coordinator.getOptions().getMaxTransactionsPerBatch());
                     break;
                 case "5":
                     System.out.println("Option 5: \"Reset service states\" selected.");

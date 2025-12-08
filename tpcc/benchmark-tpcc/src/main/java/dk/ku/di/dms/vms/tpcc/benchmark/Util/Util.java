@@ -1,4 +1,4 @@
-package dk.ku.di.dms.vms.tpcc.proxy.Util;
+package dk.ku.di.dms.vms.tpcc.benchmark.Util;
 
 public class Util
 {
@@ -6,7 +6,7 @@ public class Util
     {
         try
         {
-            System.out.println(STR."Sleeping for \{milliseconds}ms....");
+            // System.out.println(STR."Sleeping for \{milliseconds}ms....");
             Thread.sleep(milliseconds);
         } catch (InterruptedException e){}
     }

@@ -507,7 +507,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         // mark the last tid, so we can get the next to execute when appropriate
         if(this.lastTidToTidMap.containsKey(inboundEvent.lastTid())){
             var containedTiD = this.lastTidToTidMap.get(inboundEvent.lastTid());
-            if (abortedTIDs.contains(containedTiD)) {
+            if (abortedTIDs != null && abortedTIDs.contains(containedTiD)) {
                 this.lastTidToTidMap.put(inboundEvent.lastTid(), inboundEvent.tid());
 //                System.out.println(STR."\{vmsIdentifier}-SCHEDULER: put \{inboundEvent.tid()} in map for \{inboundEvent.lastTid()}");
                 return;

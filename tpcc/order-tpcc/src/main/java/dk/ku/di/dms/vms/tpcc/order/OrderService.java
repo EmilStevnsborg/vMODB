@@ -1,9 +1,10 @@
 package dk.ku.di.dms.vms.tpcc.order;
 
-import dk.ku.di.dms.vms.modb.api.annotations.*;
+import dk.ku.di.dms.vms.modb.api.annotations.Inbound;
+import dk.ku.di.dms.vms.modb.api.annotations.Microservice;
+import dk.ku.di.dms.vms.modb.api.annotations.Parallel;
+import dk.ku.di.dms.vms.modb.api.annotations.Transactional;
 import dk.ku.di.dms.vms.tpcc.common.events.NewOrderInvOut;
-import dk.ku.di.dms.vms.tpcc.common.events.PaymentOrderIn;
-import dk.ku.di.dms.vms.tpcc.common.events.PaymentOrderOut;
 import dk.ku.di.dms.vms.tpcc.order.entities.NewOrder;
 import dk.ku.di.dms.vms.tpcc.order.entities.Order;
 import dk.ku.di.dms.vms.tpcc.order.entities.OrderLine;
@@ -15,7 +16,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import static dk.ku.di.dms.vms.modb.api.enums.TransactionTypeEnum.R;
 import static dk.ku.di.dms.vms.modb.api.enums.TransactionTypeEnum.W;
 
 @Microservice("order")
@@ -29,17 +29,6 @@ public final class OrderService {
         this.orderRepository = orderRepository;
         this.newOrderRepository = newOrderRepository;
         this.orderLineRepository = orderLineRepository;
-    }
-
-    @Inbound(values = "payment-order-in")
-    @Transactional(type = R)
-    @Outbound(value = "payment-order-out")
-    public PaymentOrderOut processNewPayment(PaymentOrderIn in)
-    {
-        var orderId = new Order.OrderId(in.o_id, in.o_d_id, in.o_w_id);
-        var order = orderRepository.lookupByKey(orderId);
-
-        return new PaymentOrderOut(order.o_c_id, order.o_d_id, order.o_w_id, 100);
     }
 
     @Inbound(values = "new-order-inv-out")

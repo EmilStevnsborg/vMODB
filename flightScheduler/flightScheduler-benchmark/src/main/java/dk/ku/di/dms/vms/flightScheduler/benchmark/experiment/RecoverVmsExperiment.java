@@ -26,10 +26,10 @@ public class RecoverVmsExperiment
 {
     private Coordinator coordinator;
     private final Map<Long, BatchStats> BATCH_TO_FINISHED_TS_MAP = new ConcurrentHashMap<>();
-    private final Map<String, Long> CRASH_MAP = new ConcurrentHashMap<>();
-    private final Map<String, Long> CRASH_ACK_MAP = new ConcurrentHashMap<>();
-    private final Map<String, Long> RECONNECTION_MAP = new ConcurrentHashMap<>();
-    private final Map<String, Long> RECONNECTION_ACK_MAP = new ConcurrentHashMap<>();
+    private final Map<String, List<Long>> CRASH_MAP = new ConcurrentHashMap<>();
+    private final Map<String, List<Long>> CRASH_ACK_MAP = new ConcurrentHashMap<>();
+    private final Map<String, List<Long>> RECONNECTION_MAP = new ConcurrentHashMap<>();
+    private final Map<String, List<Long>> RECONNECTION_ACK_MAP = new ConcurrentHashMap<>();
     private final Random generate = new Random();
     private final int numRecords;
     private final int numIngestionWorkers;
@@ -59,7 +59,7 @@ public class RecoverVmsExperiment
 //        var payBookingInput = Workload.createPayBookingIterator(numTransactions/2, initTxPB);
 
         var initTxOF = 1;
-        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions, numRecords, numberOfAborts, initTxOF);
+        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions, numRecords, numberOfAborts, initTxOF, 0);
         var payBookingInput = Workload.createPayBookingIterator(0,0);
 
         this.orderFlightInput = orderFlightInput;
@@ -83,24 +83,30 @@ public class RecoverVmsExperiment
                     new BatchStats(batchId, commitedTiDs, System.currentTimeMillis()));
         });
 
+        // keep a list
         coordinator.registerCrashConsumer((crashedVms) ->  {
             System.out.println(STR."Registering CRASH in experiment consumer");
-            CRASH_MAP.put(crashedVms, System.currentTimeMillis());
+            CRASH_MAP.putIfAbsent(crashedVms, new ArrayList<>());
+            CRASH_MAP.get(crashedVms).add(System.currentTimeMillis());
         });
 
+        // keep a list
         coordinator.registerCrashAckConsumer((crashedVms) ->  {
             System.out.println(STR."Registering CRASH ACK in experiment consumer");
-            CRASH_ACK_MAP.put(crashedVms, System.currentTimeMillis());
+            CRASH_ACK_MAP.putIfAbsent(crashedVms, new ArrayList<>());
+            CRASH_ACK_MAP.get(crashedVms).add(System.currentTimeMillis());
         });
 
         coordinator.registerReconnectionConsumer((restartedVms) ->  {
             System.out.println(STR."Registering RECONNECTION in experiment consumer");
-            RECONNECTION_MAP.put(restartedVms, System.currentTimeMillis());
+            RECONNECTION_MAP.putIfAbsent(restartedVms, new ArrayList<>());
+            RECONNECTION_MAP.get(restartedVms).add(System.currentTimeMillis());
         });
 
         coordinator.registerReconnectionAckConsumer((restartedVms) ->  {
             System.out.println(STR."Registering RECONNECTION ACK in experiment consumer");
-            RECONNECTION_ACK_MAP.put(restartedVms, System.currentTimeMillis());
+            RECONNECTION_ACK_MAP.putIfAbsent(restartedVms, new ArrayList<>());
+            RECONNECTION_ACK_MAP.get(restartedVms).add(System.currentTimeMillis());
         });
 
         System.console().readLine();
@@ -124,16 +130,25 @@ public class RecoverVmsExperiment
 //        var payBookingsThread = Workload.submitPayBookings(payBookingInput, coordinator, 1000, 35000);
 
         // coordinator has already sent the events ...
-        Util.Sleep(crashPoint);
-        ComponentProcess.Kill("payment");
+//        Util.Sleep(crashPoint);
 
-//        try {
-//            payBookingsThread.interrupt();
-//        } catch (Exception e) {}
+        Util.Sleep(warmup);
+        for (int i = 0; i < 4; i++) {
+            ComponentProcess.Kill("payment");
+            Util.Sleep(2500);
+            ComponentProcess.StartVms("payment", true, 1);
+            Util.Sleep(2500);
+        }
 
-        Util.Sleep(reconnectPoint-crashPoint);
-        ComponentProcess.StartVms("payment", true, 1);
-        Util.Sleep(runTime-reconnectPoint);
+//        ComponentProcess.Kill("payment");
+//
+////        try {
+////            payBookingsThread.interrupt();
+////        } catch (Exception e) {}
+//
+//        Util.Sleep(reconnectPoint-crashPoint);
+//        ComponentProcess.StartVms("payment", true, 1);
+//        Util.Sleep(runTime-reconnectPoint);
 
 
         // avoid submitting after experiment termination
@@ -187,31 +202,31 @@ public class RecoverVmsExperiment
         for (var entry : CRASH_MAP.entrySet())
         {
             var crashedVms = entry.getKey();
-            var timestampStart = entry.getValue();
+            var timestampStarts = CRASH_MAP.get(crashedVms);
+            var timestampEnds = CRASH_ACK_MAP.get(crashedVms);
 
-            var timestampEnd = CRASH_ACK_MAP.get(crashedVms);
+            for (int i = 0; i < timestampEnds.size(); i++) {
+                var timestampStart = timestampStarts.get(i);
+                var timestampEnd = timestampEnds.get(i);
 
-            if (timestampStart == null) timestampStart = 0L;
-            if (timestampEnd == null) timestampEnd = 0L;
-
-            System.out.println(STR."Crash: \{crashedVms} started \{timestampStart} and ended \{timestampEnd}");
-
-            crashes.add(new CrashInfo(crashedVms, timestampStart, timestampEnd));
+                System.out.println(STR."Crash: \{crashedVms} started \{timestampStart} and ended \{timestampEnd}");
+                crashes.add(new CrashInfo(crashedVms, timestampStart, timestampEnd));
+            }
         }
 
         for (var entry : RECONNECTION_MAP.entrySet())
         {
             var restartedVms = entry.getKey();
-            var timestampStart = entry.getValue();
+            var timestampStarts = RECONNECTION_MAP.get(restartedVms);
+            var timestampEnds = RECONNECTION_ACK_MAP.get(restartedVms);
 
-            var timestampEnd = RECONNECTION_ACK_MAP.get(restartedVms);
+            for (int i = 0; i < timestampEnds.size(); i++) {
+                var timestampStart = timestampStarts.get(i);
+                var timestampEnd = timestampEnds.get(i);
 
-            if (timestampStart == null) timestampStart = 0L;
-            if (timestampEnd == null) timestampEnd = 0L;
-
-            System.out.println(STR."Reconnection: \{restartedVms} started \{timestampStart} and ended \{timestampEnd}");
-
-            reconnections.add(new ReconnectionInfo(restartedVms, timestampStart, timestampEnd));
+                System.out.println(STR."Reconnection: \{restartedVms} started \{timestampStart} and ended \{timestampEnd}");
+                reconnections.add(new ReconnectionInfo(restartedVms, timestampStart, timestampEnd));
+            }
         }
 
         var results = ExperimentResults.Recovery(throughputInfo, crashes, reconnections);

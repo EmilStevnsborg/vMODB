@@ -29,16 +29,16 @@ public class Workload
         }
         return min + div;
     }
-    public static Iterator<OrderFlight> createOrderFlightIterator(int numTransactions, int numberOfCustomers, int numberOfAborts, int initTx)
+    public static Iterator<OrderFlight> createOrderFlightIterator(int numTransactions, int numberOfCustomers, int numberOfAborts, int initTx, int warmupTransactions)
     {
         var aborts = new HashSet<Integer>();
         if (numberOfAborts > 0) {
             // start
-            var start = initTx + numTransactions/5;
-            var increment = (numTransactions-start)/numberOfAborts;
+            var start = initTx + warmupTransactions;
+            var increment = (numTransactions-start+1)/numberOfAborts;
 
             for (int i = 0; i < numberOfAborts; i++) {
-                var tx = start + i*increment;
+                var tx = start + i*increment + increment/2;
                 System.out.println(STR."Abort orderFlight tx=\{tx}");
                 aborts.add(tx);
             }

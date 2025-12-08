@@ -1,4 +1,4 @@
-package dk.ku.di.dms.vms.tpcc.proxy.Util;
+package dk.ku.di.dms.vms.tpcc.benchmark.Util;
 
 import java.io.File;
 import java.io.IOException;
@@ -62,7 +62,7 @@ public class ComponentProcess
     }
     public static void KillVMSes()
     {
-        List<String> components = List.of("order", "warehouse", "inventory");
+        List<String> components = List.of("warehouse", "inventory", "order");
         KillComponents(components);
     }
 
@@ -81,7 +81,7 @@ public class ComponentProcess
     }
     public static void StartVMSes() throws Exception
     {
-        List<String> components = List.of("order", "warehouse", "inventory");
+        List<String> components = List.of("warehouse", "inventory", "order");
         ComponentProcess.StartComponents(components);
     }
     public static void StartProxy(boolean recoverable, int numVmsWorkers, int numQueuesVmsWorker,
@@ -89,7 +89,7 @@ public class ComponentProcess
             throws IOException
     {
         var args = List.of(STR."recoverable=\{recoverable}",
-                           STR."num_vms_workers=\{numVmsWorkers}",
+                           STR."n1um_vms_workers=\{numVmsWorkers}",
                            STR."num_queues_vms_worker=\{numQueuesVmsWorker}",
                            STR."num_transaction_workers=\{numTransactionWorkers}",
                            STR."batch_window_ms=\{timeout}",

@@ -1,0 +1,94 @@
+{
+  "throughputInfo" : [ {
+    "timestampStart" : 1765105194407,
+    "timestampEnd" : 1765105196843,
+    "numCommittedTiDs" : 35000
+  }, {
+    "timestampStart" : 1765105196843,
+    "timestampEnd" : 1765105198059,
+    "numCommittedTiDs" : 35000
+  }, {
+    "timestampStart" : 1765105198059,
+    "timestampEnd" : 1765105199218,
+    "numCommittedTiDs" : 35000
+  }, {
+    "timestampStart" : 1765105199218,
+    "timestampEnd" : 1765105200410,
+    "numCommittedTiDs" : 35000
+  }, {
+    "timestampStart" : 1765105200410,
+    "timestampEnd" : 1765105202969,
+    "numCommittedTiDs" : 35000
+  }, {
+    "timestampStart" : 1765105202969,
+    "timestampEnd" : 1765105204287,
+    "numCommittedTiDs" : 35000
+  }, {
+    "timestampStart" : 1765105204287,
+    "timestampEnd" : 1765105205473,
+    "numCommittedTiDs" : 35000
+  }, {
+    "timestampStart" : 1765105205473,
+    "timestampEnd" : 1765105207894,
+    "numCommittedTiDs" : 35000
+  }, {
+    "timestampStart" : 1765105207894,
+    "timestampEnd" : 1765105209088,
+    "numCommittedTiDs" : 35000
+  }, {
+    "timestampStart" : 1765105209088,
+    "timestampEnd" : 1765105210280,
+    "numCommittedTiDs" : 35000
+  }, {
+    "timestampStart" : 1765105210280,
+    "timestampEnd" : 1765105211495,
+    "numCommittedTiDs" : 35000
+  }, {
+    "timestampStart" : 1765105211495,
+    "timestampEnd" : 1765105213897,
+    "numCommittedTiDs" : 35000
+  }, {
+    "timestampStart" : 1765105213897,
+    "timestampEnd" : 1765105215370,
+    "numCommittedTiDs" : 35000
+  }, {
+    "timestampStart" : 1765105215370,
+    "timestampEnd" : 1765105216560,
+    "numCommittedTiDs" : 35000
+  } ],
+  "aborts" : [ ],
+  "crashes" : [ {
+    "crashedVms" : "payment",
+    "timestampProcessed" : 1765105195189,
+    "timestampAcknowledged" : 1765105195383
+  }, {
+    "crashedVms" : "payment",
+    "timestampProcessed" : 1765105200782,
+    "timestampAcknowledged" : 1765105200989
+  }, {
+    "crashedVms" : "payment",
+    "timestampProcessed" : 1765105206382,
+    "timestampAcknowledged" : 1765105206512
+  }, {
+    "crashedVms" : "payment",
+    "timestampProcessed" : 1765105211892,
+    "timestampAcknowledged" : 1765105212087
+  } ],
+  "reconnections" : [ {
+    "restartedVms" : "payment",
+    "timestampProcessed" : 1765105199701,
+    "timestampAcknowledged" : 1765105199796
+  }, {
+    "restartedVms" : "payment",
+    "timestampProcessed" : 1765105205181,
+    "timestampAcknowledged" : 1765105205249
+  }, {
+    "restartedVms" : "payment",
+    "timestampProcessed" : 1765105210808,
+    "timestampAcknowledged" : 1765105210912
+  }, {
+    "restartedVms" : "payment",
+    "timestampProcessed" : 1765105216227,
+    "timestampAcknowledged" : 1765105216340
+  } ]
+}

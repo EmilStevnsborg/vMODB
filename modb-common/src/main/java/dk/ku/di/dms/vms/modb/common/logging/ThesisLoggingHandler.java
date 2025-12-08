@@ -342,7 +342,8 @@ public class ThesisLoggingHandler implements ILoggingHandler
 
                 if (eventTypes.contains(type) && tid > latestCheckpointedTid)
                 {
-                    eventsNotPersisted.add(TransactionEvent.of(tid, batch, event.generation(), event.event(), event.payload(), event.precedenceMap()));
+//                    eventsNotPersisted.add(TransactionEvent.of(tid, batch, event.generation(), event.event(), event.payload(), event.precedenceMap()));
+                    eventsNotPersisted.add(TransactionEvent.of(tid, batch, currentGeneration, event.event(), event.payload(), event.precedenceMap()));
                 }
             }
             buffer.clear();

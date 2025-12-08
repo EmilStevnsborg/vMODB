@@ -59,10 +59,6 @@ public final class InventoryHttpHandler extends DefaultHttpHandler {
                 this.transactionManager.beginTransaction(0, 0, 0, false);
                 this.stockRepository.upsert(stock);
             }
-            case "commit" -> {
-                transactionManager.commit();
-                transactionManager.checkpoint(0);
-            }
         }
     }
 

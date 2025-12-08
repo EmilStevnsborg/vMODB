@@ -25,7 +25,7 @@ public final class Main
 //            RecoverCoordinator.Run(client);
 //            RecoverVmsConcurrency.Run(client);
 //            RecoverVmsStress.Run(client);
-            AbortStressTest.Run(client);
+//            AbortStressTest.Run(client);
 //            RecoverVmsHeavyLoad.Run(client);
 //            VmsReloadPersistentData.Run(client);
 //            BasicTest.Run(client);
