@@ -18,6 +18,7 @@
         <module>warehouse-tpcc</module>
         <module>inventory-tpcc</module>
         <module>proxy-tpcc</module>
+        <module>benchmark-tpcc</module>
     </modules>
 
     <properties>

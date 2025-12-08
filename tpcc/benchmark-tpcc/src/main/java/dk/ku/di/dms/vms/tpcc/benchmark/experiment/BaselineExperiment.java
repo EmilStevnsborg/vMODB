@@ -7,7 +7,6 @@ import dk.ku.di.dms.vms.tpcc.benchmark.Util.Util;
 import dk.ku.di.dms.vms.tpcc.benchmark.ingestion.*;
 import dk.ku.di.dms.vms.tpcc.benchmark.workload.Workload;
 import dk.ku.di.dms.vms.tpcc.common.events.NewOrderWareIn;
-import dk.ku.di.dms.vms.tpcc.proxy.entities.Stock;
 
 import java.io.File;
 import java.io.IOException;
@@ -17,13 +16,11 @@ import java.util.concurrent.*;
 
 import static dk.ku.di.dms.vms.tpcc.proxy.experiment.ExperimentUtils.loadCoordinator;
 
-public class AbortExperiment
+public class BaselineExperiment
 {
     private boolean initialized;
     private Coordinator coordinator;
     private final Map<Long, BatchStats> BATCH_TO_FINISHED_TS_MAP = new ConcurrentHashMap<>();
-    private final Map<Long, Long> ABORT_MAP = new ConcurrentHashMap<>();
-    private final Map<Long, Long> ABORT_ACK_MAP = new ConcurrentHashMap<>();
     private final Random generate = new Random();
     private final Iterator<NewOrderWareIn> newOrderWareInInput;
 
@@ -36,11 +33,11 @@ public class AbortExperiment
         return min + div;
     }
 
-    public AbortExperiment(int numTransactions)
+    public BaselineExperiment(int numTransactions)
     {
         // half of the transactions are order flights starting at the midway point
 
-        var numberOfAborts = 1;
+        var numberOfAborts = 0;
         this.newOrderWareInInput = Workload.createNewOrderIterator(numTransactions, numberOfAborts);
     }
 
@@ -62,14 +59,6 @@ public class AbortExperiment
             BATCH_TO_FINISHED_TS_MAP.put(
                     batchId,
                     new BatchStats(batchId, commitedTiDs, System.currentTimeMillis()));
-        });
-
-        coordinator.registerAbortConsumer((abortedTid) ->  {
-            ABORT_MAP.put(abortedTid, System.currentTimeMillis());
-        });
-
-        coordinator.registerAbortAckConsumer((abortedTid) ->  {
-            ABORT_ACK_MAP.put(abortedTid, System.currentTimeMillis());
         });
 
         System.console().readLine();
@@ -130,18 +119,6 @@ public class AbortExperiment
 
             allLatencies.add(currBatchStats.endTs() - prevBatchStats.endTs());
             prevBatchStats = currBatchStats;
-        }
-
-        for (var entry : ABORT_MAP.entrySet())
-        {
-            var abortedTid = entry.getKey();
-            var timestampStart = entry.getValue();
-            var timestampEnd = ABORT_ACK_MAP.get(abortedTid);
-
-            if (timestampStart == null) timestampStart = 0L;
-            if (timestampEnd == null) timestampEnd = 0L;
-
-            aborts.add(new AbortInfo(abortedTid, timestampStart, timestampEnd));
         }
 
         var results = ExperimentResults.Abort(throughputInfo, aborts);

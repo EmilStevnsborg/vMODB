@@ -32,7 +32,6 @@
       <module>flightScheduler</module>
       <module>tpcc</module>
       <module>flightScheduler/flightScheduler-benchmark</module>
-      <module>tpcc/benchmark-tpcc</module>
 
   </modules>
 

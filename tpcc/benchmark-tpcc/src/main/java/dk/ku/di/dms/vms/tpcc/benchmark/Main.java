@@ -8,7 +8,7 @@ import java.util.Properties;
 
 public class Main
 {
-    public static int NUM_TRANSACTIONS = 100000; // 1.5 mil
+    public static int NUM_TRANSACTIONS = 500000; // 1.5 mil
     private static final Properties PROPERTIES = ConfigUtils.loadProperties("src/main/resources/app.properties");
 
     public static void main(String[] args) throws Exception
@@ -25,7 +25,7 @@ public class Main
             System.console().readLine();
 
             // experiment
-            var runtime = 10000;
+            var runtime = 20000;
             var warmup = 1;
 
             experiment.runExperiment(runtime, warmup);

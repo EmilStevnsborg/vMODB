@@ -3,6 +3,7 @@ package dk.ku.di.dms.vms.tpcc.warehouse;
 import dk.ku.di.dms.vms.modb.api.annotations.*;
 import dk.ku.di.dms.vms.tpcc.common.events.NewOrderWareIn;
 import dk.ku.di.dms.vms.tpcc.common.events.NewOrderWareOut;
+import dk.ku.di.dms.vms.tpcc.warehouse.dto.DistrictInfoDTO;
 import dk.ku.di.dms.vms.tpcc.warehouse.entities.District;
 import dk.ku.di.dms.vms.tpcc.warehouse.repositories.ICustomerRepository;
 import dk.ku.di.dms.vms.tpcc.warehouse.repositories.IDistrictRepository;
@@ -17,7 +18,7 @@ public final class WarehouseService {
     private final IDistrictRepository districtRepository;
     private final ICustomerRepository customerRepository;
 
-    public WarehouseService(IWarehouseRepository warehouseRepository, IDistrictRepository districtRepository, ICustomerRepository customerRepository){
+    public WarehouseService(IWarehouseRepository warehouseRepository, IDistrictRepository districtRepository, ICustomerRepository customerRepository) {
         this.warehouseRepository = warehouseRepository;
         this.districtRepository = districtRepository;
         this.customerRepository = customerRepository;
@@ -26,18 +27,25 @@ public final class WarehouseService {
     @Inbound(values = "new-order-ware-in")
     @Outbound("new-order-ware-out")
     @Transactional(type = RW)
-    @PartitionBy(clazz = NewOrderWareIn.class, method = "getId")
+//    @PartitionBy(clazz = NewOrderWareIn.class, method = "getId")
     public NewOrderWareOut processNewOrder(NewOrderWareIn in) {
 
         District district = this.districtRepository.lookupByKey(new District.DistrictId(in.d_id, in.w_id));
+
+        if (district == null) {
+            System.err.println("District not found");
+            throw new RuntimeException("District not found");
+        }
+
         float w_tax = this.warehouseRepository.getWarehouseTax(in.w_id);
 
         district.d_next_o_id++;
         this.districtRepository.update(district);
 
-        float c_discount = this.customerRepository.getDiscount(in.w_id, in.d_id, in.c_id);
+        float c_discount =
+                this.customerRepository.getDiscount(in.w_id, in.d_id, in.c_id);
 
-        return new NewOrderWareOut(
+        var output = new NewOrderWareOut(
                 in.w_id,
                 in.d_id,
                 in.c_id,
@@ -50,6 +58,9 @@ public final class WarehouseService {
                 district.d_tax,
                 c_discount
         );
+
+//        System.out.println(STR."sending NewOrderWareOut in warehouse \{output}");
+        return output;
     }
 
 }

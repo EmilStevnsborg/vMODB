@@ -50,7 +50,13 @@ public final class WarehouseHttpHandler extends DefaultHttpHandler {
                 int distId = Integer.parseInt(uriSplit[uriSplit.length - 2]);
                 int wareId = Integer.parseInt(uriSplit[uriSplit.length - 1]);
                 this.transactionManager.beginTransaction(Long.MAX_VALUE, 0, Long.MAX_VALUE, true);
-                return this.districtRepository.lookupByKey(new District.DistrictId( distId, wareId ));
+
+                var district = this.districtRepository.lookupByKey(new District.DistrictId(distId, wareId));
+                if (district == null) {
+                    System.out.println("district not found w=" + wareId + " d=" + distId);
+                    throw new RuntimeException("district null");
+                }
+                return district;
             }
             case "customer" -> {
                 int cId = Integer.parseInt(uriSplit[uriSplit.length - 3]);

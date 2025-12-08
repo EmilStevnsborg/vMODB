@@ -1,0 +1,34 @@
+{
+  "throughputInfo" : [ {
+    "timestampStart" : 1765234005886,
+    "timestampEnd" : 1765234008272,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765234008272,
+    "timestampEnd" : 1765234010693,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765234010693,
+    "timestampEnd" : 1765234013416,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765234013416,
+    "timestampEnd" : 1765234016023,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765234016023,
+    "timestampEnd" : 1765234018596,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765234018596,
+    "timestampEnd" : 1765234020775,
+    "numCommittedTiDs" : 39999
+  } ],
+  "aborts" : [ {
+    "abortedTid" : 250010,
+    "timestampProcessed" : 1765234011580,
+    "timestampAcknowledged" : 1765234012031
+  } ],
+  "crashes" : [ ],
+  "reconnections" : [ ]
+}

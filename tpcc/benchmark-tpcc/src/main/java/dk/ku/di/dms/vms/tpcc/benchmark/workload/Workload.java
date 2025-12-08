@@ -18,9 +18,19 @@ import static dk.ku.di.dms.vms.tpcc.proxy.infra.TPCcConstants.*;
 public class Workload
 {
 
-    public static Iterator<NewOrderWareIn> createNewOrderIterator(int numTransactions)
+    public static Iterator<NewOrderWareIn> createNewOrderIterator(int numTransactions, int numberOfAborts)
     {
         var aborts = new HashSet<Integer>();
+        if (numberOfAborts > 0) {
+            // start
+            var increment = (numTransactions)/numberOfAborts;
+
+            for (int i = 0; i < numberOfAborts; i++) {
+                var tx = i*increment + increment/2 + 10;
+                System.out.println(STR."Abort newOrder tx=\{tx}");
+                aborts.add(tx);
+            }
+        }
 
         return new Iterator<>() {
             private int current = 1;
@@ -34,7 +44,9 @@ public class Workload
                 if (!hasNext()) throw new NoSuchElementException();
                 int txIdx = current++;
 
-                var newOrder = generateNewOrder();
+                var mustAbort = aborts.contains(txIdx);
+
+                var newOrder = generateNewOrder(mustAbort);
                 return newOrder;
             }
         };
@@ -74,12 +86,15 @@ public class Workload
 
     public static NewOrderWareIn generateNewOrder()
     {
-        int w_id = 1;
+        return generateNewOrder(false);
+    }
+    public static NewOrderWareIn generateNewOrder(boolean mustAbort)
+    {
+        int w_id = mustAbort ? 2 : 1;
         int d_id;
         int c_id;
         int ol_cnt;
         int all_local = 1;
-        int not_found = NUM_ITEMS + 1;
 
         d_id = randomNumber(1, NUM_DIST_PER_WARE);
         c_id = nuRand(1023, 1, NUM_CUST_PER_DIST);

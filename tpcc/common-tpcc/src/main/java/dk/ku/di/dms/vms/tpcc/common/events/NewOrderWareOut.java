@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Arrays;
 
 @Event
 public final class NewOrderWareOut {
@@ -48,6 +49,23 @@ public final class NewOrderWareOut {
             set.add(supWare);
         }
         return set;
+    }
+
+    @Override
+    public String toString() {
+        return "{"
+                + "\"w_id\":" + w_id
+                + ",\"d_id\":" + d_id
+                + ",\"c_id\":" + c_id
+                + ",\"itemsIds\":" + Arrays.toString(itemsIds)
+                + ",\"supWares\":" + Arrays.toString(supWares)
+                + ",\"qty\":" + Arrays.toString(qty)
+                + ",\"allLocal\":" + allLocal
+                + ",\"w_tax\":" + w_tax
+                + ",\"d_next_o_id\":" + d_next_o_id
+                + ",\"d_tax\":" + d_tax
+                + ",\"c_discount\":" + c_discount
+                + "}";
     }
 
 }

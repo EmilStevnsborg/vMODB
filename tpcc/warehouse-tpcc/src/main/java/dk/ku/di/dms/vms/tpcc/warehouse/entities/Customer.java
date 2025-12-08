@@ -34,11 +34,11 @@ public class Customer implements IEntity<Customer.CustomerId> {
     public int c_id;
 
     @Id
-    @VmsForeignKey(table=District.class, column = "d_id")
+//    @VmsForeignKey(table=District.class, column = "d_id")
     public int c_d_id;
 
     @Id
-    @VmsForeignKey(table=District.class, column = "d_w_id")
+//    @VmsForeignKey(table=District.class, column = "d_w_id")
     public int c_w_id;
 
     @Column

@@ -246,6 +246,7 @@ public final class WorkloadUtils {
 
             if(FORCE_ABORTS) {
                 if ((i == ol_cnt - 1) && (rbk == 1)) {
+                    System.out.println(STR."Creating abort transactions");
                     // this can lead to exception and then abort in app code
                     itemIds[i] = not_found;
                 }
