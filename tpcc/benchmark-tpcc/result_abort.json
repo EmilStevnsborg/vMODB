@@ -1,33 +1,65 @@
 {
   "throughputInfo" : [ {
-    "timestampStart" : 1765234005886,
-    "timestampEnd" : 1765234008272,
-    "numCommittedTiDs" : 40000
+    "timestampStart" : 1765316945162,
+    "timestampEnd" : 1765316947235,
+    "numCommittedTiDs" : 30000
   }, {
-    "timestampStart" : 1765234008272,
-    "timestampEnd" : 1765234010693,
-    "numCommittedTiDs" : 40000
+    "timestampStart" : 1765316947235,
+    "timestampEnd" : 1765316949587,
+    "numCommittedTiDs" : 30000
   }, {
-    "timestampStart" : 1765234010693,
-    "timestampEnd" : 1765234013416,
-    "numCommittedTiDs" : 40000
+    "timestampStart" : 1765316949587,
+    "timestampEnd" : 1765316951741,
+    "numCommittedTiDs" : 29997
   }, {
-    "timestampStart" : 1765234013416,
-    "timestampEnd" : 1765234016023,
-    "numCommittedTiDs" : 40000
+    "timestampStart" : 1765316951741,
+    "timestampEnd" : 1765316953882,
+    "numCommittedTiDs" : 30000
   }, {
-    "timestampStart" : 1765234016023,
-    "timestampEnd" : 1765234018596,
-    "numCommittedTiDs" : 40000
+    "timestampStart" : 1765316953882,
+    "timestampEnd" : 1765316956214,
+    "numCommittedTiDs" : 30000
   }, {
-    "timestampStart" : 1765234018596,
-    "timestampEnd" : 1765234020775,
-    "numCommittedTiDs" : 39999
+    "timestampStart" : 1765316956214,
+    "timestampEnd" : 1765316957783,
+    "numCommittedTiDs" : 19998
+  }, {
+    "timestampStart" : 1765316957783,
+    "timestampEnd" : 1765316959793,
+    "numCommittedTiDs" : 30000
+  }, {
+    "timestampStart" : 1765316959793,
+    "timestampEnd" : 1765316960704,
+    "numCommittedTiDs" : 9999
+  }, {
+    "timestampStart" : 1765316960704,
+    "timestampEnd" : 1765316962574,
+    "numCommittedTiDs" : 29999
+  }, {
+    "timestampStart" : 1765316962574,
+    "timestampEnd" : 1765316963408,
+    "numCommittedTiDs" : 9999
+  }, {
+    "timestampStart" : 1765316963408,
+    "timestampEnd" : 1765316965363,
+    "numCommittedTiDs" : 30000
+  }, {
+    "timestampStart" : 1765316965363,
+    "timestampEnd" : 1765316967341,
+    "numCommittedTiDs" : 26729
+  }, {
+    "timestampStart" : 1765316967341,
+    "timestampEnd" : 1765316969083,
+    "numCommittedTiDs" : 23270
+  }, {
+    "timestampStart" : 1765316969083,
+    "timestampEnd" : 1765316971420,
+    "numCommittedTiDs" : 30000
   } ],
   "aborts" : [ {
-    "abortedTid" : 250010,
-    "timestampProcessed" : 1765234011580,
-    "timestampAcknowledged" : 1765234012031
+    "abortedTid" : 250004,
+    "timestampProcessed" : 1765316948661,
+    "timestampAcknowledged" : 1765316948837
   } ],
   "crashes" : [ ],
   "reconnections" : [ ]

@@ -27,7 +27,7 @@ public final class WarehouseService {
     @Inbound(values = "new-order-ware-in")
     @Outbound("new-order-ware-out")
     @Transactional(type = RW)
-//    @PartitionBy(clazz = NewOrderWareIn.class, method = "getId")
+    @PartitionBy(clazz = NewOrderWareIn.class, method = "getId")
     public NewOrderWareOut processNewOrder(NewOrderWareIn in) {
 
         District district = this.districtRepository.lookupByKey(new District.DistrictId(in.d_id, in.w_id));

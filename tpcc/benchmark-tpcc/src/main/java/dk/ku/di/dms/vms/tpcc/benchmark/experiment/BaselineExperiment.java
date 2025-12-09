@@ -70,7 +70,7 @@ public class BaselineExperiment
     {
         int newRuntime = runTime + warmup;
         var globalInitTs = System.currentTimeMillis();
-        Workload.submitNewOrders(newOrderWareInInput, coordinator, 1000, 40000);
+        Workload.submitNewOrders(newOrderWareInInput, coordinator, 1000, 25000);
 
         Util.Sleep(newRuntime);
 
@@ -172,7 +172,7 @@ public class BaselineExperiment
 
     public static void writeResultsToFile(ExperimentResults results)
     {
-        String fileName = "result_abort.json";
+        String fileName = "result_baseline.json";
         try {
             ObjectMapper mapper = new ObjectMapper();
             mapper.writerWithDefaultPrettyPrinter().writeValue(new File(fileName), results);

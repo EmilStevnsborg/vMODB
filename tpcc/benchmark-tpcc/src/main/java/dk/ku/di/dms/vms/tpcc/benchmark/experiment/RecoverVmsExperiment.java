@@ -1,15 +1,12 @@
-package dk.ku.di.dms.vms.flightScheduler.benchmark.experiment;
+package dk.ku.di.dms.vms.tpcc.benchmark.experiment;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dk.ku.di.dms.vms.coordinator.Coordinator;
-import dk.ku.di.dms.vms.flightScheduler.benchmark.Util.ComponentProcess;
-import dk.ku.di.dms.vms.flightScheduler.benchmark.Util.Util;
-import dk.ku.di.dms.vms.flightScheduler.benchmark.ingestion.IngestionWorkerBooking;
-import dk.ku.di.dms.vms.flightScheduler.benchmark.ingestion.IngestionWorkerCustomer;
-import dk.ku.di.dms.vms.flightScheduler.benchmark.ingestion.IngestionWorkerFlight;
-import dk.ku.di.dms.vms.flightScheduler.benchmark.workload.Workload;
-import dk.ku.di.dms.vms.flightScheduler.common.events.OrderFlight;
-import dk.ku.di.dms.vms.flightScheduler.common.events.PayBooking;
+import dk.ku.di.dms.vms.tpcc.benchmark.Util.ComponentProcess;
+import dk.ku.di.dms.vms.tpcc.benchmark.Util.Util;
+import dk.ku.di.dms.vms.tpcc.benchmark.ingestion.*;
+import dk.ku.di.dms.vms.tpcc.benchmark.workload.Workload;
+import dk.ku.di.dms.vms.tpcc.common.events.NewOrderWareIn;
 
 import java.io.File;
 import java.io.IOException;
@@ -20,7 +17,7 @@ import java.net.http.HttpResponse;
 import java.util.*;
 import java.util.concurrent.*;
 
-import static dk.ku.di.dms.vms.flightScheduler.proxy.Main.loadCoordinator;
+import static dk.ku.di.dms.vms.tpcc.proxy.experiment.ExperimentUtils.loadCoordinator;
 
 public class RecoverVmsExperiment
 {
@@ -31,10 +28,7 @@ public class RecoverVmsExperiment
     private final Map<String, List<Long>> RECONNECTION_MAP = new ConcurrentHashMap<>();
     private final Map<String, List<Long>> RECONNECTION_ACK_MAP = new ConcurrentHashMap<>();
     private final Random generate = new Random();
-    private final int numRecords;
-    private final int numIngestionWorkers;
-    private final Iterator<OrderFlight> orderFlightInput;
-    private final Iterator<PayBooking> payBookingInput;
+    private final Iterator<NewOrderWareIn> newOrderWareInInput;
 
     public int randomNumber(int min, int max) {
         int next = generate.nextInt();
@@ -45,25 +39,10 @@ public class RecoverVmsExperiment
         return min + div;
     }
 
-    public RecoverVmsExperiment(int numRecords, int numTransactions, int numIngestionWorkers)
+    public RecoverVmsExperiment(int numTransactions)
     {
-        this.numRecords = numRecords;
-        this.numIngestionWorkers = numIngestionWorkers;
-
-        // half of the transactions are order flights starting at the midway point
         var numberOfAborts = 0;
-
-//        var initTxOF = numTransactions/2+1;
-//        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions/2, numRecords, numberOfAborts, initTxOF);
-//        var initTxPB = 1;
-//        var payBookingInput = Workload.createPayBookingIterator(numTransactions/2, initTxPB);
-
-        var initTxOF = 1;
-        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions, numRecords, numberOfAborts, initTxOF, 0);
-        var payBookingInput = Workload.createPayBookingIterator(0,0);
-
-        this.orderFlightInput = orderFlightInput;
-        this.payBookingInput = payBookingInput;
+        this.newOrderWareInInput = Workload.createNewOrderIterator(numTransactions, numberOfAborts);
     }
 
     public void initExperiment(Properties coordinatorProperties) throws Exception
@@ -72,8 +51,11 @@ public class RecoverVmsExperiment
         System.out.println(STR."killed VMSes");
 
         System.console().readLine();
-        System.out.println(STR."starting VMSes and coordinator");
+        System.out.println(STR."starting VMSes");
         ComponentProcess.StartVMSes();
+
+        System.console().readLine();
+        System.out.println(STR."starting coordinator");
         Coordinator coordinator = loadCoordinator(coordinatorProperties);
         this.coordinator = coordinator;
 
@@ -122,33 +104,28 @@ public class RecoverVmsExperiment
 
         var globalInitTs = System.currentTimeMillis();
 
-        // workload is submitted and processed by coordinator too quickly
-        // just make two separate functions
-        // return the thread
-        // stop the order flight thread when flight crashes
-        var orderFlightsThread = Workload.submitOrderFlights(orderFlightInput, coordinator, 1000, 35000);
-//        var payBookingsThread = Workload.submitPayBookings(payBookingInput, coordinator, 1000, 35000);
+        Workload.submitNewOrders(newOrderWareInInput, coordinator, 1000, 25000);
 
         // coordinator has already sent the events ...
-        Util.Sleep(crashPoint);
+//        Util.Sleep(crashPoint);
 
-//        Util.Sleep(warmup);
-//        for (int i = 0; i < 4; i++) {
-//            ComponentProcess.Kill("booking");
-//            Util.Sleep(2500);
-//            ComponentProcess.StartVms("booking", true, 1);
-//            Util.Sleep(2500);
-//        }
+        Util.Sleep(warmup);
+        for (int i = 0; i < 4; i++) {
+            ComponentProcess.Kill("order");
+            Util.Sleep(2500);
+            ComponentProcess.StartVms("order", true, 1);
+            Util.Sleep(2500);
+        }
 
-        ComponentProcess.Kill("booking");
-
-//        try {
-//            payBookingsThread.interrupt();
-//        } catch (Exception e) {}
-
-        Util.Sleep(reconnectPoint-crashPoint);
-        ComponentProcess.StartVms("booking", true, 1);
-        Util.Sleep(runTime-reconnectPoint);
+//        ComponentProcess.Kill("payment");
+//
+////        try {
+////            payBookingsThread.interrupt();
+////        } catch (Exception e) {}
+//
+//        Util.Sleep(reconnectPoint-crashPoint);
+//        ComponentProcess.StartVms("payment", true, 1);
+//        Util.Sleep(runTime-reconnectPoint);
 
 
         // avoid submitting after experiment termination
@@ -242,32 +219,21 @@ public class RecoverVmsExperiment
     {
         // flight, customer, booking
 //        var totalTasks = 2*numIngestionWorkers + numIngestionWorkers/2;
-        var totalTasks = 2*numIngestionWorkers;
+        var totalTasks = 5;
 
         ExecutorService threadPool = Executors.newFixedThreadPool(totalTasks);
         BlockingQueue<Future<Void>> completionQueue = new ArrayBlockingQueue<>(totalTasks);
         CompletionService<Void> service = new ExecutorCompletionService<>(threadPool, completionQueue);
 
-        var recordPerWorker = this.numRecords / this.numIngestionWorkers;
-
         long init = System.currentTimeMillis();
         long end;
-        for (int i = 0; i < this.numIngestionWorkers; i++)
-        {
-            var startIdx = i*recordPerWorker;
-            var endIdx = (i+1)*recordPerWorker;
 
-            // first half of the flight seats and customers have been booked
-//            var injectingBookings = i < numIngestionWorkers/2;
-            var injectingBookings = false;
+        service.submit(new IngestionWorkerStock(), null);
+        service.submit(new IngestionWorkerWarehouse(), null);
+        service.submit(new IngestionWorkerCustomer(), null);
+        service.submit(new IngestionWorkerDistrict(), null);
+        service.submit(new IngestionWorkerItem(), null);
 
-            service.submit(new IngestionWorkerCustomer(startIdx, endIdx, injectingBookings), null);
-            service.submit(new IngestionWorkerFlight(startIdx, endIdx, injectingBookings), null);
-
-            if (injectingBookings) {
-                service.submit(new IngestionWorkerBooking(startIdx, endIdx), null);
-            }
-        }
         try {
             for (int i = 0; i < totalTasks; i++) {
                 Future<Void> f = service.take();  // waits for completion
@@ -283,41 +249,12 @@ public class RecoverVmsExperiment
         } finally{
             end = System.currentTimeMillis();
         }
-        System.out.println(STR."ingesting \{this.numRecords} flight_seats and customers each with \{this.numIngestionWorkers} workers time: \{end-init}ms");
+        System.out.println(STR."ingesting data took time: \{end-init}ms");
 
         // commit ingested data
         var client = HttpClient.newHttpClient();
         // Commit(client);
     }
-    public static void Commit(HttpClient client)
-    {
-        HttpRequest cust_request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8769/customer/commit"))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("{}"))
-                .build();
-
-        HttpRequest fs_request = HttpRequest.newBuilder()
-                .uri(URI.create(STR."http://localhost:8767/flight/commit"))
-                .header("Accept", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("{}"))
-                .build();
-
-        HttpRequest b_request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8768/booking/commit"))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("{}"))
-                .build();
-
-        try {
-            client.send(cust_request, HttpResponse.BodyHandlers.ofString());
-            client.send(fs_request, HttpResponse.BodyHandlers.ofString());
-            client.send(b_request, HttpResponse.BodyHandlers.ofString());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
 
     public static void writeResultsToFile(ExperimentResults results)
     {

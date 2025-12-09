@@ -3,6 +3,8 @@ package dk.ku.di.dms.vms.tpcc.benchmark;
 import dk.ku.di.dms.vms.tpcc.benchmark.Util.ComponentProcess;
 import dk.ku.di.dms.vms.tpcc.benchmark.experiment.AbortExperiment;
 import dk.ku.di.dms.vms.modb.common.utils.ConfigUtils;
+import dk.ku.di.dms.vms.tpcc.benchmark.experiment.BaselineExperiment;
+import dk.ku.di.dms.vms.tpcc.benchmark.experiment.RecoverVmsExperiment;
 
 import java.util.Properties;
 
@@ -14,9 +16,9 @@ public class Main
     public static void main(String[] args) throws Exception
     {
         try {
-//            var experiment = new BaselineExperiment(NUM_RECORDS, NUM_TRANSACTIONS, NUM_INGESTION_WORKERS);
-            var experiment = new AbortExperiment(NUM_TRANSACTIONS);
-//            var experiment = new RecoverVmsExperiment(NUM_RECORDS, NUM_TRANSACTIONS, NUM_INGESTION_WORKERS);
+            var experiment = new BaselineExperiment(NUM_TRANSACTIONS);
+//            var experiment = new AbortExperiment(NUM_TRANSACTIONS);
+//            var experiment = new RecoverVmsExperiment(NUM_TRANSACTIONS);
 
             experiment.initExperiment(PROPERTIES);
 
@@ -25,8 +27,8 @@ public class Main
             System.console().readLine();
 
             // experiment
-            var runtime = 20000;
-            var warmup = 1;
+            var runtime = 25000;
+            var warmup = 5000;
 
             experiment.runExperiment(runtime, warmup);
 

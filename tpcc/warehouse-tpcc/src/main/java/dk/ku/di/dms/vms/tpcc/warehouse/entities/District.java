@@ -21,7 +21,7 @@ public class District implements IEntity<District.DistrictId> {
     public int d_id;
 
     @Id
-//    @VmsForeignKey(table=Warehouse.class, column = "w_id")
+    @VmsForeignKey(table=Warehouse.class, column = "w_id")
     public int d_w_id;
 
     @Column
