@@ -4,14 +4,14 @@ import numpy as np
 
 
 baseline_result = "result_baseline"
-abort_result = "result_abort"
-vms_recovery_result = "result_vms_recovery"
+abort_result = "result_1_abort"
+vms_recovery_result = "result_1_order_recovery"
 
 # experiment = abort_result
 experiment = vms_recovery_result
 # experiment = baseline_result
 
-with open(f"test_results_plot_final/{experiment}_1.json") as f:
+with open(f"{experiment}_25k.json") as f:
     data_experiment = json.load(f)
 
 
@@ -83,8 +83,8 @@ else:
 plt.xlabel("Time in seconds (s)")
 plt.ylabel("Throughput (Committed TXs / s)")
 
-plt.ylim(0, 37000)
-plt.yticks(range(0, 37001, 1000))
+plt.ylim(0, 25000)
+plt.yticks(range(0, 25001, 3000))
 
 xmin = max(1, int(np.floor(timestamps_np.min()/1000)))
 xmax = int(np.ceil(timestamps_np.max()/1000))

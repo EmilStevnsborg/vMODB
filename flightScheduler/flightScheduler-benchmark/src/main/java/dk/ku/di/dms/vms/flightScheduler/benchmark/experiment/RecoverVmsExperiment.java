@@ -126,7 +126,7 @@ public class RecoverVmsExperiment
         // just make two separate functions
         // return the thread
         // stop the order flight thread when flight crashes
-        var orderFlightsThread = Workload.submitOrderFlights(orderFlightInput, coordinator, 1000, 35000);
+        var orderFlightsThread = Workload.submitOrderFlights(orderFlightInput, coordinator, 1000, 40000);
 //        var payBookingsThread = Workload.submitPayBookings(payBookingInput, coordinator, 1000, 35000);
 
         // coordinator has already sent the events ...
@@ -135,9 +135,9 @@ public class RecoverVmsExperiment
 //        Util.Sleep(warmup);
 //        for (int i = 0; i < 4; i++) {
 //            ComponentProcess.Kill("booking");
-//            Util.Sleep(2500);
+//            Util.Sleep(2000);
 //            ComponentProcess.StartVms("booking", true, 1);
-//            Util.Sleep(2500);
+//            Util.Sleep(3500);
 //        }
 
         ComponentProcess.Kill("booking");
@@ -322,6 +322,7 @@ public class RecoverVmsExperiment
     public static void writeResultsToFile(ExperimentResults results)
     {
         String fileName = "result_vms_recovery.json";
+        System.out.println(STR."writing to file \{fileName}");
         try {
             ObjectMapper mapper = new ObjectMapper();
             mapper.writerWithDefaultPrettyPrinter().writeValue(new File(fileName), results);

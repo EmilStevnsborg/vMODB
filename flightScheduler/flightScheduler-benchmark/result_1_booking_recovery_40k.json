@@ -1,0 +1,54 @@
+{
+  "throughputInfo" : [ {
+    "timestampStart" : 1765358999639,
+    "timestampEnd" : 1765359000863,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765359000863,
+    "timestampEnd" : 1765359002091,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765359002091,
+    "timestampEnd" : 1765359003212,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765359003212,
+    "timestampEnd" : 1765359004379,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765359004379,
+    "timestampEnd" : 1765359013879,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765359013879,
+    "timestampEnd" : 1765359014746,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765359014746,
+    "timestampEnd" : 1765359016075,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765359016075,
+    "timestampEnd" : 1765359017328,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765359017328,
+    "timestampEnd" : 1765359018421,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765359018421,
+    "timestampEnd" : 1765359019538,
+    "numCommittedTiDs" : 40000
+  } ],
+  "aborts" : [ ],
+  "crashes" : [ {
+    "crashedVms" : "booking",
+    "timestampProcessed" : 1765359005342,
+    "timestampAcknowledged" : 1765359005593
+  } ],
+  "reconnections" : [ {
+    "restartedVms" : "booking",
+    "timestampProcessed" : 1765359011409,
+    "timestampAcknowledged" : 1765359011488
+  } ]
+}

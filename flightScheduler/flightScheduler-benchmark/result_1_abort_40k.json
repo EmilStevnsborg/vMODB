@@ -1,0 +1,78 @@
+{
+  "throughputInfo" : [ {
+    "timestampStart" : 1765358528123,
+    "timestampEnd" : 1765358529426,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765358529426,
+    "timestampEnd" : 1765358530593,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765358530593,
+    "timestampEnd" : 1765358531706,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765358531706,
+    "timestampEnd" : 1765358532931,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765358532931,
+    "timestampEnd" : 1765358534739,
+    "numCommittedTiDs" : 39999
+  }, {
+    "timestampStart" : 1765358534739,
+    "timestampEnd" : 1765358535793,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765358535793,
+    "timestampEnd" : 1765358536898,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765358536898,
+    "timestampEnd" : 1765358537995,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765358537995,
+    "timestampEnd" : 1765358539217,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765358539217,
+    "timestampEnd" : 1765358540368,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765358540368,
+    "timestampEnd" : 1765358541559,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765358541559,
+    "timestampEnd" : 1765358542713,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765358542713,
+    "timestampEnd" : 1765358544112,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765358544112,
+    "timestampEnd" : 1765358545588,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765358545588,
+    "timestampEnd" : 1765358547021,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765358547021,
+    "timestampEnd" : 1765358548058,
+    "numCommittedTiDs" : 40000
+  }, {
+    "timestampStart" : 1765358548058,
+    "timestampEnd" : 1765358549222,
+    "numCommittedTiDs" : 40000
+  } ],
+  "aborts" : [ {
+    "abortedTid" : 300001,
+    "timestampProcessed" : 1765358533755,
+    "timestampAcknowledged" : 1765358533960
+  } ],
+  "crashes" : [ ],
+  "reconnections" : [ ]
+}

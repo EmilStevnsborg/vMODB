@@ -33,7 +33,7 @@ public final class WarehouseService {
         District district = this.districtRepository.lookupByKey(new District.DistrictId(in.d_id, in.w_id));
 
         if (district == null) {
-            System.err.println("District not found");
+            // System.err.println("District not found");
             throw new RuntimeException("District not found");
         }
 

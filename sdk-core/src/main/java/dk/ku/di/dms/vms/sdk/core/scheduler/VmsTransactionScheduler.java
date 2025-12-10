@@ -319,7 +319,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
 
         var maxTidExecuted = lastTidFinished.get();
 
-        System.out.println(STR."\{vmsIdentifier}-SCHEDULER: sets lastTidFinished to \{lastTidFinished} when clearing for \{tid}");
+//        System.out.println(STR."\{vmsIdentifier}-SCHEDULER: sets lastTidFinished to \{lastTidFinished} when clearing for \{tid}");
         return new Long[] {numTIDsExecuted, maxTidExecuted};
     }
 
@@ -352,7 +352,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
             if(task.isFinished()){
                 // System.out.println(STR."task \{task} with lastTidFinished=\{lastTidFinished} in \{vmsIdentifier} isFinished");
                 if (this.isPaused()) {
-                    System.out.println(STR."Scheduler is paused");
+//                    System.out.println(STR."Scheduler is paused");
                     return;
                 }
                 this.updateLastFinishedTid(nextTid);
@@ -459,9 +459,9 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
     private void processNewEvent(InboundEvent inboundEvent)
     {
         if (inboundEvent.generation() != this.currentGeneration.get()) {
-            System.out.println(STR."\{vmsIdentifier} inboundEvent gen=\{inboundEvent.generation()} != " +
-                               STR."currentGeneration=\{currentGeneration} " +
-                               STR."of inbound event \{inboundEvent.tid()} ignored");
+//            System.out.println(STR."\{vmsIdentifier} inboundEvent gen=\{inboundEvent.generation()} != " +
+//                               STR."currentGeneration=\{currentGeneration} " +
+//                               STR."of inbound event \{inboundEvent.tid()} ignored");
             return;
         }
 

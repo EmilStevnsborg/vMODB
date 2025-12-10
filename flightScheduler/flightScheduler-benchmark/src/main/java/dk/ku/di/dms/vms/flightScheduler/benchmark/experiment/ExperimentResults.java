@@ -23,7 +23,7 @@ public class ExperimentResults
         this.crashes = crashes;
         this.reconnections = reconnections;
 
-        Summary();
+//        Summary();
     }
     public static ExperimentResults Baseline(List<ThroughputInfo> throughputInfo) {
         return new ExperimentResults(throughputInfo, new ArrayList<>(), new ArrayList<>(), new ArrayList<>());

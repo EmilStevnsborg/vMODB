@@ -5,15 +5,15 @@ import numpy as np
 
 baseline_result = "result_baseline"
 abort_result = "result_many_abort"
-vms_recovery_result = "result_many_booking_recovery"
+vms_recovery_result = "result_many_order_recovery"
 
-with open(f"{abort_result}_40k.json") as f:
+with open(f"{abort_result}_25k.json") as f:
     data_abort = json.load(f)
 
-with open(f"{baseline_result}_40k.json") as f:
+with open(f"{baseline_result}_25k.json") as f:
     data_baseline = json.load(f)
 
-with open(f"{vms_recovery_result}_40k.json") as f:
+with open(f"{vms_recovery_result}_25k.json") as f:
     data_recovery = json.load(f)
 
 def load_and_normalize_throughput(data):

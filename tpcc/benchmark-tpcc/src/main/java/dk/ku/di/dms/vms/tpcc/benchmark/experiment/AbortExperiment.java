@@ -40,7 +40,8 @@ public class AbortExperiment
     {
         // half of the transactions are order flights starting at the midway point
 
-        var numberOfAborts = 1;
+//        var numberOfAborts = 1;
+        var numberOfAborts = numTransactions/25000;
         this.newOrderWareInInput = Workload.createNewOrderIterator(numTransactions, numberOfAborts);
     }
 
@@ -81,7 +82,7 @@ public class AbortExperiment
     {
         int newRuntime = runTime + warmup;
         var globalInitTs = System.currentTimeMillis();
-        Workload.submitNewOrders(newOrderWareInInput, coordinator, 1000, 40000);
+        Workload.submitNewOrders(newOrderWareInInput, coordinator, 1000, 25000);
 
         Util.Sleep(newRuntime);
 

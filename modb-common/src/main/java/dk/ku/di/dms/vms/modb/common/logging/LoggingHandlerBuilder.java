@@ -30,7 +30,7 @@ public final class LoggingHandlerBuilder {
 
         FileChannel fileChannel;
 
-        System.out.println(STR."Log with write_buffers_size \{bufferSize}\{truncate ? " truncating" : ""} at file filePath: \{filePath}");
+        // System.out.println(STR."Log with write_buffers_size \{bufferSize}\{truncate ? " truncating" : ""} at file filePath: \{filePath}");
 
 
         StandardOpenOption[] options;

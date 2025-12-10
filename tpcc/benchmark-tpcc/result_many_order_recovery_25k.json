@@ -1,0 +1,46 @@
+{
+  "throughputInfo" : [ {
+    "timestampStart" : 1765368803727,
+    "timestampEnd" : 1765368810219,
+    "numCommittedTiDs" : 25000
+  }, {
+    "timestampStart" : 1765368810219,
+    "timestampEnd" : 1765368815846,
+    "numCommittedTiDs" : 25000
+  } ],
+  "aborts" : [ ],
+  "crashes" : [ {
+    "crashedVms" : "order",
+    "timestampProcessed" : 1765368804701,
+    "timestampAcknowledged" : 1765368804867
+  }, {
+    "crashedVms" : "order",
+    "timestampProcessed" : 1765368810432,
+    "timestampAcknowledged" : 1765368810763
+  }, {
+    "crashedVms" : "order",
+    "timestampProcessed" : 1765368816297,
+    "timestampAcknowledged" : 1765368816419
+  }, {
+    "crashedVms" : "order",
+    "timestampProcessed" : 1765368822295,
+    "timestampAcknowledged" : 1765368822362
+  } ],
+  "reconnections" : [ {
+    "restartedVms" : "order",
+    "timestampProcessed" : 1765368807806,
+    "timestampAcknowledged" : 1765368807863
+  }, {
+    "restartedVms" : "order",
+    "timestampProcessed" : 1765368813544,
+    "timestampAcknowledged" : 1765368813597
+  }, {
+    "restartedVms" : "order",
+    "timestampProcessed" : 1765368819397,
+    "timestampAcknowledged" : 1765368819467
+  }, {
+    "restartedVms" : "order",
+    "timestampProcessed" : 1765368825366,
+    "timestampAcknowledged" : 1765368825426
+  } ]
+}

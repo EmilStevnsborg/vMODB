@@ -1,0 +1,138 @@
+{
+  "throughputInfo" : [ {
+    "timestampStart" : 1765362418799,
+    "timestampEnd" : 1765362420805,
+    "numCommittedTiDs" : 24999
+  }, {
+    "timestampStart" : 1765362420805,
+    "timestampEnd" : 1765362422538,
+    "numCommittedTiDs" : 24999
+  }, {
+    "timestampStart" : 1765362422538,
+    "timestampEnd" : 1765362424492,
+    "numCommittedTiDs" : 24999
+  }, {
+    "timestampStart" : 1765362424492,
+    "timestampEnd" : 1765362426556,
+    "numCommittedTiDs" : 24999
+  }, {
+    "timestampStart" : 1765362426556,
+    "timestampEnd" : 1765362428527,
+    "numCommittedTiDs" : 24999
+  }, {
+    "timestampStart" : 1765362428527,
+    "timestampEnd" : 1765362430622,
+    "numCommittedTiDs" : 24999
+  }, {
+    "timestampStart" : 1765362430622,
+    "timestampEnd" : 1765362432564,
+    "numCommittedTiDs" : 24999
+  }, {
+    "timestampStart" : 1765362432564,
+    "timestampEnd" : 1765362434597,
+    "numCommittedTiDs" : 24999
+  }, {
+    "timestampStart" : 1765362434597,
+    "timestampEnd" : 1765362436430,
+    "numCommittedTiDs" : 24999
+  }, {
+    "timestampStart" : 1765362436430,
+    "timestampEnd" : 1765362438199,
+    "numCommittedTiDs" : 24999
+  }, {
+    "timestampStart" : 1765362438199,
+    "timestampEnd" : 1765362439955,
+    "numCommittedTiDs" : 24999
+  }, {
+    "timestampStart" : 1765362439955,
+    "timestampEnd" : 1765362441681,
+    "numCommittedTiDs" : 24999
+  }, {
+    "timestampStart" : 1765362441681,
+    "timestampEnd" : 1765362443585,
+    "numCommittedTiDs" : 24999
+  } ],
+  "aborts" : [ {
+    "abortedTid" : 437510,
+    "timestampProcessed" : 1765362432158,
+    "timestampAcknowledged" : 1765362432371
+  }, {
+    "abortedTid" : 337510,
+    "timestampProcessed" : 1765362427951,
+    "timestampAcknowledged" : 1765362428125
+  }, {
+    "abortedTid" : 137510,
+    "timestampProcessed" : 1765362420155,
+    "timestampAcknowledged" : 1765362420228
+  }, {
+    "abortedTid" : 237510,
+    "timestampProcessed" : 1765362423949,
+    "timestampAcknowledged" : 1765362424134
+  }, {
+    "abortedTid" : 37510,
+    "timestampProcessed" : 1765362416133,
+    "timestampAcknowledged" : 1765362416237
+  }, {
+    "abortedTid" : 462510,
+    "timestampProcessed" : 1765362433041,
+    "timestampAcknowledged" : 1765362433587
+  }, {
+    "abortedTid" : 262510,
+    "timestampProcessed" : 1765362425016,
+    "timestampAcknowledged" : 1765362425467
+  }, {
+    "abortedTid" : 362510,
+    "timestampProcessed" : 1765362429015,
+    "timestampAcknowledged" : 1765362429495
+  }, {
+    "abortedTid" : 162510,
+    "timestampProcessed" : 1765362420572,
+    "timestampAcknowledged" : 1765362420665
+  }, {
+    "abortedTid" : 62510,
+    "timestampProcessed" : 1765362416697,
+    "timestampAcknowledged" : 1765362416790
+  }, {
+    "abortedTid" : 487510,
+    "timestampProcessed" : 1765362433991,
+    "timestampAcknowledged" : 1765362434235
+  }, {
+    "abortedTid" : 287510,
+    "timestampProcessed" : 1765362425849,
+    "timestampAcknowledged" : 1765362425973
+  }, {
+    "abortedTid" : 387510,
+    "timestampProcessed" : 1765362429866,
+    "timestampAcknowledged" : 1765362430025
+  }, {
+    "abortedTid" : 187510,
+    "timestampProcessed" : 1765362421623,
+    "timestampAcknowledged" : 1765362421837
+  }, {
+    "abortedTid" : 87510,
+    "timestampProcessed" : 1765362417694,
+    "timestampAcknowledged" : 1765362418453
+  }, {
+    "abortedTid" : 412510,
+    "timestampProcessed" : 1765362431093,
+    "timestampAcknowledged" : 1765362431629
+  }, {
+    "abortedTid" : 312510,
+    "timestampProcessed" : 1765362426987,
+    "timestampAcknowledged" : 1765362427605
+  }, {
+    "abortedTid" : 212510,
+    "timestampProcessed" : 1765362422791,
+    "timestampAcknowledged" : 1765362423569
+  }, {
+    "abortedTid" : 12510,
+    "timestampProcessed" : 1765362415177,
+    "timestampAcknowledged" : 1765362415286
+  }, {
+    "abortedTid" : 112510,
+    "timestampProcessed" : 1765362418802,
+    "timestampAcknowledged" : 1765362419821
+  } ],
+  "crashes" : [ ],
+  "reconnections" : [ ]
+}

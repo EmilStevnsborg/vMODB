@@ -190,7 +190,7 @@ public class Workload
                     if (i >= batchSize) {
                         Util.Sleep(delay);
                         i=0;
-                        System.out.println("queuing orderFlights stopped sleeping");
+//                        System.out.println("queuing orderFlights stopped sleeping");
                     }
                     orderFlightFunction.accept(orderFlightsIterator.next());
                     i++;

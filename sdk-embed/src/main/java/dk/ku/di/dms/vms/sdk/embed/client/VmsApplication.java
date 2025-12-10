@@ -131,12 +131,13 @@ public final class VmsApplication {
                 vmsMetadata.inputEventSchema(),
                 vmsMetadata.outputEventSchema());
 
-        System.out.println(STR."VmsApplication \{vmsIdentifier.identifier} isRecovering=\{isRecovering}");
+        // System.out.println(STR."VmsApplication \{vmsIdentifier.identifier} isRecovering=\{isRecovering}");
 
         IHttpHandler httpHandler = builder.build(transactionManager, tableToRepositoryMap::get);
 
         VmsEmbedInternalChannels vmsInternalPubSubService = new VmsEmbedInternalChannels();
 
+//        System.out.println(STR."options.recoveryEnabled() = \{options.recoveryEnabled()}");
         VmsEventHandler eventHandler = VmsEventHandler.build(vmsIdentifier, transactionManager, vmsInternalPubSubService, vmsMetadata, options, httpHandler, serdes, options.recoveryEnabled());
 
         StoppableRunnable transactionScheduler = VmsTransactionScheduler.build(

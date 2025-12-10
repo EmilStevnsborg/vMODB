@@ -50,7 +50,8 @@ public class AbortExperiment
         this.numIngestionWorkers = numIngestionWorkers;
 
         // half of the transactions are order flights starting at the midway point
-        var numberOfAborts = numTransactions/35000; // 1 per batch
+        var numberOfAborts = numTransactions/40000; // 1 per batch
+//        var numberOfAborts = 1;
 
 //        var initTxOF = numTransactions/2+1;
 //        var orderFlightInput = Workload.createOrderFlightIterator(numTransactions/2, numRecords, numberOfAborts, initTxOF);
@@ -58,7 +59,6 @@ public class AbortExperiment
 //        var payBookingInput = Workload.createPayBookingIterator(numTransactions/2, initTxPB);
 
         var initTxOF = 1;
-//        var warmupTransactions =  numTransactions/5;
         var warmupTransactions =  0;
         var orderFlightInput = Workload.createOrderFlightIterator(numTransactions, numRecords, numberOfAborts, initTxOF, warmupTransactions);
         var payBookingInput = Workload.createPayBookingIterator(0,0);
@@ -101,7 +101,7 @@ public class AbortExperiment
     {
         int newRuntime = runTime + warmup;
         var globalInitTs = System.currentTimeMillis();
-        var orderFlightsThread = Workload.submitOrderFlights(orderFlightInput, coordinator, 1000, 35000);
+        var orderFlightsThread = Workload.submitOrderFlights(orderFlightInput, coordinator, 1000, 40000);
 
         Util.Sleep(newRuntime);
 

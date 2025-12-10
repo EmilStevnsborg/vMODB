@@ -67,26 +67,26 @@ public class RecoverVmsExperiment
 
         // keep a list
         coordinator.registerCrashConsumer((crashedVms) ->  {
-            System.out.println(STR."Registering CRASH in experiment consumer");
+            // System.out.println(STR."Registering CRASH in experiment consumer");
             CRASH_MAP.putIfAbsent(crashedVms, new ArrayList<>());
             CRASH_MAP.get(crashedVms).add(System.currentTimeMillis());
         });
 
         // keep a list
         coordinator.registerCrashAckConsumer((crashedVms) ->  {
-            System.out.println(STR."Registering CRASH ACK in experiment consumer");
+            // System.out.println(STR."Registering CRASH ACK in experiment consumer");
             CRASH_ACK_MAP.putIfAbsent(crashedVms, new ArrayList<>());
             CRASH_ACK_MAP.get(crashedVms).add(System.currentTimeMillis());
         });
 
         coordinator.registerReconnectionConsumer((restartedVms) ->  {
-            System.out.println(STR."Registering RECONNECTION in experiment consumer");
+            // System.out.println(STR."Registering RECONNECTION in experiment consumer");
             RECONNECTION_MAP.putIfAbsent(restartedVms, new ArrayList<>());
             RECONNECTION_MAP.get(restartedVms).add(System.currentTimeMillis());
         });
 
         coordinator.registerReconnectionAckConsumer((restartedVms) ->  {
-            System.out.println(STR."Registering RECONNECTION ACK in experiment consumer");
+            // System.out.println(STR."Registering RECONNECTION ACK in experiment consumer");
             RECONNECTION_ACK_MAP.putIfAbsent(restartedVms, new ArrayList<>());
             RECONNECTION_ACK_MAP.get(restartedVms).add(System.currentTimeMillis());
         });
@@ -107,24 +107,20 @@ public class RecoverVmsExperiment
         Workload.submitNewOrders(newOrderWareInInput, coordinator, 1000, 25000);
 
         // coordinator has already sent the events ...
-//        Util.Sleep(crashPoint);
 
         Util.Sleep(warmup);
         for (int i = 0; i < 4; i++) {
             ComponentProcess.Kill("order");
-            Util.Sleep(2500);
+            Util.Sleep(2000);
             ComponentProcess.StartVms("order", true, 1);
-            Util.Sleep(2500);
+            Util.Sleep(3500);
         }
 
-//        ComponentProcess.Kill("payment");
-//
-////        try {
-////            payBookingsThread.interrupt();
-////        } catch (Exception e) {}
+//        Util.Sleep(crashPoint);
+//        ComponentProcess.Kill("order");
 //
 //        Util.Sleep(reconnectPoint-crashPoint);
-//        ComponentProcess.StartVms("payment", true, 1);
+//        ComponentProcess.StartVms("order", true, 1);
 //        Util.Sleep(runTime-reconnectPoint);
 
 

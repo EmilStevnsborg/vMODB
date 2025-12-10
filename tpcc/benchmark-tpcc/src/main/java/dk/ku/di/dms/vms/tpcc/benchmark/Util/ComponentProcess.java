@@ -76,6 +76,7 @@ public class ComponentProcess
 
     public static void StartVms(String vms, boolean recoverable, int numVmsWorkers) throws IOException
     {
+//        System.out.println(STR."trying to start \{vms}");
         var args = List.of(STR."recoverable=\{recoverable}", STR."num_vms_workers=\{numVmsWorkers}");
         ComponentProcess.VmsProcessBuilder(vms, args).start();
     }
@@ -89,7 +90,7 @@ public class ComponentProcess
             throws IOException
     {
         var args = List.of(STR."recoverable=\{recoverable}",
-                           STR."n1um_vms_workers=\{numVmsWorkers}",
+                           STR."num_vms_workers=\{numVmsWorkers}",
                            STR."num_queues_vms_worker=\{numQueuesVmsWorker}",
                            STR."num_transaction_workers=\{numTransactionWorkers}",
                            STR."batch_window_ms=\{timeout}",

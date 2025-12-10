@@ -25,16 +25,16 @@ public class Main
 
     public static int NUM_INGESTION_WORKERS = 4;
 //            = Runtime.getRuntime().availableProcessors() / 4;
-    public static int NUM_RECORDS = 1000000; // 1.5 mil (10 workers 17.135s-25.235s)
-    public static int NUM_TRANSACTIONS = 1000000; // 1.5 mil
+    public static int NUM_RECORDS = 1200000; // 1.2 mil (10 workers 17.135s-25.235s)
+    public static int NUM_TRANSACTIONS = 1200000; // 1.2 mil
     private static final Properties PROPERTIES = ConfigUtils.loadProperties("src/main/resources/app.properties");
 
     public static void main(String[] args) throws Exception
     {
         try {
-//            var experiment = new BaselineExperiment(NUM_RECORDS, NUM_TRANSACTIONS, NUM_INGESTION_WORKERS);
+            var experiment = new BaselineExperiment(NUM_RECORDS, NUM_TRANSACTIONS, NUM_INGESTION_WORKERS);
 //            var experiment = new AbortExperiment(NUM_RECORDS, NUM_TRANSACTIONS, NUM_INGESTION_WORKERS);
-            var experiment = new RecoverVmsExperiment(NUM_RECORDS, NUM_TRANSACTIONS, NUM_INGESTION_WORKERS);
+//            var experiment = new RecoverVmsExperiment(NUM_RECORDS, NUM_TRANSACTIONS, NUM_INGESTION_WORKERS);
 
             experiment.initExperiment(PROPERTIES);
 
@@ -44,7 +44,7 @@ public class Main
 
             // experiment
             var runtime = 25000;
-            var warmup = 3000;
+            var warmup = 5000;
 
             experiment.runExperiment(runtime, warmup);
 

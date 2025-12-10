@@ -267,10 +267,15 @@ public final class VmsEventHandler extends ModbHttpServer {
         this.serverSocket.accept(null, new AcceptCompletionHandler());
         var crashOccurred = true; // check for logs or snapshot
 
-        System.out.println(STR."crashOccurred=\{crashOccurred} && recoveryEnabled=\{recoveryEnabled}");
+//        System.out.println(STR."crashOccurred=\{crashOccurred} && recoveryEnabled=\{recoveryEnabled}");
         if (crashOccurred && recoveryEnabled) {
+
+            // in flightScheduler
             // need to be in configuration
-            recoverVms("localhost", 8766);
+//            recoverVms("localhost", 8766);
+
+            // in tpcc
+            recoverVms("localhost", 9999);
 //            recoverVms(leader.host, leader.port);
         }
     }
@@ -310,7 +315,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     // crashed VMS tries to recover
     private void recoverVms(String leaderHost, int leaderPort)
     {
-        System.out.println(STR."\{me.identifier} started, and is now recovering. It will ping leader at \{leaderHost}:\{leaderPort}");
+        // System.out.println(STR."\{me.identifier} started, and is now recovering. It will ping leader at \{leaderHost}:\{leaderPort}");
         pauseHandler.accept(true);
 
         // fix scheduler metadata
@@ -350,7 +355,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         var batch = latestCommitInfo[0];
         var maxTid = latestCommitInfo[1];
 
-        System.out.println(STR."\{me.identifier} resets to state batch=\{batch} and tid=\{maxTid}");
+        // System.out.println(STR."\{me.identifier} resets to state batch=\{batch} and tid=\{maxTid}");
 
         // clear all tasks at the maxTID or later
         // this does not seem safe
@@ -375,7 +380,7 @@ public final class VmsEventHandler extends ModbHttpServer {
 
     private void processVmsCrash(VmsCrash.Payload vmsCrash)
     {
-        System.out.println(STR."\{me.identifier} started processing crash of \{vmsCrash}, new gen is \{vmsCrash.newGeneration()}");
+        // System.out.println(STR."\{me.identifier} started processing crash of \{vmsCrash}, new gen is \{vmsCrash.newGeneration()}");
         var vmsNode = vmsMetadataMap.get(vmsCrash.vms());
         var crashedVmsWorkerContainer = consumerVmsContainerMap.remove(vmsNode);
         if (crashedVmsWorkerContainer != null) {
@@ -406,7 +411,7 @@ public final class VmsEventHandler extends ModbHttpServer {
     private void processVmsReconnection(VmsReconnect.Payload reconnection)
     {
         var restartedVms = reconnection.vms();
-        System.out.println(STR."\{me.identifier} initiates reconnection to consumer \{restartedVms}");
+//        System.out.println(STR."\{me.identifier} initiates reconnection to consumer \{restartedVms}");
 
         // init new worker
         var restartedVmsNode = vmsMetadataMap.get(restartedVms);
@@ -419,12 +424,13 @@ public final class VmsEventHandler extends ModbHttpServer {
             var eventsNotPersisted = loggingHandler.getAffectedEvents(consumedEventTypes, reconnection.vmsLastTid(),  this.generation.get());
 
             if (!eventsNotPersisted.isEmpty()) {
-                System.out.println(STR."restarted VMS \{restartedVms} last checkpointed at " +
-                        STR."tid=\{reconnection.vmsLastTid()}, but coordinator found \{eventsNotPersisted.size()} " +
-                        STR."later than tid");
+//                System.out.println(STR."restarted VMS \{restartedVms} last checkpointed at " +
+//                        STR."tid=\{reconnection.vmsLastTid()}, but vms \{me.identifier} found \{eventsNotPersisted.size()} " +
+//                        STR."later than tid");
 
+                var node = vmsMetadataMap.get(restartedVms);
                 for (var event : eventsNotPersisted) {
-                    consumerVmsContainerMap.get(restartedVms).queue(event);
+                    consumerVmsContainerMap.get(node).queue(event);
                 }
             }
 
@@ -432,7 +438,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             e.printStackTrace();
         }
 
-        System.out.println(STR."\{me.identifier} sending RECONNECTION ACK");
+        // System.out.println(STR."\{me.identifier} sending RECONNECTION ACK");
         var reconnectionACK = ReconnectionAck.of(restartedVms, me.identifier);
         leaderWorker.queueMessage(reconnectionACK);
     }
@@ -491,7 +497,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             return;
         }
 
-        System.out.println(STR."\{me.identifier} PROCESSES abort of \{tid}");
+        // System.out.println(STR."\{me.identifier} PROCESSES abort of \{tid}");
 
         applyAbortLocally(tid, bid, false);
 
@@ -508,7 +514,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         var tid = eventOutput.tid();
         var bid = eventOutput.batch();
 
-        System.out.println(STR."\{me.identifier} INITIATES abort of \{tid}");
+        // System.out.println(STR."\{me.identifier} INITIATES abort of \{tid}");
 
         applyAbortLocally(tid, bid, true);
 
@@ -939,7 +945,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                     this.buffer.clear();
                     channel.read(buffer, 0, new LeaderReadCompletionHandler(new ConnectionMetadata(leader.hashCode(), ConnectionMetadata.NodeType.SERVER, channel), buffer));
                     generation.set(serverNode.generation);
-                    System.out.println(STR."\{me.identifier} setting generation to \{generation} for serverNode gen=\{serverNode.generation} after leader connection");
+//                    System.out.println(STR."\{me.identifier} setting generation to \{generation} for serverNode gen=\{serverNode.generation} after leader connection");
                 } else {
                     try {
                         LOGGER.log(WARNING,"Dropping a connection attempt from a node claiming to be leader");
@@ -1098,7 +1104,7 @@ public final class VmsEventHandler extends ModbHttpServer {
             // leader has disconnected, or new leader
             leader = Presentation.readServer(this.buffer);
             generation.set(leader.generation);
-            System.out.println(STR."\{me.identifier} setting generation to \{generation} for serverNode gen=\{leader.generation} after leader connection");
+//            System.out.println(STR."\{me.identifier} setting generation to \{generation} for serverNode gen=\{leader.generation} after leader connection");
 
             // read queues leader is interested
             boolean hasQueuesToSubscribe = this.buffer.get() == Presentation.YES;
@@ -1174,7 +1180,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         public void completed(Integer result, Integer startPos) {
 //            System.out.println("Read from leader");
             if(result == -1){
-                System.out.println("Leader has disconnected");
+//                System.out.println("Leader has disconnected");
                 LOGGER.log(INFO,me.identifier+": Leader has disconnected");
                 leader.off();
                 try {
@@ -1270,7 +1276,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                             LOGGER.log(ERROR, me.identifier + ": Message type sent by the leader cannot be identified: " + messageType);
                 }
             } catch (Exception e){
-                System.out.println(STR."Error reading \{messageType} from leader in \{me.identifier}");
+//                System.out.println(STR."Error reading \{messageType} from leader in \{me.identifier}");
                 e.printStackTrace();
             }
 
@@ -1334,7 +1340,7 @@ public final class VmsEventHandler extends ModbHttpServer {
                 vmsInternalChannels.transactionInputQueue().addAll(payloads);
             } catch (Exception e){
                 LOGGER.log(ERROR, me.identifier +": Error while processing a batch\n"+e);
-                e.printStackTrace(System.out);
+//                e.printStackTrace(System.out);
                 if(e instanceof BufferUnderflowException) {
                     throw new RuntimeException(e);
                 }
@@ -1451,7 +1457,7 @@ public final class VmsEventHandler extends ModbHttpServer {
         @Override
         public void failed(Throwable exc, Integer carryOn) {
             LOGGER.log(ERROR,me.identifier+": Message could not be processed: "+exc);
-            exc.printStackTrace(System.out);
+//            exc.printStackTrace(System.out);
             this.setUpNewRead();
         }
     }

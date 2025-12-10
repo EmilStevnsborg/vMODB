@@ -42,7 +42,7 @@ public class StorageUtils {
     }
 
     public static ReadWriteIndex<IKey> createNonUniqueIndex(Schema schema, int[] columnsIndex, String indexName){
-        System.out.println(STR."createNonUniqueIndex");
+//        System.out.println(STR."createNonUniqueIndex");
         if(SEC_IDX_IN_MEMORY_STORAGE){
             return new NonUniqueHashMapIndex(schema, columnsIndex);
         } else {
