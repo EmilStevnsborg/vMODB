@@ -70,11 +70,12 @@ for reconnection in data_experiment["reconnections"]:
     plt.axvline(x=ts_p/1000, color="g", linestyle="--", label=f"{vms} attempts reconnection")
     plt.axvline(x=ts_a/1000, color="g", linestyle="-", label=f"{vms} reconnection ACK")
 
+avg_throughput = np.mean(throughputs_np)
+plt.axhline(y=avg_throughput, color="k", linestyle="--", label=f"Average Throughput {('%.0f'%avg_throughput)} TXs / s")
+
 if experiment == baseline_result:
     #plot constant line
     plt.title("Baseline Running Throughput")
-    avg_throughput = np.mean(throughputs_np)
-    plt.axhline(y=avg_throughput, color="k", linestyle="--", label=f"Average Throughput ~{('%.0f'%avg_throughput)} TXs / s")
 elif experiment == abort_result:
     plt.title("Abort Effects on Running Throughput")
 else:
@@ -83,8 +84,10 @@ else:
 plt.xlabel("Time in seconds (s)")
 plt.ylabel("Throughput (Committed TXs / s)")
 
-plt.ylim(0, 25000)
-plt.yticks(range(0, 25001, 3000))
+# plt.ylim(12000, 18000)
+# plt.yticks(range(12000, 18001, 1000))
+plt.ylim(5000, 18000)
+plt.yticks(range(5000, 18001, 1000))
 
 xmin = max(1, int(np.floor(timestamps_np.min()/1000)))
 xmax = int(np.ceil(timestamps_np.max()/1000))

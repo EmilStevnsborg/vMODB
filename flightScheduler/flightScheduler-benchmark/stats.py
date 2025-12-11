@@ -30,6 +30,7 @@ def load_and_normalize_throughput(data):
         runtime = (info["timestampEnd"] - timestamp_start_global)/1000
         running_throughput = total_committed / runtime
         throughputs.append(running_throughput)
+        timestamps.append(info["timestampStart"])
         timestamps.append(info["timestampEnd"])
 
     # Convert to numpy
@@ -45,8 +46,8 @@ throughputs_np_recovery, timestamps_np_recovery = load_and_normalize_throughput(
 
 def batch_latencies(timestamps):
     latencies = []
-    for i in range(1, len(timestamps)):
-        latency = timestamps[i] - timestamps[i - 1]
+    for i in range(0, len(timestamps), 2):
+        latency = timestamps[i+1] - timestamps[i]
         latencies.append(latency)
 
     return latencies
@@ -56,26 +57,36 @@ abort_batch_latencies = batch_latencies(timestamps_np_abort)
 baseline_batch_latencies = batch_latencies(timestamps_np_baseline)
 
 # the acknowledgment latency
-def protocol_ack_latency(protocol_timestamps):
+def protocol_ack_latency(protocol_timestamps, start, end):
     # acknowledgment latency
     latencies = []
     for protocol_timestamp in protocol_timestamps:
+        if protocol_timestamp["timestampProcessed"] < start or protocol_timestamp["timestampAcknowledged"] > end:
+            # print(protocol_timestamp)
+            continue
         latency = protocol_timestamp["timestampAcknowledged"] - protocol_timestamp["timestampProcessed"]
         latencies.append(latency)
 
     return latencies
 
-abort_protocol_ack_latencies = protocol_ack_latency(data_abort["aborts"])
-crash_protocol_ack_latencies = protocol_ack_latency(data_recovery["crashes"])
-reconnection_protocol_ack_latencies = protocol_ack_latency(data_recovery["reconnections"])
+
+abort_exp_start = min(info["timestampStart"] for info in data_abort["throughputInfo"])
+abort_exp_end = max(info["timestampEnd"] for info in data_abort["throughputInfo"])
+abort_protocol_ack_latencies = protocol_ack_latency(data_abort["aborts"], abort_exp_start, abort_exp_end)
+
+crash_protocol_ack_latencies = protocol_ack_latency(data_recovery["crashes"], 0, np.infty)
+
+reconnection_protocol_ack_latencies = protocol_ack_latency(data_recovery["reconnections"], 0, np.infty)
 
 # LATENCY
 print(f"BASELINE: there are {len(baseline_batch_latencies)} batches, with an average latency of {np.mean(baseline_batch_latencies)} ms")
 print(f"ABORT: there are {len(abort_batch_latencies)} batches, with an average latency of {np.mean(abort_batch_latencies)} ms")
+print()
 
 # THROUGHPUTS
 print(f"BASELINE: there are {len(throughputs_np_recovery)} batches, with an average throughput of {np.mean(throughputs_np_baseline)} ms")
 print(f"ABORT: there are {len(throughputs_np_abort)} batches, with an average throughput of {np.mean(throughputs_np_abort)} ms")
+print()
 
 # ACKS
 print(f"ABORT: there are {len(abort_protocol_ack_latencies)} aborts initiated and acknowledged "
