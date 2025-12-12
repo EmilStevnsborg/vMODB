@@ -1,137 +1,109 @@
 {
   "throughputInfo" : [ {
-    "timestampStart" : 1765362418799,
-    "timestampEnd" : 1765362420805,
+    "timestampStart" : 1765568224550,
+    "timestampEnd" : 1765568226584,
     "numCommittedTiDs" : 24999
   }, {
-    "timestampStart" : 1765362420805,
-    "timestampEnd" : 1765362422538,
+    "timestampStart" : 1765568226584,
+    "timestampEnd" : 1765568228476,
     "numCommittedTiDs" : 24999
   }, {
-    "timestampStart" : 1765362422538,
-    "timestampEnd" : 1765362424492,
+    "timestampStart" : 1765568228476,
+    "timestampEnd" : 1765568230340,
     "numCommittedTiDs" : 24999
   }, {
-    "timestampStart" : 1765362424492,
-    "timestampEnd" : 1765362426556,
+    "timestampStart" : 1765568230340,
+    "timestampEnd" : 1765568232237,
     "numCommittedTiDs" : 24999
   }, {
-    "timestampStart" : 1765362426556,
-    "timestampEnd" : 1765362428527,
+    "timestampStart" : 1765568232237,
+    "timestampEnd" : 1765568234276,
     "numCommittedTiDs" : 24999
   }, {
-    "timestampStart" : 1765362428527,
-    "timestampEnd" : 1765362430622,
+    "timestampStart" : 1765568234276,
+    "timestampEnd" : 1765568236374,
     "numCommittedTiDs" : 24999
   }, {
-    "timestampStart" : 1765362430622,
-    "timestampEnd" : 1765362432564,
+    "timestampStart" : 1765568236374,
+    "timestampEnd" : 1765568238564,
     "numCommittedTiDs" : 24999
   }, {
-    "timestampStart" : 1765362432564,
-    "timestampEnd" : 1765362434597,
+    "timestampStart" : 1765568238564,
+    "timestampEnd" : 1765568240683,
     "numCommittedTiDs" : 24999
   }, {
-    "timestampStart" : 1765362434597,
-    "timestampEnd" : 1765362436430,
+    "timestampStart" : 1765568240683,
+    "timestampEnd" : 1765568242591,
     "numCommittedTiDs" : 24999
   }, {
-    "timestampStart" : 1765362436430,
-    "timestampEnd" : 1765362438199,
+    "timestampStart" : 1765568242591,
+    "timestampEnd" : 1765568245069,
     "numCommittedTiDs" : 24999
   }, {
-    "timestampStart" : 1765362438199,
-    "timestampEnd" : 1765362439955,
+    "timestampStart" : 1765568245069,
+    "timestampEnd" : 1765568247220,
     "numCommittedTiDs" : 24999
   }, {
-    "timestampStart" : 1765362439955,
-    "timestampEnd" : 1765362441681,
-    "numCommittedTiDs" : 24999
-  }, {
-    "timestampStart" : 1765362441681,
-    "timestampEnd" : 1765362443585,
+    "timestampStart" : 1765568247220,
+    "timestampEnd" : 1765568249490,
     "numCommittedTiDs" : 24999
   } ],
   "aborts" : [ {
-    "abortedTid" : 437510,
-    "timestampProcessed" : 1765362432158,
-    "timestampAcknowledged" : 1765362432371
-  }, {
     "abortedTid" : 337510,
-    "timestampProcessed" : 1765362427951,
-    "timestampAcknowledged" : 1765362428125
+    "timestampProcessed" : 1765568250576,
+    "timestampAcknowledged" : 1765568250994
   }, {
     "abortedTid" : 137510,
-    "timestampProcessed" : 1765362420155,
-    "timestampAcknowledged" : 1765362420228
+    "timestampProcessed" : 1765568233208,
+    "timestampAcknowledged" : 1765568233311
   }, {
     "abortedTid" : 237510,
-    "timestampProcessed" : 1765362423949,
-    "timestampAcknowledged" : 1765362424134
+    "timestampProcessed" : 1765568241549,
+    "timestampAcknowledged" : 1765568241852
   }, {
     "abortedTid" : 37510,
-    "timestampProcessed" : 1765362416133,
-    "timestampAcknowledged" : 1765362416237
-  }, {
-    "abortedTid" : 462510,
-    "timestampProcessed" : 1765362433041,
-    "timestampAcknowledged" : 1765362433587
+    "timestampProcessed" : 1765568225466,
+    "timestampAcknowledged" : 1765568225779
   }, {
     "abortedTid" : 262510,
-    "timestampProcessed" : 1765362425016,
-    "timestampAcknowledged" : 1765362425467
-  }, {
-    "abortedTid" : 362510,
-    "timestampProcessed" : 1765362429015,
-    "timestampAcknowledged" : 1765362429495
+    "timestampProcessed" : 1765568243787,
+    "timestampAcknowledged" : 1765568244124
   }, {
     "abortedTid" : 162510,
-    "timestampProcessed" : 1765362420572,
-    "timestampAcknowledged" : 1765362420665
+    "timestampProcessed" : 1765568235306,
+    "timestampAcknowledged" : 1765568235503
   }, {
     "abortedTid" : 62510,
-    "timestampProcessed" : 1765362416697,
-    "timestampAcknowledged" : 1765362416790
-  }, {
-    "abortedTid" : 487510,
-    "timestampProcessed" : 1765362433991,
-    "timestampAcknowledged" : 1765362434235
+    "timestampProcessed" : 1765568227555,
+    "timestampAcknowledged" : 1765568227656
   }, {
     "abortedTid" : 287510,
-    "timestampProcessed" : 1765362425849,
-    "timestampAcknowledged" : 1765362425973
-  }, {
-    "abortedTid" : 387510,
-    "timestampProcessed" : 1765362429866,
-    "timestampAcknowledged" : 1765362430025
+    "timestampProcessed" : 1765568246039,
+    "timestampAcknowledged" : 1765568246289
   }, {
     "abortedTid" : 187510,
-    "timestampProcessed" : 1765362421623,
-    "timestampAcknowledged" : 1765362421837
+    "timestampProcessed" : 1765568237363,
+    "timestampAcknowledged" : 1765568237549
   }, {
     "abortedTid" : 87510,
-    "timestampProcessed" : 1765362417694,
-    "timestampAcknowledged" : 1765362418453
-  }, {
-    "abortedTid" : 412510,
-    "timestampProcessed" : 1765362431093,
-    "timestampAcknowledged" : 1765362431629
+    "timestampProcessed" : 1765568229406,
+    "timestampAcknowledged" : 1765568229534
   }, {
     "abortedTid" : 312510,
-    "timestampProcessed" : 1765362426987,
-    "timestampAcknowledged" : 1765362427605
+    "timestampProcessed" : 1765568248285,
+    "timestampAcknowledged" : 1765568248622
   }, {
     "abortedTid" : 212510,
-    "timestampProcessed" : 1765362422791,
-    "timestampAcknowledged" : 1765362423569
+    "timestampProcessed" : 1765568239569,
+    "timestampAcknowledged" : 1765568239753
   }, {
     "abortedTid" : 12510,
-    "timestampProcessed" : 1765362415177,
-    "timestampAcknowledged" : 1765362415286
+    "timestampProcessed" : 1765568223428,
+    "timestampAcknowledged" : 1765568223551
   }, {
     "abortedTid" : 112510,
-    "timestampProcessed" : 1765362418802,
-    "timestampAcknowledged" : 1765362419821
+    "timestampProcessed" : 1765568231301,
+    "timestampAcknowledged" : 1765568231392
   } ],
   "crashes" : [ ],
   "reconnections" : [ ]

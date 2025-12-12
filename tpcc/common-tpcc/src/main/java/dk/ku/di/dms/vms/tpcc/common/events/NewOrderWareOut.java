@@ -23,10 +23,11 @@ public final class NewOrderWareOut {
     public int d_next_o_id;
     public double d_tax;
     public float c_discount;
+    public int mustAbort;
 
     public NewOrderWareOut(){}
 
-    public NewOrderWareOut(int w_id, int d_id, int c_id, int[] itemsIds, int[] supWares, int[] qty, boolean allLocal, double w_tax, int d_next_o_id, double d_tax, float c_discount) {
+    public NewOrderWareOut(int w_id, int d_id, int c_id, int[] itemsIds, int[] supWares, int[] qty, boolean allLocal, double w_tax, int d_next_o_id, double d_tax, float c_discount, int mustAbort) {
         this.w_id = w_id;
         this.d_id = d_id;
         this.c_id = c_id;
@@ -38,6 +39,7 @@ public final class NewOrderWareOut {
         this.d_next_o_id = d_next_o_id;
         this.d_tax = d_tax;
         this.c_discount = c_discount;
+        this.mustAbort = mustAbort;
     }
 
     @SuppressWarnings("unused")
@@ -65,6 +67,7 @@ public final class NewOrderWareOut {
                 + ",\"d_next_o_id\":" + d_next_o_id
                 + ",\"d_tax\":" + d_tax
                 + ",\"c_discount\":" + c_discount
+                + ",\"mustAbort\":" + mustAbort
                 + "}";
     }
 

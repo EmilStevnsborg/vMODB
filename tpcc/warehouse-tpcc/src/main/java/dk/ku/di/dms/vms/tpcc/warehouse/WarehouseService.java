@@ -56,7 +56,8 @@ public final class WarehouseService {
                 w_tax,
                 district.d_next_o_id,
                 district.d_tax,
-                c_discount
+                c_discount,
+                in.mustAbort
         );
 
 //        System.out.println(STR."sending NewOrderWareOut in warehouse \{output}");

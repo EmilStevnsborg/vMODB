@@ -16,33 +16,27 @@ with open(f"{baseline_result}_40k.json") as f:
 with open(f"{vms_recovery_result}_40k.json") as f:
     data_recovery = json.load(f)
 
-def load_and_normalize_throughput(data):
-    throughput = data["throughputInfo"]
+def compute_throughput_and_normalize_timestamps(data):
     timestamp_start_global = min(info["timestampStart"] for info in data["throughputInfo"])
-    timestamp_first_end_global = min(info["timestampEnd"] for info in data["throughputInfo"])
+    timestamp_first_end_global = max(info["timestampEnd"] for info in data["throughputInfo"])
 
     total_committed = 0
-    throughputs = []
     timestamps = []
 
-    for info in throughput:
+    for info in data["throughputInfo"]:
         total_committed += info["numCommittedTiDs"]
-        runtime = (info["timestampEnd"] - timestamp_start_global)/1000
-        running_throughput = total_committed / runtime
-        throughputs.append(running_throughput)
         timestamps.append(info["timestampStart"])
         timestamps.append(info["timestampEnd"])
 
-    # Convert to numpy
-    throughputs_np = np.array(throughputs)
+    throughput = total_committed/((timestamp_first_end_global-timestamp_start_global)/1000)
     timestamps_np = np.array(timestamps)
     timestamps_np = timestamps_np - timestamp_start_global
 
-    return throughputs_np, timestamps_np
+    return throughput, timestamps_np
 
-throughputs_np_abort, timestamps_np_abort = load_and_normalize_throughput(data_abort)
-throughputs_np_baseline, timestamps_np_baseline = load_and_normalize_throughput(data_baseline)
-throughputs_np_recovery, timestamps_np_recovery = load_and_normalize_throughput(data_recovery)
+throughput_abort, timestamps_np_abort = compute_throughput_and_normalize_timestamps(data_abort)
+throughput_baseline, timestamps_np_baseline = compute_throughput_and_normalize_timestamps(data_baseline)
+throughput_recovery, timestamps_np_recovery = compute_throughput_and_normalize_timestamps(data_recovery)
 
 def batch_latencies(timestamps):
     latencies = []
@@ -50,12 +44,13 @@ def batch_latencies(timestamps):
         latency = timestamps[i+1] - timestamps[i]
         latencies.append(latency)
 
-    return latencies
+    return np.array(latencies)
 
 # use right baseline i.e. the 35k
 abort_batch_latencies = batch_latencies(timestamps_np_abort)
 baseline_batch_latencies = batch_latencies(timestamps_np_baseline)
 
+print(39999*len(abort_batch_latencies)/np.sum(abort_batch_latencies))
 # the acknowledgment latency
 def protocol_ack_latency(protocol_timestamps, start, end):
     # acknowledgment latency
@@ -84,8 +79,8 @@ print(f"ABORT: there are {len(abort_batch_latencies)} batches, with an average l
 print()
 
 # THROUGHPUTS
-print(f"BASELINE: there are {len(throughputs_np_recovery)} batches, with an average throughput of {np.mean(throughputs_np_baseline)} ms")
-print(f"ABORT: there are {len(throughputs_np_abort)} batches, with an average throughput of {np.mean(throughputs_np_abort)} ms")
+print(f"BASELINE: average throughput of {throughput_baseline} TXs/s")
+print(f"ABORT: there are {throughput_abort} TXs/s")
 print()
 
 # ACKS

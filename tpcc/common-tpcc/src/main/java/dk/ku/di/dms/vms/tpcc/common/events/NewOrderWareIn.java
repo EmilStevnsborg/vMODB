@@ -14,11 +14,12 @@ public final class NewOrderWareIn {
     public int[] supWares;
     public int[] qty;
     public boolean allLocal;
+    public int mustAbort;
 
     @SuppressWarnings("unused")
     public NewOrderWareIn(){}
 
-    public NewOrderWareIn(int w_id, int d_id, int c_id, int[] itemsIds, int[] supWares, int[] qty, boolean allLocal) {
+    public NewOrderWareIn(int w_id, int d_id, int c_id, int[] itemsIds, int[] supWares, int[] qty, boolean allLocal, int mustAbort) {
             this.w_id = w_id;
             this.d_id = d_id;
             this.c_id = c_id;
@@ -26,6 +27,7 @@ public final class NewOrderWareIn {
             this.supWares = supWares;
             this.qty = qty;
             this.allLocal = allLocal;
+            this.mustAbort = mustAbort;
     }
 
     public record WareDistId(int w_id, int d_id){}
@@ -45,6 +47,7 @@ public final class NewOrderWareIn {
                 + ",\"supWares\":" + Arrays.toString(supWares)
                 + ",\"qty\":" + Arrays.toString(qty)
                 + ",\"allLocal\":\"" + allLocal + "\""
+                + ",\"mustAbort\":\"" + mustAbort + "\""
                 + "}";
     }
 

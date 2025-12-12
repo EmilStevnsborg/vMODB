@@ -345,7 +345,6 @@ public final class PrimaryIndex implements IMultiVersionIndex {
         if(this.insert(txCtx, key, values)){
             return key;
         }
-        System.out.println(STR."insertAndGetKey, insert false key: \{key}");
         return null;
     }
 

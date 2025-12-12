@@ -40,8 +40,8 @@ public class AbortExperiment
     {
         // half of the transactions are order flights starting at the midway point
 
-//        var numberOfAborts = 1;
-        var numberOfAborts = numTransactions/25000;
+        var numberOfAborts = 1;
+//        var numberOfAborts = numTransactions/25000;
         this.newOrderWareInInput = Workload.createNewOrderIterator(numTransactions, numberOfAborts);
     }
 

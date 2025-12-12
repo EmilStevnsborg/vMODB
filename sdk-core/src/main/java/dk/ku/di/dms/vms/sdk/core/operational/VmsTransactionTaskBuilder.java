@@ -119,7 +119,7 @@ public final class VmsTransactionTaskBuilder {
         }
 
         private void handleGenericError(Exception e, Object input) {
-            System.out.println("VmsTransactionTaskBuilder handleGenericError");
+            // System.out.println("VmsTransactionTaskBuilder handleGenericError");
             LOGGER.log(ERROR, "Error not related to invoking task "+this.toString()+"\n Input event: "+input+"\n"+ e);
             e.printStackTrace(System.out);
             schedulerCallback.error(signature.executionMode(), this.tid, this.batch, this.generation, e);

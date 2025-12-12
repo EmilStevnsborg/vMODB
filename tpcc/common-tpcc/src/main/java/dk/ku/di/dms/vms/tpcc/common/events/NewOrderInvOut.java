@@ -21,9 +21,11 @@ public final class NewOrderInvOut {
     public float[] prices;
     public String[] ol_dist_info;
 
+    // for benchmarking
+    public int mustAbort;
     public NewOrderInvOut(){}
 
-    public NewOrderInvOut(int w_id, int d_id, int c_id, int[] itemsIds, int[] supWares, int[] qty, boolean allLocal, double w_tax, int d_next_o_id, double d_tax, float c_discount, float[] prices, String[] ol_dist_info) {
+    public NewOrderInvOut(int w_id, int d_id, int c_id, int[] itemsIds, int[] supWares, int[] qty, boolean allLocal, double w_tax, int d_next_o_id, double d_tax, float c_discount, float[] prices, String[] ol_dist_info, int mustAbort) {
         this.w_id = w_id;
         this.d_id = d_id;
         this.c_id = c_id;
@@ -37,6 +39,7 @@ public final class NewOrderInvOut {
         this.c_discount = c_discount;
         this.prices = prices;
         this.ol_dist_info = ol_dist_info;
+        this.mustAbort = mustAbort;
     }
 
 }

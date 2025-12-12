@@ -1451,7 +1451,7 @@ public final class Coordinator extends ModbHttpServer {
 
             // STORE committed batch events persistently
             // before sending messages to VMSes
-//            System.out.println(STR."coordinator committing \{batchContext.numTIDsOverall} TiDs in batch \{batchContext.batchOffset}");
+            // System.out.println(STR."coordinator committing \{batchContext.numTIDsOverall} TiDs in batch \{batchContext.batchOffset}");
             loggingHandler.commit(batchOffsetPendingCommit);
 
             this.numTIDsCommitted.updateAndGet(i -> i + batchContext.numTIDsOverall);

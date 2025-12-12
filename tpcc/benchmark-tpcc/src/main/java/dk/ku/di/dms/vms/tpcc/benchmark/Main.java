@@ -17,8 +17,8 @@ public class Main
     {
         try {
 //            var experiment = new BaselineExperiment(NUM_TRANSACTIONS);
-//            var experiment = new AbortExperiment(NUM_TRANSACTIONS);
-            var experiment = new RecoverVmsExperiment(NUM_TRANSACTIONS);
+            var experiment = new AbortExperiment(NUM_TRANSACTIONS);
+//            var experiment = new RecoverVmsExperiment(NUM_TRANSACTIONS);
 
             experiment.initExperiment(PROPERTIES);
 

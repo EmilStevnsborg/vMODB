@@ -90,7 +90,7 @@ public class Workload
     }
     public static NewOrderWareIn generateNewOrder(boolean mustAbort)
     {
-        int w_id = mustAbort ? 2 : 1;
+        int w_id = 1;
         int d_id;
         int c_id;
         int ol_cnt;
@@ -122,7 +122,7 @@ public class Workload
             qty[i] = randomNumber(1, 10);
         }
 
-        return new NewOrderWareIn(w_id, d_id, c_id, itemIds, supWares, qty, all_local == 1);
+        return new NewOrderWareIn(w_id, d_id, c_id, itemIds, supWares, qty, all_local == 1, mustAbort ? 1 : 0);
     }
 
     private static boolean foundItem(int[] itemIds, int length, int value){

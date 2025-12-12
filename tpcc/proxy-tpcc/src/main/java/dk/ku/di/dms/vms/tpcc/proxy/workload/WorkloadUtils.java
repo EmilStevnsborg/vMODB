@@ -213,7 +213,8 @@ public final class WorkloadUtils {
                 (int[]) newOrderInput[3],
                 (int[]) newOrderInput[4],
                 (int[]) newOrderInput[5],
-                (boolean) newOrderInput[6]
+                (boolean) newOrderInput[6],
+                0
         );
     }
 

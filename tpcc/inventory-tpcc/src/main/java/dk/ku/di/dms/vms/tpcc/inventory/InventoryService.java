@@ -30,6 +30,11 @@ public final class InventoryService {
     @PartitionBy(clazz = NewOrderWareOut.class, method = "getId")
     public NewOrderInvOut processNewOrder(NewOrderWareOut in) {
         // System.out.println(STR."received NewOrderWareOut in inventory \{in}");
+
+        if (in.mustAbort == 1) {
+            throw new RuntimeException("Abort processing of new-order-inv-out");
+        }
+
         int n = in.itemsIds.length;
 
         float[] prices = itemRepository.getPricePerItemId(in.itemsIds);
@@ -85,7 +90,8 @@ public final class InventoryService {
                 in.d_tax,
                 in.c_discount,
                 prices,
-                ol_dist_info
+                ol_dist_info,
+                in.mustAbort
         );
     }
 

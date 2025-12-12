@@ -151,6 +151,7 @@ public final class VmsTransactionScheduler extends StoppableRunnable {
         @Override
         public void success(ExecutionModeEnum executionMode, OutboundEventResult outboundEventResult) {
             VmsTransactionTask task = transactionTaskMap.get(outboundEventResult.tid());
+            if (task == null) return;
             task.signalFinished();
             updateLastFinishedTid(outboundEventResult.tid());
             this.eventHandler.accept(outboundEventResult);
