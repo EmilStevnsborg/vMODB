@@ -2,6 +2,8 @@
 
 This project contains the modules to execute the warehouse, inventory, and order services of vMODB for the TPC-C benchmark.
 
+It also contains the newly developed benchmark module. Navigate to it to run the experiments used in Emil Stevnsborg's thesis.
+
 ## Running an experiment
 
 ### Preliminaries

@@ -59,7 +59,6 @@ public final class WarehouseService {
                 c_discount,
                 in.mustAbort
         );
-
 //        System.out.println(STR."sending NewOrderWareOut in warehouse \{output}");
         return output;
     }
